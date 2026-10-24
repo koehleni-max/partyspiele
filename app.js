@@ -197,6 +197,7 @@ function konfetti(n = 90) {
 }
 
 function zeichnen() {
+  document.body.classList.remove("nachtmodus");
   const fokus = document.activeElement && document.activeElement.id;
   if (rolle === "gast" && !raum) app.innerHTML = gastWarten();
   else if (raum && raum.spiel) {
@@ -238,7 +239,9 @@ function gastWarten() {
 }
 
 function lobbyBild() {
-  const liste = [0, 1, 2, 3].map((platz) => {
+  const hoechster = Math.max(3, ...raum.spieler.map((x) => x.platz), ...Object.keys(einladungen).map(Number));
+  const plaetze = Array.from({ length: Math.min(20, hoechster + 1) }, (_, k) => k);
+  const liste = plaetze.map((platz) => {
     const sp = raum.spieler.find((x) => x.platz === platz);
     if (platz === 0) return `<li class="sp an"><span class="farbe f0"></span>${esc(sp.name)} <span class="leise">(Gastgeber${ich === 0 ? ", du" : ""})</span></li>`;
     if (rolle !== "gastgeber") {
@@ -267,7 +270,11 @@ function lobbyBild() {
       ${rolle === "gastgeber" ? `
         <details class="antwort"><summary>Antwort-Code von Hand einfügen</summary>
           <textarea id="antwortfeld" placeholder="Antwort-Link oder Code hier einfügen"></textarea>
-          <button id="antwortknopf">Übernehmen</button></details>` : ""}
+          <button id="antwortknopf">Übernehmen</button></details>
+        <div class="raster2" style="margin-top:10px">
+          ${hoechster < 19 ? `<button data-mehr="1">➕ Weiterer Platz</button>` : ""}
+          ${hoechster < 19 ? `<button data-mehr="sammel">📨 Viele auf einmal</button>` : ""}</div>
+        ${Object.values(einladungen).filter((e) => e.link && e.status === "wartet").length > 1 ? `<button class="gross pink" data-sammellink="1">📲 Alle offenen Einladungen teilen</button>` : ""}` : ""}
       <div class="schalter" ${rolle === "gastgeber" ? `data-a='{"typ":"_ab18"}'` : ""}><input type="checkbox" ${raum.ab18 ? "checked" : ""} ${rolle === "gastgeber" ? "" : "disabled"} tabindex="-1">
         <span>🔞 Alle hier sind über 18<br><small class="leise">schaltet die Kategorien Spicy und 18+ frei</small></span></div>
       <div class="schalter" ${rolle === "gastgeber" ? `data-a='{"typ":"_trink"}'` : ""}><input type="checkbox" ${raum.ohneAlkohol ? "checked" : ""} ${rolle === "gastgeber" ? "" : "disabled"} tabindex="-1">
@@ -294,10 +301,21 @@ function spielBild() {
 
 // ---------------------------------------------------------------- Klicks
 document.addEventListener("click", (ev) => {
-  const el = ev.target.closest("[data-a],[data-teilen],[data-neu],#antwortknopf");
+  const el = ev.target.closest("[data-a],[data-teilen],[data-neu],[data-mehr],[data-sammellink],#antwortknopf");
   if (!el) return;
   if (el.dataset.teilen) return teilen(el.dataset.teilen, "Partyspiele");
   if (el.dataset.neu !== undefined) return einladungErzeugen(Number(el.dataset.neu));
+  if (el.dataset.mehr) {
+    const belegt = new Set([...raum.spieler.map((x) => x.platz), ...Object.keys(einladungen).map(Number)]);
+    const frei = []; for (let k = 1; k < 20 && frei.length < (el.dataset.mehr === "sammel" ? 6 : 1); k++) if (!belegt.has(k)) frei.push(k);
+    (async () => { for (const k of frei) await einladungErzeugen(k); })();
+    return;
+  }
+  if (el.dataset.sammellink) {
+    const offen = Object.entries(einladungen).filter(([, e]) => e.link && e.status === "wartet").sort((x, y) => x[0] - y[0]);
+    const text = "🎉 Partyspiele – jeder tippt NUR seinen eigenen Platz an:\n\n" + offen.map(([k, e]) => `Platz ${Number(k) + 1}: ${e.link}`).join("\n\n");
+    return teilen(text, "Partyspiele-Einladungen");
+  }
   if (el.id === "antwortknopf") {
     const t = document.getElementById("antwortfeld").value;
     if (t.trim()) antwortEinlesen(t);

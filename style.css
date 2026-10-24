@@ -217,3 +217,52 @@ details.verdeckt summary { cursor: pointer; font-weight: 900; text-align: center
 .quizknopf.aus { opacity: .45; } .quizknopf span { display: flex; gap: 3px; } .quizknopf i.farbe { width: 12px; height: 12px; }
 .gruppentitel { margin: 18px 4px 10px; font-size: 15px; font-weight: 900; color: var(--leise); letter-spacing: 1px; text-transform: uppercase; }
 .gruppentitel:first-child { margin-top: 0; }
+
+/* Werwolf */
+.ww-himmel, .ww-nacht { position: relative; height: 190px; border-radius: 24px; overflow: hidden; margin-bottom: 14px; box-shadow: 0 8px 0 #0007; }
+.ww-himmel.tag { background: linear-gradient(180deg, #4fb3ff 0%, #a7dcff 55%, #ffe8b0 100%); }
+.ww-nacht { background: linear-gradient(180deg, #05060f 0%, #141a3d 60%, #2a2350 100%); }
+.anim-auf { animation: aufgang 3.2s ease-out; } @keyframes aufgang { 0% { filter: brightness(.15) saturate(.3); } 60% { filter: brightness(.8) sepia(.4); } }
+.anim-auf .sonne { animation: sonneHoch 3.2s ease-out; } @keyframes sonneHoch { from { transform: translateY(150px); } }
+.anim-unter { animation: untergang 3s ease-out; } @keyframes untergang { 0% { filter: brightness(2.2) sepia(.9) hue-rotate(-30deg); } }
+.anim-unter .mond { animation: mondHoch 3s ease-out; } @keyframes mondHoch { from { transform: translateY(160px); opacity: 0; } }
+.sonne { position: absolute; top: 26px; right: 40px; width: 64px; height: 64px; border-radius: 50%; background: radial-gradient(circle, #fff7c2, #ffc800 60%, #ff9600); box-shadow: 0 0 60px #ffc800; }
+.mond { position: absolute; top: 24px; right: 44px; width: 56px; height: 56px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fffbe6, #d9d6c0); box-shadow: 0 0 40px #fffbe688, inset -10px -6px 0 #0002; }
+.sterne { position: absolute; inset: 0; background-image: radial-gradient(2px 2px at 20% 30%, #fff, transparent), radial-gradient(1.5px 1.5px at 60% 20%, #fff, transparent), radial-gradient(2px 2px at 80% 50%, #fff, transparent), radial-gradient(1px 1px at 35% 60%, #fff, transparent), radial-gradient(1.5px 1.5px at 10% 70%, #fff, transparent), radial-gradient(1px 1px at 45% 15%, #fff, transparent), radial-gradient(2px 2px at 70% 75%, #fff, transparent); animation: funkeln 3s ease-in-out infinite alternate; }
+@keyframes funkeln { to { opacity: .5; } }
+.ww-dorf { position: absolute; left: 0; right: 0; bottom: 0; height: 70px; background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 70' preserveAspectRatio='none'><path fill='%23224d2f' d='M0 50 Q60 30 120 45 T240 40 T400 42 V70 H0Z'/><g fill='%233b2a1e'><rect x='30' y='30' width='34' height='28'/><polygon points='26,32 47,12 68,32'/><rect x='110' y='26' width='40' height='34'/><polygon points='105,28 130,6 155,28'/><rect x='200' y='34' width='30' height='24'/><polygon points='196,36 215,18 234,36'/><rect x='290' y='22' width='14' height='38'/><polygon points='286,24 297,2 308,24'/><rect x='320' y='32' width='44' height='28'/><polygon points='315,34 342,12 369,34'/></g><g fill='%23ffd23f'><rect x='40' y='38' width='8' height='8'/><rect x='122' y='36' width='8' height='8'/><rect x='334' y='40' width='8' height='8'/></g></svg>") bottom/100% 100% no-repeat; }
+.ww-dorf.nacht { filter: brightness(.45); }
+.ww-titel { position: absolute; left: 16px; top: 14px; font-size: 24px; font-weight: 900; color: #fff; text-shadow: 0 2px 8px #0009; }
+.nachtpanel { background: #05060f; border: 2px solid #1d2147; border-radius: 22px; padding: 16px; color: #c8ccef; }
+.nachttext { text-align: center; font-size: 19px; font-weight: 800; color: #e6e8ff; }
+.sternenfeld { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.stern { background: #10142e; box-shadow: 0 4px 0 #05060f; font-size: 26px; color: #ffd23f; height: 64px; } .stern:active { color: #fff; }
+.rollenliste { background: #0f1022; border: 2px solid var(--rand); border-radius: 16px; padding: 6px 12px; }
+.rollenzeile { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--rand); font-weight: 800; } .rollenzeile:last-child { border: 0; }
+.rollenzeile span { flex: 1; } .rollenzeile b { min-width: 24px; text-align: center; font-size: 18px; }
+.rollenkarte { text-align: center; padding: 22px 16px; border-radius: 22px; background: linear-gradient(150deg, #3b4a6b, #1c2236); margin: 10px 0; box-shadow: 0 6px 0 #0007; animation: umdrehen .5s; }
+.rollenkarte .emo { font-size: 64px; } .rollenkarte b { font-size: 24px; display: block; margin: 6px 0; }
+.rollenkarte.r-wolf { background: linear-gradient(150deg, #8b1e1e, #2b0a0a); } .rollenkarte.r-seherin { background: linear-gradient(150deg, #6c5ce7, #2d1e8a); }
+.rollenkarte.r-hexe { background: linear-gradient(150deg, #00b894, #0a4f40); } .rollenkarte.r-amor { background: linear-gradient(150deg, #fd79a8, #8e2d6b); }
+.rollenkarte.r-jaeger { background: linear-gradient(150deg, #b8860b, #4a3405); } .rollenkarte.r-waechter { background: linear-gradient(150deg, #0984e3, #0b3a66); }
+.todeskarte { background: linear-gradient(135deg, #2a0f14, #160a0d); border: 2px solid #7a1f2a; border-radius: 16px; padding: 12px; margin: 8px 0; text-align: center; font-size: 17px; animation: aufploppen .5s; }
+.meinerolle { margin-top: 12px; color: var(--leise); font-weight: 700; text-align: center; } .meinerolle summary { cursor: pointer; }
+.rollenaufloesung { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 8px 0; } .rollenaufloesung span { background: #0f1022; padding: 5px 9px; border-radius: 10px; font-weight: 700; font-size: 14px; }
+body.nachtmodus { background: #020208; } body.nachtmodus::before { opacity: .15; } body.nachtmodus .fuss, body.nachtmodus .kopf { opacity: .35; }
+/* Farben fuer bis zu 20 Spieler */
+.f4 { background: hsl(188 85% 62%); color: hsl(188 85% 62%); } .n4 { color: hsl(188 90% 72%); } .fig.f4 { background: hsl(188 85% 62%); }
+.f5 { background: hsl(235 85% 62%); color: hsl(235 85% 62%); } .n5 { color: hsl(235 90% 72%); } .fig.f5 { background: hsl(235 85% 62%); }
+.f6 { background: hsl(282 85% 62%); color: hsl(282 85% 62%); } .n6 { color: hsl(282 90% 72%); } .fig.f6 { background: hsl(282 85% 62%); }
+.f7 { background: hsl(329 85% 62%); color: hsl(329 85% 62%); } .n7 { color: hsl(329 90% 72%); } .fig.f7 { background: hsl(329 85% 62%); }
+.f8 { background: hsl(16 85% 62%); color: hsl(16 85% 62%); } .n8 { color: hsl(16 90% 72%); } .fig.f8 { background: hsl(16 85% 62%); }
+.f9 { background: hsl(63 85% 62%); color: hsl(63 85% 62%); } .n9 { color: hsl(63 90% 72%); } .fig.f9 { background: hsl(63 85% 62%); }
+.f10 { background: hsl(110 85% 62%); color: hsl(110 85% 62%); } .n10 { color: hsl(110 90% 72%); } .fig.f10 { background: hsl(110 85% 62%); }
+.f11 { background: hsl(157 85% 62%); color: hsl(157 85% 62%); } .n11 { color: hsl(157 90% 72%); } .fig.f11 { background: hsl(157 85% 62%); }
+.f12 { background: hsl(204 85% 62%); color: hsl(204 85% 62%); } .n12 { color: hsl(204 90% 72%); } .fig.f12 { background: hsl(204 85% 62%); }
+.f13 { background: hsl(251 85% 62%); color: hsl(251 85% 62%); } .n13 { color: hsl(251 90% 72%); } .fig.f13 { background: hsl(251 85% 62%); }
+.f14 { background: hsl(298 85% 62%); color: hsl(298 85% 62%); } .n14 { color: hsl(298 90% 72%); } .fig.f14 { background: hsl(298 85% 62%); }
+.f15 { background: hsl(345 85% 62%); color: hsl(345 85% 62%); } .n15 { color: hsl(345 90% 72%); } .fig.f15 { background: hsl(345 85% 62%); }
+.f16 { background: hsl(32 85% 62%); color: hsl(32 85% 62%); } .n16 { color: hsl(32 90% 72%); } .fig.f16 { background: hsl(32 85% 62%); }
+.f17 { background: hsl(79 85% 62%); color: hsl(79 85% 62%); } .n17 { color: hsl(79 90% 72%); } .fig.f17 { background: hsl(79 85% 62%); }
+.f18 { background: hsl(126 85% 62%); color: hsl(126 85% 62%); } .n18 { color: hsl(126 90% 72%); } .fig.f18 { background: hsl(126 85% 62%); }
+.f19 { background: hsl(173 85% 62%); color: hsl(173 85% 62%); } .n19 { color: hsl(173 90% 72%); } .fig.f19 { background: hsl(173 85% 62%); }
