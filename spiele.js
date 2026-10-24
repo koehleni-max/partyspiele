@@ -95,7 +95,7 @@ const KLATSCH_REGELN = {
   K: ["Klatschglas", "Kipp einen Schluck ins Glas in der Mitte. Wer den vierten König zieht, trinkt das Glas aus!"],
 };
 const klatschen = {
-  id: "klatschen", name: "Klatschen", emoji: "🃏", kurz: "Kartenkreis mit Regeln – ohne echte Karten",
+  id: "klatschen", name: "Klatschen", emoji: "🃏", farben: ["#8b5cf6","#4c1d95"], kurz: "Kartenkreis mit Regeln – ohne echte Karten",
   start: () => ({ stapel: K.deck52(), dran: 0, karte: null, koenige: 0, regeln: [], partner: {}, reaktion: null, gezogen: 0 }),
   aktion(s, i, a, namen) {
     if (a.typ === "ziehen" && i === s.dran && s.stapel.length && !s.karte) {
@@ -144,7 +144,7 @@ const BUS_FRAGEN = [
   { titel: "Welche Farbe?", wahl: [["♠", "♠"], ["♥", "♥"], ["♦", "♦"], ["♣", "♣"]] },
 ];
 const busfahrer = {
-  id: "busfahrer", name: "Busfahrer", emoji: "🚌", kurz: "Vier Fragen pro Runde – falsch heißt trinken",
+  id: "busfahrer", name: "Busfahrer", emoji: "🚌", farben: ["#facc15","#b45309"], kurz: "Vier Fragen pro Runde – falsch heißt trinken",
   start: (namen) => ({ stapel: K.deck52(), dran: 0, hand: namen.map(() => []), stufe: 0, letzt: null, fehler: namen.map(() => 0) }),
   aktion(s, i, a) {
     if (a.typ === "tipp" && i === s.dran && s.stufe < 4 && !s.letzt) {
@@ -180,7 +180,7 @@ const busfahrer = {
 // ================================================================ Pferderennen
 const ZIEL = 7;
 const pferderennen = {
-  id: "pferde", name: "Pferderennen", emoji: "🏇", kurz: "Wetten auf die Asse – Sieger verteilen",
+  id: "pferde", name: "Pferderennen", emoji: "🏇", farben: ["#16a34a","#14532d"], kurz: "Wetten auf die Asse – Sieger verteilen",
   start: (namen) => ({ phase: "wetten", wetten: {}, pos: { "♠": 0, "♥": 0, "♦": 0, "♣": 0 }, stapel: null, seite: [], aufgedeckt: 0, letzte: null, sieger: null }),
   aktion(s, i, a) {
     if (a.typ === "wette" && s.phase === "wetten") s.wetten[i] = { f: a.f, n: Math.max(1, Math.min(10, Number(a.wert) || 1)) };
@@ -231,4 +231,5 @@ import { MINISPIELE } from "./minispiele.js";
 import { brett } from "./brett.js";
 import { hindernis } from "./hindernis.js";
 
-export const SPIELE = [brett, hindernis, klatschen, farbchaos, busfahrer, werWuerde, nochNie, wop, pferderennen, ...MINISPIELE];
+import { FRAGESPIELE } from "./fragespiele.js";
+export const SPIELE = [brett, hindernis, ...FRAGESPIELE, farbchaos, klatschen, busfahrer, pferderennen, ...MINISPIELE];

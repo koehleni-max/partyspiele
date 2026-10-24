@@ -27,7 +27,7 @@ function neuerStern(s) {
 }
 
 export const brett = {
-  id: "brett", name: "Partybrett", emoji: "🎲", kurz: "Würfeln, Münzen sammeln, Sterne kaufen, Minispiele – 8 Runden",
+  id: "brett", name: "Partybrett", emoji: "🎲", farben: ["#ff9600","#b4231f"], kurz: "Würfeln, Münzen sammeln, Sterne kaufen, Minispiele – 8 Runden",
   start(namen) {
     const s = { runde: 1, dran: 0, pos: namen.map(() => 0), muenzen: namen.map(() => 5), sterne: namen.map(() => 0),
       phase: "wuerfeln", wurf: null, meldung: "Wer zuerst würfelt, fängt an!", stern: 0, mini: null, ende: false };

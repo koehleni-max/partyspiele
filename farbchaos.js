@@ -48,7 +48,7 @@ function spielbar(s, k) {
 }
 
 export const farbchaos = {
-  id: "farbchaos", name: "Farbchaos Extrem", emoji: "🌈", kurz: "Ablegen nach Farbe oder Zahl – mit Stapeln, Tauschen, Schlucken",
+  id: "farbchaos", name: "Farbchaos Extrem", emoji: "🌈", farben: ["#e11d48","#2563eb"], kurz: "Ablegen nach Farbe oder Zahl – mit Stapeln, Tauschen, Schlucken",
   start(namen) {
     const s = { stapel: neuesDeck(), ablage: [], haende: [], dran: 0, richtung: 1, strafe: 0, farbe: null,
       warte: null, gerufen: {}, gezogen: false, sieger: null, meldung: "Los geht's!" };

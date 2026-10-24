@@ -40,7 +40,7 @@ function startBild() {
   if (hash.startsWith("#a=")) return antwortUebergeben(hash.slice(3));
   const einladung = hash.startsWith("#j=") ? hash.slice(3) : null;
   app.innerHTML = `
-    <div class="karte mitte">
+    <div class="karte mitte titelbild">
       <div class="logo">🎉</div>
       <h1>Partyspiele</h1>
       <p class="leise">Vier Handys, ein WLAN, kein Server.</p>
@@ -126,12 +126,16 @@ function ausfuehren(idx, a) {
     raum.spiel = sp.id;
     raum.s = sp.start(raum.spieler.map((x) => x.name));
     raum.s.anzahl = raum.spieler.length;
+  } else if (a.typ === "_ab18" && idx === 0) {
+    raum.ab18 = !raum.ab18;
+  } else if (a.typ === "_trink" && idx === 0) {
+    raum.ohneAlkohol = !raum.ohneAlkohol;
   } else if (a.typ === "_zurueck" && idx === 0) {
     raum.spiel = null; raum.s = null;
   } else if (raum.spiel) {
     const sp = SPIELE.find((x) => x.id === raum.spiel);
     raum.s.anzahl = raum.spieler.length;
-    try { sp.aktion(raum.s, idx, a, raum.spieler.map((x) => x.name)); } catch (e) { console.error(e); }
+    try { sp.aktion(raum.s, idx, a, raum.spieler.map((x) => x.name), raum); } catch (e) { console.error(e); }
   }
   verteilen();
 }
@@ -168,15 +172,44 @@ export function senden(a) {
   else netz.senden({ t: "aktion", a });
 }
 
+const gesehen = new Set();
+function konfetti(n = 90) {
+  const farben = ["#ff5fae", "#3fd0ff", "#ffd23f", "#5ef08a", "#6d5dfc", "#ff9600"];
+  for (let i = 0; i < n; i++) {
+    const d = document.createElement("i");
+    d.className = "konfetti";
+    d.style.left = Math.random() * 100 + "vw";
+    d.style.background = farben[i % farben.length];
+    d.style.setProperty("--dx", (Math.random() * 40 - 20) + "vw");
+    d.style.setProperty("--dreh", (Math.random() * 1440 - 720) + "deg");
+    d.style.animationDuration = 1.8 + Math.random() * 1.6 + "s";
+    d.style.animationDelay = Math.random() * 0.4 + "s";
+    document.body.appendChild(d);
+    setTimeout(() => d.remove(), 4200);
+  }
+  vibriere(200);
+}
+
 function zeichnen() {
   const fokus = document.activeElement && document.activeElement.id;
   if (rolle === "gast" && !raum) app.innerHTML = gastWarten();
   else if (raum && raum.spiel) {
     app.innerHTML = spielBild();
     const sp = SPIELE.find((x) => x.id === raum.spiel);
-    if (sp.nach) try { sp.nach(raum.s, ich, senden, raum.spieler.map((x) => x.name)); } catch (e) { console.error(e); }
+    if (sp.nach) try { sp.nach(raum.s, ich, senden, raum.spieler.map((x) => x.name), raum); } catch (e) { console.error(e); }
   }
   else if (raum) app.innerHTML = lobbyBild();
+  // Animationen nur beim ersten Erscheinen, Konfetti bei Siegen
+  document.querySelectorAll("[data-key]").forEach((el) => {
+    const k = el.dataset.key;
+    if (gesehen.has(k)) el.classList.add("still"); else gesehen.add(k);
+  });
+  document.querySelectorAll(".urteil").forEach((el) => {
+    const k = "k:" + el.textContent.slice(0, 80);
+    if (!gesehen.has(k)) { gesehen.add(k); if (/🏆|gewinnt/.test(el.textContent)) konfetti(); }
+    else el.classList.add("still");
+  });
+  if (gesehen.size > 3000) gesehen.clear();
   if (fokus && document.getElementById(fokus) && document.getElementById(fokus).tagName === "INPUT") {
     document.getElementById(fokus).focus();
   }
@@ -216,8 +249,8 @@ function lobbyBild() {
     if (status === "fehlgeschlagen" || status === "getrennt") knopf = `<span class="fehler">getrennt</span><button data-neu="${platz}">Neu einladen</button>`;
     return `<li class="sp ${sp ? "an" : "leer"}"><span class="farbe f${platz}"></span>${sp ? esc(sp.name) : `Spieler ${platz + 1}`}<span class="rechts">${knopf}</span></li>`;
   }).join("");
-  const auswahl = SPIELE.map((sp) => `
-    <button class="spielkachel ${rolle === "gastgeber" ? "" : "aus"}" ${rolle === "gastgeber" ? `data-a='${JSON.stringify({ typ: "_spielwahl", id: sp.id })}'` : ""}>
+  const auswahl = SPIELE.map((sp, nr) => `
+    <button class="spielkachel ${rolle === "gastgeber" ? "" : "aus"} ${nr < 2 ? "breit" : ""}" style="--k1:${(sp.farben || [])[0] || "#3b2f8f"};--k2:${(sp.farben || [])[1] || "#1f1b4d"}" ${rolle === "gastgeber" ? `data-a='${JSON.stringify({ typ: "_spielwahl", id: sp.id })}'` : ""}>
       <span class="emo">${sp.emoji}</span><b>${esc(sp.name)}</b><small>${esc(sp.kurz)}</small></button>`).join("");
   return `
     <div class="karte">
@@ -227,6 +260,8 @@ function lobbyBild() {
         <details class="antwort"><summary>Antwort-Code von Hand einfügen</summary>
           <textarea id="antwortfeld" placeholder="Antwort-Link oder Code hier einfügen"></textarea>
           <button id="antwortknopf">Übernehmen</button></details>` : ""}
+      <div class="schalter" ${rolle === "gastgeber" ? `data-a='{"typ":"_ab18"}'` : ""}><input type="checkbox" ${raum.ab18 ? "checked" : ""} ${rolle === "gastgeber" ? "" : "disabled"} tabindex="-1">
+        <span>🔞 Alle hier sind über 18<br><small class="leise">schaltet die Kategorien Spicy und 18+ frei</small></span></div>
     </div>
     <div class="karte">
       <h2>${rolle === "gastgeber" ? "Spiel wählen" : "Der Gastgeber wählt ein Spiel …"}</h2>
@@ -238,7 +273,7 @@ function lobbyBild() {
 function spielBild() {
   const sp = SPIELE.find((x) => x.id === raum.spiel);
   let inhalt;
-  try { inhalt = sp.render(raum.s, ich, raum.spieler.map((x) => x.name)); }
+  try { inhalt = sp.render(raum.s, ich, raum.spieler.map((x) => x.name), raum); }
   catch (e) { console.error(e); inhalt = `<p class="fehler">Anzeigefehler: ${esc(e.message)}</p>`; }
   return `
     <div class="kopf"><span>${sp.emoji} ${esc(sp.name)}</span>

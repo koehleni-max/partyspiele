@@ -6,7 +6,7 @@ import * as T from "./texte.js";
 // Jedes Handy misst selbst (keine Uhrenabgleich-Probleme): Start kommt vom Gastgeber, Gruen nach eigener Wartezeit.
 let reaktionLokal = { runde: -1, gruen: 0, timer: null, gesendet: false };
 const reaktion = {
-  id: "reaktion", name: "Blitzreaktion", emoji: "⚡", kurz: "Tippen, sobald es grün wird – der Langsamste trinkt",
+  id: "reaktion", name: "Blitzreaktion", emoji: "⚡", farben: ["#22d3ee","#1e3a8a"], kurz: "Tippen, sobald es grün wird – der Langsamste trinkt",
   start: () => ({ runde: 0, phase: "bereit", warte: 0, zeiten: {} }),
   aktion(s, i, a, namen) {
     if (a.typ === "los" && s.phase !== "laeuft") { s.runde++; s.phase = "laeuft"; s.warte = 1500 + zufall(4000); s.zeiten = {}; }
@@ -51,7 +51,7 @@ const reaktion = {
 
 // ================================================================ Schaetzen
 const schaetzen = {
-  id: "schaetzen", name: "Schätzmeister", emoji: "🎯", kurz: "Zahlen schätzen – wer am weitesten weg liegt, trinkt",
+  id: "schaetzen", name: "Schätzmeister", emoji: "🎯", farben: ["#f97316","#7c2d12"], kurz: "Zahlen schätzen – wer am weitesten weg liegt, trinkt",
   start: () => { const s = { tipps: {}, phase: "tippen" }; s.rest = mischen(T.SCHAETZ.map((_, i) => i)); s.nr = s.rest.pop(); return s; },
   aktion(s, i, a) {
     if (a.typ === "tipp" && s.phase === "tippen" && a.wert !== "" && !isNaN(Number(a.wert))) {
@@ -77,7 +77,7 @@ const schaetzen = {
 // ================================================================ Malen & Raten
 let malLokal = { pfad: null };
 const malen = {
-  id: "malen", name: "Malen & Raten", emoji: "🎨", kurz: "Einer malt, die anderen raten – reihum",
+  id: "malen", name: "Malen & Raten", emoji: "🎨", farben: ["#ec4899","#6d28d9"], kurz: "Einer malt, die anderen raten – reihum",
   start: () => ({ maler: 0, wort: ziehe(T.MALEN), striche: [], tipps: [], geloest: null, runde: 1 }),
   aktion(s, i, a, namen) {
     if (a.typ === "strich" && i === s.maler && !s.geloest && Array.isArray(a.p) && a.p.length < 400) s.striche.push(a.p);
