@@ -39,6 +39,42 @@ function toeten(s, j, grund, namen) {
 }
 
 const NACHT_REIHE = ["amor", "wolf", "seherin", "waechter", "hexe"];
+
+// Saetze des Erzaehlers - gleich wie in stimme_bauen.py; der Text dient nur als Ersatz, falls eine Aufnahme fehlt.
+const SAETZE = {
+  nacht: "Die Nacht bricht herein. Das ganze Dorf schläft ein.", amor: "Amor erwacht und verliebt zwei Menschen.",
+  wolf: "Die Werwölfe erwachen und suchen sich ein Opfer.", seherin: "Die Seherin erwacht und blickt in die Seele eines Spielers.",
+  waechter: "Der Wächter erwacht und beschützt jemanden.", hexe: "Die Hexe erwacht und betrachtet ihre Tränke.",
+  morgen: "Die Sonne geht auf.", keiner: "Ein Wunder. Heute Nacht ist niemand gestorben.",
+  t_wolf: "Die Werwölfe haben ein Opfer gefunden.", t_gift: "Jemand wurde vergiftet.", t_liebe: "Jemand ist aus Liebeskummer gestorben.",
+  t_jaeger: "Der Jäger hat seinen letzten Schuss abgegeben.", t_dorf: "Das Dorf hat sein Urteil vollstreckt.",
+  schauen: "Seht auf eure Bildschirme.", jaeger: "Der Jäger liegt im Sterben. Ihm bleibt ein letzter Schuss.",
+  tag: "Das Dorf versammelt sich. Diskutiert, und stimmt dann ab, wer gehängt wird.",
+  uneinig: "Das Dorf ist sich uneinig. Heute stirbt niemand.", entschieden: "Das Dorf hat entschieden.",
+  sieg_dorf: "Das Dorf hat gewonnen. Alle Werwölfe sind besiegt.", sieg_wolf: "Die Werwölfe haben gewonnen. Das Dorf ist verloren.",
+  sieg_liebe: "Das Liebespaar hat gewonnen.",
+};
+// Ein laufender Satz wird nie abgeschnitten; was davor noch wartete, ist durch den neuen Stand ueberholt und faellt weg.
+const erzaehlerReihe = [];
+let erzaehlerSpricht = false;
+function erzaehlen(folge) {
+  erzaehlerReihe.splice(0, erzaehlerReihe.length, ...folge);
+  if (!erzaehlerSpricht) weitersprechen();
+}
+function weitersprechen() {
+  const satz = erzaehlerReihe.shift();
+  if (!satz) { erzaehlerSpricht = false; return; }
+  erzaehlerSpricht = true;
+  const weiter = () => setTimeout(weitersprechen, 350);
+  const a = new Audio(`stimme/ww/${satz}.mp3`);
+  let ersatz = false;
+  a.onended = weiter;
+  a.onerror = () => { // Aufnahme fehlt: Browserstimme als Ersatz
+    if (ersatz) return; ersatz = true;
+    try { const u = new SpeechSynthesisUtterance(SAETZE[satz] || ""); u.lang = "de-DE"; u.onend = weiter; u.onerror = weiter; speechSynthesis.speak(u); } catch (e) { weiter(); }
+  };
+  a.play().catch(() => a.onerror());
+}
 function naechsteNachtphase(s, ab) {
   for (let k = ab; k < NACHT_REIHE.length; k++) {
     const r = NACHT_REIHE[k];
@@ -141,7 +177,7 @@ export const werwolf = {
         <p class="mitte">${n} Spieler. ${n < 5 ? "<b>Mit mindestens 5 macht es richtig Spaß – mit 8 bis 20 ist es perfekt.</b>" : ""}</p>
         <div class="rollenliste">${zeilen}<div class="rollenzeile"><span>🧑‍🌾 Dorfbewohner</span><b>${Math.max(0, n - summe)}</b></div></div>
         ${summe > n ? `<p class="fehler mitte">Zu viele Sonderrollen für ${n} Spieler!</p>` : ""}
-        ${ich === 0 ? `<div class="schalter" data-a='{"typ":"stimme"}'><input type="checkbox" ${s.stimme ? "checked" : ""} tabindex="-1"><span>🗣️ Erzähler-Stimme auf diesem Handy</span></div>
+        ${ich === 0 ? `<div class="schalter" data-a='{"typ":"stimme"}'><input type="checkbox" ${s.stimme ? "checked" : ""} tabindex="-1"><span>🗣️ Erzähler (Jarvis) auf diesem Handy</span></div>
           ${knopf("🃏 Rollen verteilen", { typ: "verteilen" }, "gross", summe > n ? "disabled" : "")}` : `<div class="hinweisbox warten">${esc(namen[0])} stellt die Rollen ein …</div>`}`;
     }
     if (s.phase === "rollen") {
@@ -268,18 +304,32 @@ export const werwolf = {
         b.onclick = () => { const j = Number(b.dataset.amor); window.__amor = window.__amor.includes(j) ? window.__amor.filter((x) => x !== j) : [...window.__amor, j].slice(-2); amor.forEach((x) => x.classList.toggle("gewaehlt", window.__amor.includes(Number(x.dataset.amor)))); }; });
       const ok = document.getElementById("amor-ok"); if (ok) ok.onclick = () => { if (window.__amor.length === 2) senden({ typ: "liebe", ziele: window.__amor }); };
     }
-    // Erzaehler-Stimme nur auf dem Gastgeber-Handy
-    if (ich !== 0 || !s.stimme || !("speechSynthesis" in window)) return;
-    const schluessel = `${s.phase}-${s.zug}-${s.nachtSchritt}-${s.jaegerOffen}-${s.gewinner}`;
+    // Erzaehler mit Jarvis' Stimme (einmal aufgenommen, stimme_bauen.py), nur auf dem Gastgeber-Handy.
+    // Er nennt nie Namen oder Rollen von Spielern - wer gestorben ist, steht auf dem Bildschirm.
+    if (ich !== 0 || !s.stimme || !s.rolle) return;
+    const schluessel = `${s.phase}-${s.zug}-${s.nachtSchritt}-${s.jaegerOffen}-${s.gewinner}-${(s.tode || []).length}`;
     if (window.__wwStimme === schluessel) return;
     window.__wwStimme = schluessel;
-    let text = "";
-    if (s.phase === "nacht") text = { amor: `Nacht ${s.nacht}. Das Dorf schläft ein. Amor erwacht und verliebt zwei Menschen.`, wolf: "Die Werwölfe erwachen und suchen sich ein Opfer.", seherin: "Die Seherin erwacht und blickt in die Seele eines Spielers.", waechter: "Der Wächter erwacht und beschützt jemanden.", hexe: "Die Hexe erwacht und betrachtet ihre Tränke." }[NACHT_REIHE[s.nachtSchritt]] || "";
-    else if (s.phase === "morgen") text = s.tode.length ? `Die Sonne geht auf. ${s.tode.map((d) => `${namen[d.j].replace(/🤖\s*/u, "")} ${d.grund}.`).join(" ")}` : "Die Sonne geht auf. Wunder, heute Nacht ist niemand gestorben.";
-    else if (s.phase === "tag") text = "Das Dorf versammelt sich. Diskutiert und stimmt ab, wer gehängt wird.";
-    else if (s.phase === "hinrichtung") text = s.unentschieden ? "Das Dorf ist sich uneinig. Heute stirbt niemand." : `Das Dorf hat entschieden. ${s.tode.map((d) => `${namen[d.j].replace(/🤖\s*/u, "")} ist tot.`).join(" ")}`;
-    if (s.gewinner) text = { dorf: "Das Dorf hat gewonnen.", wolf: "Die Werwölfe haben gewonnen.", liebe: "Das Liebespaar hat gewonnen." }[s.gewinner];
-    if (!text) return;
-    try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = "de-DE"; u.rate = 0.95; u.pitch = 0.8; speechSynthesis.speak(u); } catch (e) {}
+    const folge = [];
+    const tod = (d) => (/Werwölfen/.test(d.grund) ? "t_wolf" : /vergiftet/.test(d.grund) ? "t_gift" : /Liebeskummer/.test(d.grund) ? "t_liebe" : /Jäger/.test(d.grund) ? "t_jaeger" : "t_dorf");
+    const gesagt = window.__wwTode && window.__wwTode.zug === s.zug ? window.__wwTode.n : 0;
+    const neueTode = (s.tode || []).slice(gesagt);
+    window.__wwTode = { zug: s.zug, n: (s.tode || []).length };
+    if (s.phase === "nacht") {
+      if (window.__wwNacht !== s.zug) { window.__wwNacht = s.zug; folge.push("nacht"); }
+      folge.push(NACHT_REIHE[s.nachtSchritt]);
+    } else if (s.phase === "morgen") {
+      if (!gesagt) folge.push("morgen");
+      if (!gesagt && !neueTode.length) folge.push("keiner");
+      neueTode.forEach((d) => folge.push(tod(d)));
+      if (neueTode.length) folge.push(s.jaegerOffen !== null ? "jaeger" : "schauen");
+    } else if (s.phase === "tag") folge.push("tag");
+    else if (s.phase === "hinrichtung") {
+      if (!gesagt) folge.push(s.unentschieden ? "uneinig" : "entschieden");
+      neueTode.forEach((d) => folge.push(tod(d)));
+      if (neueTode.length) folge.push(s.jaegerOffen !== null ? "jaeger" : "schauen");
+    }
+    if (s.gewinner) folge.push(`sieg_${s.gewinner}`);
+    erzaehlen(folge.filter(Boolean));
   },
 };
