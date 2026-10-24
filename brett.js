@@ -2,6 +2,7 @@
 // (in der Art bekannter Party-Brettspiele, eigene Umsetzung).
 import { esc, knopf, zufall, ziehe, mischen, name, schlucke } from "./hilfe.js";
 import * as T from "./texte.js";
+import { brett3dZeigen } from "./brett3d.js";
 
 const RUNDEN = 8;
 const FELDER = 28;
@@ -19,7 +20,7 @@ const EREIGNISSE = [
   ["Du trinkst 2 Schlucke – dafür +4 Münzen", (s, i) => (s.muenzen[i] += 4)],
   ["Schenk jemandem 3 Münzen – oder trink 3 Schlucke", () => {}],
 ];
-const MINI = ["tappen", "reaktion", "schaetzen"];
+const MINI = ["tappen", "farbwort", "reaktion", "gedaechtnis", "schaetzen"];
 
 function neuerStern(s) {
   let f; do { f = zufall(FELDER); } while (s.pos && s.pos.includes(f));
@@ -78,7 +79,7 @@ export const brett = {
         ${f === s.stern ? "⭐" : ART[MUSTER[f]][0]}<div class="figs">${figuren}</div></div>`;
     }).join("");
     const mitte = `<div class="brettmitte">Runde ${Math.min(s.runde, RUNDEN)}/${RUNDEN}${s.wurf ? `<div class="wuerfel">🎲 ${s.wurf}</div>` : ""}</div>`;
-    const brettHtml = `<div class="brett">${felder}${mitte}</div>`;
+    const brettHtml = `<div id="brett3d" class="brett3d"><div class="brett brett2d">${felder}${mitte}</div><div class="brett3d-info">Runde ${Math.min(s.runde, RUNDEN)}/${RUNDEN}${s.wurf ? ` · 🎲 ${s.wurf}` : ""}</div></div>`;
     const meldung = `<div class="meldung">${esc(s.meldung)}</div>`;
     if (s.ende) {
       const rang = namen.map((_, j) => j).sort((a, b) => s.sterne[b] - s.sterne[a] || s.muenzen[b] - s.muenzen[a]);
@@ -95,7 +96,14 @@ export const brett = {
     if (s.phase === "weiter") steuer = knopf("Weiter", { typ: "weiter" }, "gross");
     return `${tafel}${brettHtml}${meldung}${steuer}`;
   },
-  nach(s, ich, senden) { if (s.phase === "mini") miniNach(s, ich, senden); },
+  nach(s, ich, senden) {
+    if (s.phase === "mini") return miniNach(s, ich, senden);
+    const c = document.getElementById("brett3d");
+    if (c && !s.ende) {
+      const zweiD = c.querySelector(".brett2d");
+      if (brett3dZeigen(c, s, MUSTER) && zweiD) zweiD.remove();
+    }
+  },
 };
 
 function feldWirkung(s, i, feld, namen, nachStern = false) {
@@ -114,7 +122,7 @@ function zugEnde(s) {
   if (s.dran === 0) {
     // Runde vorbei: Minispiel
     const art = MINI[(s.runde - 1) % MINI.length];
-    s.mini = { art, runde: s.runde, werte: {}, warte: 1500 + zufall(3500), frage: zufall(T.SCHAETZ.length) };
+    s.mini = { art, runde: s.runde, werte: {}, warte: 1500 + zufall(3500), frage: zufall(T.SCHAETZ.length), zahl: String(10000000 + zufall(89999999)) };
     s.phase = "mini";
     s.meldung = "";
   } else s.phase = "wuerfeln";
@@ -128,7 +136,7 @@ function miniAktion(s, i, a, namen) {
       m.fertig = true;
       const n = s.pos.length;
       let rang;
-      if (m.art === "tappen") rang = [...Array(n).keys()].sort((x, y) => m.werte[y] - m.werte[x]);
+      if (m.art === "tappen" || m.art === "farbwort" || m.art === "gedaechtnis") rang = [...Array(n).keys()].sort((x, y) => m.werte[y] - m.werte[x]);
       else if (m.art === "reaktion") rang = [...Array(n).keys()].sort((x, y) => (m.werte[x] < 0 ? 1e9 : m.werte[x]) - (m.werte[y] < 0 ? 1e9 : m.werte[y]));
       else { const l = T.SCHAETZ[m.frage][1]; rang = [...Array(n).keys()].sort((x, y) => Math.abs(m.werte[x] - l) - Math.abs(m.werte[y] - l)); }
       const preis = [8, 4, 2, 0];
@@ -145,6 +153,8 @@ function miniAktion(s, i, a, namen) {
 }
 
 const MINITEXT = {
+  farbwort: ["🎨 Farbwort-Chaos", "Tippe die FARBE, in der das Wort geschrieben ist – nicht das Wort! 12 Sekunden."],
+  gedaechtnis: ["🧠 Zahlen-Gedächtnis", "Merk dir die Zahl – sie verschwindet nach 3 Sekunden."],
   tappen: ["👆 Tipp-Marathon", "Tippe so oft du kannst auf die Fläche – 5 Sekunden!"],
   reaktion: ["⚡ Blitzreaktion", "Tippe, sobald die Fläche grün wird. Zu früh = letzter Platz."],
   schaetzen: ["🎯 Schätzfrage", "Wer am nächsten dran ist, gewinnt."],
@@ -154,7 +164,7 @@ function miniRender(s, ich, namen) {
   const m = s.mini;
   const [titel, text] = MINITEXT[m.art];
   if (m.fertig) {
-    const fmt = (j) => (m.art === "tappen" ? `${m.werte[j]} Taps` : m.art === "reaktion" ? (m.werte[j] < 0 ? "zu früh" : `${m.werte[j]} ms`) : m.werte[j]);
+    const fmt = (j) => (m.art === "farbwort" ? `${m.werte[j]} richtig` : m.art === "gedaechtnis" ? `${m.werte[j]} Ziffern` : m.art === "tappen" ? `${m.werte[j]} Taps` : m.art === "reaktion" ? (m.werte[j] < 0 ? "zu früh" : `${m.werte[j]} ms`) : m.werte[j]);
     return `<div class="frage">${titel} – Ergebnis${m.art === "schaetzen" ? `<br><small>${esc(T.SCHAETZ[m.frage][0])} → <b>${T.SCHAETZ[m.frage][1]}</b></small>` : ""}</div>
       <ol class="rangliste">${m.rang.map((j, p) => `<li>${name(namen, j)}: ${fmt(j)} → +${[8, 4, 2, 0][p]} 🪙</li>`).join("")}</ol>
       <div class="urteil">${name(namen, m.rang[m.rang.length - 1])} trinkt 2 Schlucke</div>${knopf("Weiter zur nächsten Runde", { typ: "miniweiter" }, "gross")}`;
@@ -163,14 +173,19 @@ function miniRender(s, ich, namen) {
   let inhalt = "";
   if (fertig) inhalt = `<p class="mitte">Erledigt – warte auf die anderen (${Object.keys(m.werte).length}/${namen.length})</p>`;
   else if (m.art === "schaetzen") inhalt = `<div class="frage">${esc(T.SCHAETZ[m.frage][0])}</div><input id="minitipp" type="number" inputmode="decimal" placeholder="Schätzung">${knopf("Abgeben", { typ: "mini" }, "gross", `data-feld="minitipp"`)}`;
+  else if (m.art === "farbwort") inhalt = `<div id="farbwort" class="farbwort">Tippe zum Starten</div><div class="raster farbknoepfe">${FW.map(([n, c]) => `<button class="gross" style="background:${c};box-shadow:0 5px 0 #0008" data-fw="${n}">${n}</button>`).join("")}</div>`;
+  else if (m.art === "gedaechtnis") inhalt = `<div id="gedzahl" class="reaktion fertig" style="font-size:44px;letter-spacing:6px">${m.zahl}</div><input id="gedtipp" inputmode="numeric" placeholder="Zahl eintippen" style="display:none"><button id="gedknopf" class="gross" style="display:none">Abgeben</button>`;
   else inhalt = `<div id="minifeld" class="reaktion rot">${m.art === "tappen" ? "Tippen zum Starten!" : "Warte …"}</div>`;
   return `<div class="frage">Minispiel: ${titel}</div><p class="mitte leise">${text}</p>${inhalt}`;
 }
 
 let miniLokal = { schluessel: null };
+const FW = [["Rot", "#e11d48"], ["Blau", "#2563eb"], ["Grün", "#16a34a"], ["Gelb", "#ca8a04"]];
 function miniNach(s, ich, senden) {
   const m = s.mini;
   if (!m || m.fertig || m.werte[ich] !== undefined || m.art === "schaetzen") return;
+  if (m.art === "farbwort") return farbwortNach(m, senden);
+  if (m.art === "gedaechtnis") return gedaechtnisNach(m, senden);
   const fl = document.getElementById("minifeld");
   const schluessel = `${m.runde}-${m.art}`;
   if (miniLokal.schluessel !== schluessel) {
@@ -210,4 +225,32 @@ function brettKoord() {
   for (let x = 6; x >= 0; x--) k.push([x, 7]);
   for (let y = 6; y >= 1; y--) k.push([0, y]);
   return k;
+}
+
+let fwLokal = { schluessel: null };
+function farbwortNach(m, senden) {
+  const schluessel = `fw-${m.runde}`;
+  const anzeige = document.getElementById("farbwort");
+  const neu = () => { const w = FW[Math.floor(Math.random() * 4)], f = FW[Math.floor(Math.random() * 4)]; fwLokal.richtig = f[0]; return [w[0], f[1]]; };
+  const zeige = () => { const a = document.getElementById("farbwort"); if (a && fwLokal.wort) { a.textContent = fwLokal.wort[0]; a.style.color = fwLokal.wort[1]; } };
+  if (fwLokal.schluessel !== schluessel) fwLokal = { schluessel, start: 0, punkte: 0, gesendet: false };
+  if (fwLokal.start) zeige();
+  anzeige.onclick = () => { if (fwLokal.start) return; fwLokal.start = performance.now(); fwLokal.wort = neu(); zeige();
+    setTimeout(() => { fwLokal.gesendet = true; senden({ typ: "mini", wert: fwLokal.punkte }); }, 12000); };
+  document.querySelectorAll("[data-fw]").forEach((b) => (b.onclick = () => {
+    if (!fwLokal.start || fwLokal.gesendet) return;
+    if (b.dataset.fw === fwLokal.richtig) fwLokal.punkte++; else fwLokal.punkte = Math.max(0, fwLokal.punkte - 1);
+    fwLokal.wort = neu(); zeige();
+    const a = document.getElementById("farbwort"); if (a) a.dataset.punkte = fwLokal.punkte;
+  }));
+}
+let gedLokal = { schluessel: null };
+function gedaechtnisNach(m, senden) {
+  const schluessel = `ged-${m.runde}`;
+  if (gedLokal.schluessel !== schluessel) { gedLokal = { schluessel, versteckt: false }; setTimeout(() => { gedLokal.versteckt = true; gedaechtnisNach(m, senden); }, 3000); }
+  if (!gedLokal.versteckt) return;
+  const z = document.getElementById("gedzahl"), i = document.getElementById("gedtipp"), k = document.getElementById("gedknopf");
+  if (!z) return;
+  z.textContent = "? ? ? ?"; i.style.display = "block"; k.style.display = "block";
+  k.onclick = () => { const e = i.value.replace(/\D/g, ""); let r = 0; for (let x = 0; x < m.zahl.length; x++) if (e[x] === m.zahl[x]) r++; senden({ typ: "mini", wert: r }); };
 }
