@@ -229,5 +229,6 @@ const pferderennen = {
 import { farbchaos } from "./farbchaos.js";
 import { MINISPIELE } from "./minispiele.js";
 import { brett } from "./brett.js";
+import { hindernis } from "./hindernis.js";
 
-export const SPIELE = [brett, klatschen, farbchaos, busfahrer, werWuerde, nochNie, wop, pferderennen, ...MINISPIELE];
+export const SPIELE = [brett, hindernis, klatschen, farbchaos, busfahrer, werWuerde, nochNie, wop, pferderennen, ...MINISPIELE];
