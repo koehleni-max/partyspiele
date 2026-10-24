@@ -234,10 +234,12 @@ import { hindernis } from "./hindernis.js";
 import { FRAGESPIELE } from "./fragespiele.js";
 import { ELTERNSPIELE } from "./elternspiele.js";
 import { werwolf } from "./werwolf.js";
-export const SPIELE = [brett, hindernis, werwolf, ...FRAGESPIELE, ...ELTERNSPIELE, farbchaos, klatschen, busfahrer, pferderennen, ...MINISPIELE];
+import { FREMDSPIELE } from "./fremd.js";
+export const SPIELE = [brett, hindernis, werwolf, ...FRAGESPIELE, ...ELTERNSPIELE, farbchaos, klatschen, busfahrer, pferderennen, ...MINISPIELE, ...FREMDSPIELE];
 export const GRUPPEN = [
   { titel: "🎲 Große Partyspiele", ids: ["brett", "fiesbau", "werwolf"] },
   { titel: "🧩 Gemeinsam spielen – ohne Alkohol", ids: ["begriffe", "pantomime", "quiz", "werbinich", "spion", "slf", "malen", "schaetzen", "reaktion"] },
   { titel: "🍻 Fragen & Trinkspiele", ids: ["nochnie", "werwuerde", "wop", "lieber", "paranoia"] },
   { titel: "🃏 Kartenspiele", ids: ["farbchaos", "klatschen", "busfahrer", "pferde"] },
+  { titel: "📦 Fertige Spiele (aus dem Netz)", ids: ["f-wuerfel", "f-vier", "f-schiffe", "f-dame", "f-ttt"] },
 ];
