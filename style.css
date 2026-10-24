@@ -195,3 +195,25 @@ details.antwort { margin-top: 10px; color: var(--leise); }
 .brett3d-info { position: absolute; top: 10px; left: 12px; background: #000a; padding: 5px 11px; border-radius: 99px; font-weight: 900; font-size: 13px; }
 .farbwort { font-size: 48px; font-weight: 900; text-align: center; padding: 34px 10px; background: #f5f3ff; border-radius: 20px; margin: 10px 0; color: #222; box-shadow: 0 6px 0 #0007; user-select: none; }
 .farbknoepfe button { margin: 0; }
+/* Gemeinschaftsspiele */
+.uhr { text-align: center; font-size: 34px; font-weight: 900; margin: 4px 0 10px; font-variant-numeric: tabular-nums; }
+.uhr.knapp { color: var(--rot); animation: pulsieren .8s infinite; }
+.verboten { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 12px; }
+.verboten span { background: #0006; color: #ffb3b3; border: 2px solid #ff6b6b; border-radius: 99px; padding: 4px 10px; font-weight: 800; font-size: 14px; text-decoration: line-through; }
+.figurenliste { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+.figurkarte { background: linear-gradient(150deg, #4834d4, #2a1f7a); border-radius: 18px; padding: 14px 10px; text-align: center; box-shadow: 0 5px 0 #0007; min-height: 96px; display: flex; flex-direction: column; justify-content: center; gap: 4px; overflow-wrap: anywhere; }
+.figurkarte small { opacity: .8; font-weight: 800; } .figurkarte b { font-size: 18px; } .figurkarte em { font-style: normal; color: var(--gelb); font-weight: 800; font-size: 12px; }
+.figurkarte.ich { background: linear-gradient(150deg, #636e72, #2d3436); } .figurkarte.geschafft { outline: 3px solid var(--gruen); }
+details.verdeckt { background: #0f1022; border: 2px dashed var(--rand); border-radius: 18px; padding: 12px; margin-bottom: 10px; }
+details.verdeckt summary { cursor: pointer; font-weight: 900; text-align: center; font-size: 17px; }
+.buchstabe { display: inline-flex; width: 64px; height: 64px; align-items: center; justify-content: center; font-size: 40px; font-weight: 900; background: var(--gelb); color: #3b2a00; border-radius: 16px; box-shadow: 0 5px 0 var(--gelb-lippe); margin-left: 8px; animation: aufploppen .5s; }
+.slf-felder label { margin: 8px 0; }
+.slf-tabelle { overflow-x: auto; margin: 8px 0; } .slf-tabelle table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.slf-tabelle th, .slf-tabelle td { border: 1px solid var(--rand); padding: 6px; text-align: left; vertical-align: top; } .slf-tabelle td small { display: block; color: var(--gelb); font-weight: 900; }
+.quizraster { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.quizknopf { min-height: 84px; font-size: 16px; background: var(--flaeche3); box-shadow: 0 5px 0 #14162b; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; overflow-wrap: anywhere; }
+.quizknopf.gewaehlt { background: var(--blau); box-shadow: 0 5px 0 var(--blau-lippe); }
+.quizknopf.richtig { background: var(--gruen); box-shadow: 0 5px 0 var(--gruen-lippe); animation: aufploppen .4s; } .quizknopf.falsch { background: var(--rot); box-shadow: 0 5px 0 var(--rot-lippe); }
+.quizknopf.aus { opacity: .45; } .quizknopf span { display: flex; gap: 3px; } .quizknopf i.farbe { width: 12px; height: 12px; }
+.gruppentitel { margin: 18px 4px 10px; font-size: 15px; font-weight: 900; color: var(--leise); letter-spacing: 1px; text-transform: uppercase; }
+.gruppentitel:first-child { margin-top: 0; }

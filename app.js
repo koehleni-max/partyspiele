@@ -1,6 +1,6 @@
 // Partyspiele: Lobby, Verbindung, Spielablauf. Der Gastgeber haelt den Spielstand und verteilt ihn.
 import { Gastgeber, Gast } from "./net.js";
-import { SPIELE } from "./spiele.js";
+import { SPIELE, GRUPPEN } from "./spiele.js";
 
 const app = document.getElementById("app");
 const BASIS = location.href.split("#")[0];
@@ -173,6 +173,12 @@ export function senden(a) {
 }
 
 const gesehen = new Set();
+function ohneAlkohol(h) {
+  return h.replace(/trinkt das Klatschglas aus/g, "bekommt 5 Strafpunkte")
+    .replace(/(\d+)\s*Schlucke/g, "$1 Strafpunkte").replace(/(\d+)\s*Schluck\b/g, "$1 Strafpunkt")
+    .replace(/einen Schluck/g, "einen Strafpunkt").replace(/\btrinkt\b/g, "bekommt").replace(/\btrinken\b/g, "bekommen")
+    .replace(/klatscht/g, "bekommt einen Strafpunkt").replace(/🍺|🍻|🥃/g, "⚡").replace(/Schlucke/g, "Strafpunkte").replace(/Schluck\b/g, "Strafpunkt");
+}
 function konfetti(n = 90) {
   const farben = ["#ff5fae", "#3fd0ff", "#ffd23f", "#5ef08a", "#6d5dfc", "#ff9600"];
   for (let i = 0; i < n; i++) {
@@ -249,9 +255,11 @@ function lobbyBild() {
     if (status === "fehlgeschlagen" || status === "getrennt") knopf = `<span class="fehler">getrennt</span><button data-neu="${platz}">Neu einladen</button>`;
     return `<li class="sp ${sp ? "an" : "leer"}"><span class="farbe f${platz}"></span>${sp ? esc(sp.name) : `Spieler ${platz + 1}`}<span class="rechts">${knopf}</span></li>`;
   }).join("");
-  const auswahl = SPIELE.map((sp, nr) => `
-    <button class="spielkachel ${rolle === "gastgeber" ? "" : "aus"} ${nr < 2 ? "breit" : ""}" style="--k1:${(sp.farben || [])[0] || "#3b2f8f"};--k2:${(sp.farben || [])[1] || "#1f1b4d"}" ${rolle === "gastgeber" ? `data-a='${JSON.stringify({ typ: "_spielwahl", id: sp.id })}'` : ""}>
-      <span class="emo">${sp.emoji}</span><b>${esc(sp.name)}</b><small>${esc(sp.kurz)}</small></button>`).join("");
+  const kachel = (sp, breit) => `
+    <button class="spielkachel ${rolle === "gastgeber" ? "" : "aus"} ${breit ? "breit" : ""}" style="--k1:${(sp.farben || [])[0] || "#3b2f8f"};--k2:${(sp.farben || [])[1] || "#1f1b4d"}" ${rolle === "gastgeber" ? `data-a='${JSON.stringify({ typ: "_spielwahl", id: sp.id })}'` : ""}>
+      <span class="emo">${sp.emoji}</span><b>${esc(sp.name)}</b><small>${esc(sp.kurz)}</small></button>`;
+  const auswahl = GRUPPEN.map((g) => `<div class="gruppentitel" style="grid-column:span 2">${g.titel}</div>` +
+    g.ids.map((id) => SPIELE.find((x) => x.id === id)).filter(Boolean).map((sp) => kachel(sp, g.ids.length < 3)).join("")).join("");
   return `
     <div class="karte">
       <h2>Lobby</h2>
@@ -262,6 +270,8 @@ function lobbyBild() {
           <button id="antwortknopf">Übernehmen</button></details>` : ""}
       <div class="schalter" ${rolle === "gastgeber" ? `data-a='{"typ":"_ab18"}'` : ""}><input type="checkbox" ${raum.ab18 ? "checked" : ""} ${rolle === "gastgeber" ? "" : "disabled"} tabindex="-1">
         <span>🔞 Alle hier sind über 18<br><small class="leise">schaltet die Kategorien Spicy und 18+ frei</small></span></div>
+      <div class="schalter" ${rolle === "gastgeber" ? `data-a='{"typ":"_trink"}'` : ""}><input type="checkbox" ${raum.ohneAlkohol ? "checked" : ""} ${rolle === "gastgeber" ? "" : "disabled"} tabindex="-1">
+        <span>🧃 Ohne Alkohol spielen<br><small class="leise">statt Schlucken gibt es Strafpunkte</small></span></div>
     </div>
     <div class="karte">
       <h2>${rolle === "gastgeber" ? "Spiel wählen" : "Der Gastgeber wählt ein Spiel …"}</h2>
@@ -273,7 +283,7 @@ function lobbyBild() {
 function spielBild() {
   const sp = SPIELE.find((x) => x.id === raum.spiel);
   let inhalt;
-  try { inhalt = sp.render(raum.s, ich, raum.spieler.map((x) => x.name), raum); }
+  try { inhalt = sp.render(raum.s, ich, raum.spieler.map((x) => x.name), raum); if (raum.ohneAlkohol) inhalt = ohneAlkohol(inhalt); }
   catch (e) { console.error(e); inhalt = `<p class="fehler">Anzeigefehler: ${esc(e.message)}</p>`; }
   return `
     <div class="kopf"><span>${sp.emoji} ${esc(sp.name)}</span>

@@ -232,4 +232,11 @@ import { brett } from "./brett.js";
 import { hindernis } from "./hindernis.js";
 
 import { FRAGESPIELE } from "./fragespiele.js";
-export const SPIELE = [brett, hindernis, ...FRAGESPIELE, farbchaos, klatschen, busfahrer, pferderennen, ...MINISPIELE];
+import { ELTERNSPIELE } from "./elternspiele.js";
+export const SPIELE = [brett, hindernis, ...FRAGESPIELE, ...ELTERNSPIELE, farbchaos, klatschen, busfahrer, pferderennen, ...MINISPIELE];
+export const GRUPPEN = [
+  { titel: "🎲 Große Partyspiele", ids: ["brett", "fiesbau"] },
+  { titel: "🧩 Gemeinsam spielen – ohne Alkohol", ids: ["begriffe", "pantomime", "quiz", "werbinich", "spion", "slf", "malen", "schaetzen", "reaktion"] },
+  { titel: "🍻 Fragen & Trinkspiele", ids: ["nochnie", "werwuerde", "wop", "lieber", "paranoia"] },
+  { titel: "🃏 Kartenspiele", ids: ["farbchaos", "klatschen", "busfahrer", "pferde"] },
+];
