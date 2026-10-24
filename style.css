@@ -95,3 +95,17 @@ details.antwort { margin-top: 10px; color: var(--leise); }
 .tipps { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; font-size: 13px; }
 .tipps span { background: #120e26; padding: 4px 8px; border-radius: 8px; }
 .n0 { color: #ff8cc6; } .n1 { color: #8ce3ff; } .n2 { color: #fde68a; } .n3 { color: #86efac; }
+/* Partybrett */
+.tafel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
+.tafel > div { background: #120e26; border-radius: 10px; padding: 6px 8px; display: flex; gap: 6px; align-items: center; font-size: 13px; min-width: 0; }
+.tafel > div b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tafel > div.dran { outline: 2px solid var(--akzent2); }
+.brett { display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr); gap: 3px; aspect-ratio: 1; margin: 6px 0; }
+.feld { border-radius: 7px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 15px; position: relative; background: #2d2459; min-width: 0; }
+.feld.art-m { background: #1f4a2e; } .feld.art-v { background: #5a1f2e; } .feld.art-t { background: #5b3d12; } .feld.art-e { background: #2a3f7a; } .feld.art-d { background: #4b1f63; }
+.feld.sternfeld { background: #a16207; box-shadow: 0 0 10px #facc15; }
+.figs { position: absolute; bottom: 1px; display: flex; gap: 1px; }
+.fig { width: 9px; height: 9px; border-radius: 50%; border: 1px solid #000; display: block; }
+.fig.f0 { background: #ff4fa3; } .fig.f1 { background: #4fd2ff; } .fig.f2 { background: #facc15; } .fig.f3 { background: #4ade80; }
+.brettmitte { grid-column: 2 / 8; grid-row: 2 / 8; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--leise); font-weight: 700; }
+.wuerfel { font-size: 40px; color: #fff; margin-top: 6px; }
