@@ -95,8 +95,10 @@ export const farbchaos = {
         s.meldung = `${namen[i]} zieht ${s.strafe} Karten und trinkt ${Math.ceil(s.strafe / 2)} Schlucke!`;
         s.strafe = 0; weiter(s, 1);
       } else if (!s.gezogen) {
-        hand.push(...ziehen(s, 1)); s.gezogen = true; s.gerufen[i] = false;
-        s.meldung = `${namen[i]} zieht eine Karte.`;
+        const neu = ziehen(s, 1);
+        hand.push(...neu); s.gerufen[i] = false;
+        if (neu.length && spielbar(s, neu[0])) { s.gezogen = true; s.meldung = `${namen[i]} zieht eine Karte – sie passt!`; }
+        else { s.meldung = `${namen[i]} zieht eine Karte – passt nicht, weiter.`; weiter(s, 1); }
       }
       return;
     }
@@ -108,6 +110,7 @@ export const farbchaos = {
       hand.splice(a.k, 1);
       s.ablage.push({ ...k });
       if (hand.length > 1) s.gerufen[i] = false;
+      if (hand.length === 1) s.gerufen[i] = true;
       s.meldung = `${namen[i]} legt ${k.f === "schwarz" ? "" : FARBNAME[k.f] + " "}${anzeige(k)}`;
       if (!hand.length) {
         s.sieger = i;
@@ -131,41 +134,46 @@ export const farbchaos = {
   },
 
   render(s, ich, namen) {
-    const n = s.haende.length;
     const oben = s.ablage[s.ablage.length - 1];
     const gegner = namen.map((nm, j) => `<div class="gegner ${j === s.dran ? "dran" : ""}">
-        <b>${esc(nm)}${j === ich ? " (du)" : ""}</b><span>🂠 × ${s.haende[j].length}</span>
-        ${s.haende[j].length === 1 && !s.gerufen[j] && j !== ich ? knopf("Erwischt!", { typ: "erwischt", ziel: j }, "klein2 rot") : ""}
-        ${s.gerufen[j] && s.haende[j].length === 1 ? "<em>letzte!</em>" : ""}</div>`).join("");
-    const tisch = `<div class="tisch"><div class="stapel">🂠<small>${s.stapel.length}</small></div>
-      ${karteHtml({ f: oben.gewaehlt || oben.f, w: oben.w }, "gross")}
-      <div class="info">Farbe: <b class="t-${s.farbe}">${FARBNAME[s.farbe]}</b><br>Richtung: ${s.richtung > 0 ? "⟳" : "⟲"}${s.strafe ? `<br><b class="rotk">Strafe: +${s.strafe}</b>` : ""}</div></div>`;
+        <b>${j === s.dran ? "👉 " : ""}${esc(nm)}${j === ich ? " (du)" : ""}</b>
+        <span class="minikarten">${"<i></i>".repeat(Math.min(s.haende[j].length, 10))}<small>${s.haende[j].length}</small></span>
+        ${s.haende[j].length === 1 ? "<em>LETZTE KARTE!</em>" : ""}</div>`).join("");
+    const farbeOben = oben.gewaehlt || oben.f;
+    const tisch = `<div class="tisch">
+      <button class="stapel-knopf" ${s.dran === ich && !s.warte && !s.gezogen ? `data-a='{"typ":"ziehen"}'` : "disabled"}>🂠<small>${s.strafe ? `+${s.strafe} ziehen` : "ziehen"}</small></button>
+      ${karteHtml({ f: farbeOben, w: oben.w }, "gross")}
+      <div class="info"><span class="farbpunkt fp-${s.farbe}"></span><b class="t-${s.farbe}">${FARBNAME[s.farbe]}</b><br>${s.richtung > 0 ? "⟳ im Uhrzeigersinn" : "⟲ gegen die Uhr"}</div></div>`;
     const meldung = `<div class="meldung">${esc(s.meldung)}</div>`;
     if (s.sieger !== null) {
-      const rest = namen.map((nm, j) => (j === s.sieger ? "" : `${esc(nm)} trinkt ${Math.max(1, Math.ceil(s.haende[j].length / 3))}`)).filter(Boolean).join(" · ");
-      return `${meldung}<div class="urteil">🏆 ${esc(namen[s.sieger])} gewinnt!<br><small>${rest}</small></div>${knopf("Neue Runde", { typ: "neustart" }, "gross")}`;
+      const rest = namen.map((nm, j) => (j === s.sieger ? "" : `${esc(nm)}: ${Math.max(1, Math.ceil(s.haende[j].length / 3))} 🍺`)).filter(Boolean).join(" · ");
+      return `<div class="urteil">🏆 ${esc(namen[s.sieger])} gewinnt!<br><small>${rest}</small></div>${knopf("Neue Runde 🔄", { typ: "neustart" }, "gross gruen")}`;
     }
-    let steuerung = "";
-    if (s.warte && s.warte.wer === ich) {
-      if (s.warte.art === "farbe") steuerung = `<p class="mitte">Wähle die neue Farbe:</p><div class="raster">${FARBEN.map((f) => knopf(FARBNAME[f], { typ: "farbe", f }, `gross fb-${f}`)).join("")}</div>`;
-      else steuerung = `<p class="mitte">Mit wem tauschst du die Hand?</p><div class="raster">${namen.map((nm, j) => (j === ich ? "" : knopf(esc(nm), { typ: "tausch", ziel: j }, "gross"))).join("")}</div>`;
-    } else if (s.warte) steuerung = `<p class="mitte leise">${esc(namen[s.warte.wer])} entscheidet …</p>`;
-    else if (s.dran === ich) {
-      steuerung = `<div class="zeile-knoepfe">${knopf(s.strafe ? `+${s.strafe} ziehen 🍺` : s.gezogen ? "" : "Karte ziehen", { typ: "ziehen" }, `${s.gezogen && !s.strafe ? "versteckt" : ""}`)}
-        ${s.gezogen && !s.strafe ? knopf("Passen", { typ: "passen" }) : ""}</div>`;
-    } else steuerung = `<p class="mitte leise">${esc(namen[s.dran])} ist dran</p>`;
     const hand = s.haende[ich];
+    const spielbare = hand.filter((k, j) => s.dran === ich && !s.warte && spielbar(s, k) && (!s.gezogen || j === hand.length - 1)).length;
+    let hinweis = "", steuerung = "";
+    if (s.warte && s.warte.wer === ich) {
+      if (s.warte.art === "farbe") { hinweis = "🎨 Wähle die neue Farbe"; steuerung = `<div class="raster">${FARBEN.map((f) => knopf(FARBNAME[f], { typ: "farbe", f }, `gross fb-${f}`)).join("")}</div>`; }
+      else { hinweis = "🔄 Mit wem tauschst du deine Karten?"; steuerung = `<div class="raster">${namen.map((nm, j) => (j === ich ? "" : knopf(esc(nm), { typ: "tausch", ziel: j }, "gross"))).join("")}</div>`; }
+    } else if (s.warte) hinweis = `⏳ ${esc(namen[s.warte.wer])} entscheidet …`;
+    else if (s.dran === ich) {
+      if (s.strafe) hinweis = spielbare ? `⚠️ Leg eine ${s.strafe >= 4 ? "+4" : "+2 oder +4"} drauf – oder tippe auf den Stapel (+${s.strafe})` : `😬 Keine passende Karte – tippe auf den Stapel und zieh ${s.strafe}`;
+      else if (s.gezogen) { hinweis = "✨ Die gezogene Karte passt – ausspielen oder behalten?"; steuerung = knopf("Behalten & weiter", { typ: "passen" }, "zweit"); }
+      else hinweis = spielbare ? "👆 DU BIST DRAN – tippe eine leuchtende Karte" : "👆 DU BIST DRAN – nichts passt: tippe auf den Stapel";
+    } else hinweis = `⏳ ${esc(namen[s.dran])} ist dran`;
     const meineHand = `<div class="fc-hand">${hand.map((k, j) => {
       const ok = s.dran === ich && !s.warte && spielbar(s, k) && (!s.gezogen || j === hand.length - 1);
-      return `<button class="fc-knopf ${ok ? "ok" : "nein"}" data-a='${JSON.stringify({ typ: "spielen", k: j })}'>${karteHtml(k)}</button>`;
+      return `<button class="fc-knopf ${ok ? "ok" : "nein"}" ${ok ? `data-a='${JSON.stringify({ typ: "spielen", k: j })}'` : ""}>${karteHtml(k)}</button>`;
     }).join("")}</div>`;
-    const rufen = hand.length <= 2 && !s.gerufen[ich] ? knopf("📣 Letzte Karte!", { typ: "rufen" }, "gross gelb") : "";
-    return `<div class="gegnerliste">${gegner}</div>${tisch}${meldung}${steuerung}${meineHand}${rufen}
-      <details class="grundregeln"><summary>Regeln</summary><ul>
-        <li>Lege gleiche Farbe oder gleiche Zahl/Symbol. ★ und +4 gehen immer.</li>
-        <li>+2 auf +2 und +4 auf alles stapeln – wer nicht kann, zieht alles und trinkt die Hälfte als Schlucke.</li>
-        <li>7: Hand mit jemandem tauschen. 0: alle Hände wandern in Spielrichtung weiter.</li>
-        <li>Bei der vorletzten Karte „Letzte Karte!“ drücken – sonst kann man dich erwischen (2 Karten + Schluck).</li>
-        <li>Am Ende trinkt jeder einen Schluck pro 3 Restkarten.</li></ul></details>`;
+    const istDran = (s.dran === ich && !s.warte) || (s.warte && s.warte.wer === ich);
+    return `<div class="gegnerliste">${gegner}</div>${tisch}${meldung}
+      <div class="hinweisbox ${istDran ? "" : "warten"}" data-key="h${s.ablage.length}-${s.dran}-${ich}">${hinweis}</div>${steuerung}
+      <div class="handtitel">Deine Karten (${hand.length})</div>${meineHand}
+      <details class="grundregeln" ${s.ablage.length < 4 ? "open" : ""}><summary>📖 So geht's (30 Sekunden)</summary><ul>
+        <li>Leg eine Karte mit <b>gleicher Farbe</b> oder <b>gleicher Zahl/Zeichen</b>. Passende Karten leuchten.</li>
+        <li>Nichts passt? <b>Tippe auf den Stapel</b>. Passt die neue Karte, darfst du sie legen.</li>
+        <li>★ = Farbe wünschen. +2 / +4 = der Nächste zieht – außer er legt auch +2/+4 drauf.</li>
+        <li>⊘ = Nächster setzt aus. ⇄ = Richtung dreht. 7 = Karten tauschen. 0 = alle geben ihre Karten weiter.</li>
+        <li>Wer ziehen muss, trinkt halb so viele Schlucke. Wer zuerst keine Karten hat, gewinnt.</li></ul></details>`;
   },
 };

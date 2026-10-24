@@ -177,3 +177,15 @@ details.antwort { margin-top: 10px; color: var(--leise); }
 .steuer #fb-sprung { background: var(--gruen); box-shadow: 0 6px 0 var(--gruen-lippe); }
 .konfetti { position: fixed; top: -12px; width: 10px; height: 14px; z-index: 40; pointer-events: none; border-radius: 2px; animation: fallen linear forwards; }
 @keyframes fallen { to { transform: translate3d(var(--dx), 110vh, 0) rotate(var(--dreh)); } }
+/* Farbchaos leicht */
+.minikarten { display: inline-flex; align-items: center; gap: 1px; } .minikarten i { width: 7px; height: 11px; border-radius: 2px; background: linear-gradient(135deg, #6d5dfc, #eb459e); display: inline-block; }
+.minikarten small { margin-left: 5px; font-weight: 800; }
+.stapel-knopf { font-size: 46px; padding: 6px 12px 4px; background: #0e3a26; border: 2px dashed #8fe0b5; box-shadow: 0 5px 0 #062417; display: flex; flex-direction: column; align-items: center; }
+.stapel-knopf small { font-size: 12px; font-weight: 900; color: #d8ffe9; } .stapel-knopf:not(:disabled) { animation: wippen 1.4s ease-in-out infinite; border-style: solid; border-color: var(--gelb); }
+.stapel-knopf:disabled { opacity: .55; filter: none; }
+.farbpunkt { display: inline-block; width: 18px; height: 18px; border-radius: 50%; vertical-align: middle; margin-right: 6px; border: 2px solid #fff; }
+.fp-rot { background: #e11d48; } .fp-gelb { background: #eab308; } .fp-gruen { background: #16a34a; } .fp-blau { background: #2563eb; }
+.handtitel { text-align: center; font-weight: 900; color: var(--leise); margin-top: 6px; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; }
+.fc-hand .fc { width: 62px; height: 92px; font-size: 26px; }
+.hinweisbox:not(.warten) { animation: pulsieren 1.6s ease-in-out infinite; }
+@keyframes pulsieren { 50% { box-shadow: 0 0 26px #ffc80077; } }
