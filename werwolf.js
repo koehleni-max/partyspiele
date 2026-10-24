@@ -181,11 +181,15 @@ export const werwolf = {
           ${s.gifttrank && s.giftZiel === null ? `<details class="grundregeln"><summary>☠️ Gifttrank benutzen</summary>${spielerKnoepfe("gift", (j) => lebt(s, j) && j !== ich)}</details>` : s.giftZiel !== null ? `<p class="mitte">☠️ ${esc(namen[s.giftZiel])} wird vergiftet.</p>` : ""}
           ${knopf("Fertig – weiterschlafen", { typ: "fertig" }, "gross")}`;
       }
-      return `<div class="ww-nacht ${s.uebergang === "sonnenuntergang" ? "anim-unter" : ""}" data-key="nacht${s.zug}"><div class="mond"></div><div class="sterne"></div><div class="ww-dorf nacht"></div>
+      // Geraeusche klingen auf ALLEN Handys gleich - verraten also niemanden
+      const klang = `<i hidden data-key="wwton-n${s.zug}-${s.nachtSchritt}" data-ton="${r === "wolf" ? "heulen" : r === "amor" ? "herz" : "magie"}"></i>`;
+      return `${klang}<div class="ww-nacht ${s.uebergang === "sonnenuntergang" ? "anim-unter" : ""}" data-key="nacht${s.zug}" data-ton="gong"><div class="mond"></div><div class="sterne"></div><div class="ww-dorf nacht"></div>
         <div class="ww-titel">Nacht ${s.nacht}</div></div><div class="nachtpanel">${inhalt}</div>${meineRolle}${geist}`;
     }
 
-    const himmel = (art) => `<div class="ww-himmel tag ${s.uebergang === "sonnenaufgang" && art === "morgen" ? "anim-auf" : ""}" data-key="${art}${s.zug}"><div class="sonne"></div><div class="ww-dorf"></div>
+    const himmel = (art) => `<i hidden data-key="wwton-${art}${s.zug}-${s.tode.length}-${s.gewinner || ""}" data-ton="${
+      art === "morgen" ? (s.tode.length ? "tod" : "morgen") : art === "hinrichtung" ? (s.unentschieden ? "falsch" : "tod") : "tack"}"></i>${
+      s.jaegerOffen === null && s.tode.some((d) => /erschossen|Jäger/i.test(d.grund)) ? `<i hidden data-key="wwschuss${s.zug}-${s.tode.length}" data-ton="schuss"></i>` : ""}<div class="ww-himmel tag ${s.uebergang === "sonnenaufgang" && art === "morgen" ? "anim-auf" : ""}" data-key="${art}${s.zug}"><div class="sonne"></div><div class="ww-dorf"></div>
       <div class="ww-titel">${art === "morgen" ? `☀️ Tag ${s.nacht}` : art === "tag" ? "⚖️ Abstimmung" : "🪢 Urteil"}</div></div>`;
     const todesliste = s.tode.length ? s.tode.map((d) => `<div class="todeskarte">✝ <b>${esc(namen[d.j])}</b> ${d.grund}.<br><small>Rolle: ${ROLLEN[s.rolle[d.j]].emoji} ${ROLLEN[s.rolle[d.j]].name}</small></div>`).join("") : "";
     let unten = "";
@@ -202,6 +206,8 @@ export const werwolf = {
       ${tot ? "<div class='hinweisbox warten'>👻 Tote dürfen nicht abstimmen.</div>" : `<div class="raster">${namen.map((nm, j) => (lebt(s, j) && j !== ich ? knopf(esc(nm), { typ: "stimme", ziel: j }, `wahl ${s.stimmen[ich] === j ? "gewaehlt" : ""}`) : "")).join("")}</div>`}
       <p class="mitte leise">${l.filter((j) => s.stimmen[j] !== undefined).length}/${l.length} haben abgestimmt</p>${meineRolle}${geist}`;
   },
+
+  musik(s) { return s.phase === "nacht" ? "nacht" : ["morgen", "tag", "hinrichtung"].includes(s.phase) ? "dorf" : null; },
 
   nach(s, ich, senden, namen) {
     document.body.classList.toggle("nachtmodus", s.phase === "nacht");

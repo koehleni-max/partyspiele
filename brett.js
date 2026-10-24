@@ -80,22 +80,25 @@ export const brett = {
     }).join("");
     const mitte = `<div class="brettmitte">Runde ${Math.min(s.runde, RUNDEN)}/${RUNDEN}${s.wurf ? `<div class="wuerfel">🎲 ${s.wurf}</div>` : ""}</div>`;
     const brettHtml = `<div id="brett3d" class="brett3d"><div class="brett brett2d">${felder}${mitte}</div><div class="brett3d-info">Runde ${Math.min(s.runde, RUNDEN)}/${RUNDEN}${s.wurf ? ` · 🎲 ${s.wurf}` : ""}</div></div>`;
-    const meldung = `<div class="meldung">${esc(s.meldung)}</div>`;
+    const m = s.meldung || "";
+    const klang = /kauft einen Stern/.test(m) ? "stern" : /\+3 Münzen/.test(m) ? "richtig" : /−3 Münzen/.test(m) ? "falsch" : /❓/.test(m) ? "magie" : /Duell/.test(m) ? "spannung" : /Trinkfeld/.test(m) ? "pop" : "";
+    const meldung = `<div class="meldung">${esc(m)}</div>${klang ? `<i hidden data-key="bt-${s.runde}-${s.dran}-${m.length}-${klang}" data-ton="${klang}" data-ton-nach="${s.wurf && klang !== "stern" ? 400 + s.wurf * 280 : 0}"></i>` : ""}`;
     if (s.ende) {
       const rang = namen.map((_, j) => j).sort((a, b) => s.sterne[b] - s.sterne[a] || s.muenzen[b] - s.muenzen[a]);
       return `${tafel}<div class="urteil">🏆 ${name(namen, rang[0])} gewinnt das Partybrett!</div>
         <ol class="rangliste">${rang.map((j) => `<li>${name(namen, j)}: ⭐${s.sterne[j]} 🪙${s.muenzen[j]}</li>`).join("")}</ol>
         <p class="mitte">Letzter Platz trinkt 3 Schlucke 🍺</p>${knopf("Neues Spiel", { typ: "neustart" }, "gross")}`;
     }
-    if (s.phase === "mini") return `${tafel}${miniRender(s, ich, namen)}`;
+    if (s.phase === "mini") return `${tafel}<i hidden data-key="btmini-${s.runde}-${s.mini && s.mini.art}" data-ton="los"></i>${miniRender(s, ich, namen)}`;
     let steuer = "";
     const istDran = ich === s.dran;
-    if (s.phase === "wuerfeln") steuer = istDran ? knopf("🎲 Würfeln", { typ: "wuerfeln" }, "gross") : `<p class="mitte leise">${esc(namen[s.dran])} würfelt …</p>`;
+    if (s.phase === "wuerfeln") steuer = istDran ? `<i hidden data-key="btdran-${s.runde}-${s.dran}" data-ton="dran"></i>` + knopf("🎲 Würfeln", { typ: "wuerfeln" }, "gross") : `<p class="mitte leise">${esc(namen[s.dran])} würfelt …</p>`;
     if (s.phase === "stern") steuer = istDran ? `<div class="raster2">${knopf(`⭐ Kaufen (${STERNPREIS})`, { typ: "kaufen" }, "gross gelb")}${knopf("Nein", { typ: "nein" }, "gross")}</div>` : `<p class="mitte leise">${esc(namen[s.dran])} überlegt …</p>`;
     if (s.phase === "duell") steuer = istDran ? `<p class="mitte">Wen forderst du heraus?</p><div class="raster">${namen.map((nm, j) => (j === ich ? "" : knopf(esc(nm), { typ: "duell", ziel: j }, "gross"))).join("")}</div>` : `<p class="mitte leise">${esc(namen[s.dran])} wählt einen Gegner …</p>`;
     if (s.phase === "weiter") steuer = knopf("Weiter", { typ: "weiter" }, "gross");
     return `${tafel}${brettHtml}${meldung}${steuer}`;
   },
+  musik(s) { return s.ende ? null : "brett"; },
   nach(s, ich, senden) {
     if (s.phase === "mini") return miniNach(s, ich, senden);
     const c = document.getElementById("brett3d");

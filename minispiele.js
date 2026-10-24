@@ -1,4 +1,5 @@
 // Geschicklichkeits- und Kreativspiele
+import { spiele as klang } from "./ton.js";
 import { esc, knopf, zufall, ziehe, mischen, name, schlucke } from "./hilfe.js";
 import * as T from "./texte.js";
 
@@ -36,7 +37,7 @@ const reaktion = {
       reaktionLokal = { runde: s.runde, gruen: 0, gesendet: false, timer: setTimeout(() => {
         reaktionLokal.gruen = performance.now();
         const f = document.getElementById("reaktionsflaeche");
-        if (f) { f.className = "reaktion gruen"; f.textContent = "JETZT!"; }
+        if (f) { f.className = "reaktion gruen"; f.textContent = "JETZT!"; klang("los"); }
       }, s.warte) };
     } else if (reaktionLokal.gruen) { fl.className = "reaktion gruen"; fl.textContent = "JETZT!"; }
     fl.onpointerdown = () => {

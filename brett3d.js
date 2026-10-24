@@ -1,5 +1,6 @@
 // 3D-Ansicht fuer das Partybrett (three.js, liegt lokal in vendor/). Die Szene bleibt ueber Neuzeichnungen erhalten:
 // das Canvas wird jeweils in den neuen Platzhalter umgehaengt, Figuren huepfen Feld fuer Feld zur neuen Position.
+import { spiele as klang } from "./ton.js";
 import * as THREE from "./vendor/three.module.js";
 
 const FARBEN_SP = [0xff5fae, 0x3fd0ff, 0xffd23f, 0x5ef08a];
@@ -172,7 +173,7 @@ function schleife() {
   g.figuren.forEach((f, j) => {
     if (f.anzeige !== f.ziel) {
       f.huepfen += dt * 3.6;
-      if (f.huepfen >= 1) { f.huepfen = 0; f.anzeige = (f.anzeige + 1) % g.n; }
+      if (f.huepfen >= 1) { f.huepfen = 0; f.anzeige = (f.anzeige + 1) % g.n; klang("schritt"); }
     }
     const a = g.felder[f.anzeige].p, b = g.felder[(f.anzeige + (f.anzeige !== f.ziel ? 1 : 0)) % g.n].p;
     const k = f.anzeige !== f.ziel ? f.huepfen : 0;
@@ -227,7 +228,7 @@ export function brett3dZeigen(container, s, muster) {
   const sp = g.felder[s.stern].p; g.stern.position.x = sp.x; g.stern.position.z = sp.z;
   const schluessel = s.wurf ? `${s.runde}-${s.dran}-${s.wurf}-${s.pos.join(",")}` : null;
   if (schluessel && schluessel !== g.wurfSchluessel) {
-    g.wurfSchluessel = schluessel; g.wurfStart = performance.now(); g.wurfZahl = s.wurf; g.wuerfel.visible = true;
+    g.wurfSchluessel = schluessel; g.wurfStart = performance.now(); g.wurfZahl = s.wurf; g.wuerfel.visible = true; klang("wuerfel");
   }
   const sternSchluessel = s.sterne.join(",");
   if (g.sterneAlt !== undefined && g.sterneAlt !== sternSchluessel) funkenAn(g.felder[s.pos[s.dran]].p);

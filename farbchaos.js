@@ -167,7 +167,7 @@ export const farbchaos = {
     }).join("")}</div>`;
     const istDran = (s.dran === ich && !s.warte) || (s.warte && s.warte.wer === ich);
     return `<div class="gegnerliste">${gegner}</div>${tisch}${meldung}
-      <div class="hinweisbox ${istDran ? "" : "warten"}" data-key="h${s.ablage.length}-${s.dran}-${ich}">${hinweis}</div>${steuerung}
+      <div class="hinweisbox ${istDran ? "" : "warten"}" data-key="h${s.ablage.length}-${s.dran}-${ich}" data-ton="${istDran ? "dran" : "karte"}">${hinweis}</div>${steuerung}
       <div class="handtitel">Deine Karten (${hand.length})</div>${meineHand}
       <details class="grundregeln" ${s.ablage.length < 4 ? "open" : ""}><summary>📖 So geht's (30 Sekunden)</summary><ul>
         <li>Leg eine Karte mit <b>gleicher Farbe</b> oder <b>gleicher Zahl/Zeichen</b>. Passende Karten leuchten.</li>

@@ -2,6 +2,7 @@
 // Jeder baut reihum ein Teil in die Strecke, dann laeuft jeder auf seinem Handy. Nur wer es ins Ziel schafft, punktet -
 // schaffen es alle, ist die Strecke zu leicht und keiner punktet.
 import { esc, knopf, zufall, mischen, name } from "./hilfe.js";
+import { spiele as klang } from "./ton.js";
 
 const B = 22, H = 12; // Raster
 const KARTE = [
@@ -85,6 +86,7 @@ export const hindernis = {
     return `${tafel}<div class="frage">${esc(s.meldung)}</div><ul class="rangliste">${zeilen}</ul>
       <p class="mitte">Wer nicht ins Ziel kam, trinkt 1 🍺</p>${knopf("Nächste Runde bauen", { typ: "weiter" }, "gross")}`;
   },
+  musik(s) { return s.phase === "laufen" ? "fiesbau" : s.phase === "ende" ? null : "brett"; },
   nach(s, ich, senden) {
     const c = document.getElementById("fiesbau");
     if (!c) return;
@@ -152,6 +154,7 @@ function starteLauf(s, senden) {
   const ende = (ziel) => {
     if (lauf.fertig) return;
     lauf.fertig = true;
+    klang(ziel ? "ziel" : "aua");
     senden({ typ: "ergebnis", ziel, zeit: Math.round(performance.now() - lauf.start) });
   };
   const schritt = (jetzt) => {
@@ -164,7 +167,7 @@ function starteLauf(s, senden) {
     if (ziel) f.blick = ziel;
     const beschl = glatt ? 6 : 40;
     f.vx += (ziel * 6.5 - f.vx) * Math.min(1, beschl * dt);
-    if (tasten.sprung && f.boden) { f.vy = -11.5; f.boden = false; }
+    if (tasten.sprung && f.boden) { f.vy = -11.5; f.boden = false; klang("sprung"); }
     f.vy = Math.min(f.vy + 30 * dt, 18);
     // waagerecht
     f.x += f.vx * dt;
@@ -182,7 +185,7 @@ function starteLauf(s, senden) {
     for (const xx of [Math.floor(f.x + 0.1), Math.floor(f.x + W - 0.1)]) for (const yy of [Math.floor(f.y + 0.1), Math.floor(f.y + Hh - 0.05)]) {
       const t = teilBei(xx, yy);
       if (t && (t.typ === "stachel" || t.typ === "saege")) return ende(false);
-      if (t && t.typ === "feder" && f.vy >= 0) { f.vy = -17; f.boden = false; }
+      if (t && t.typ === "feder" && f.vy >= 0) { f.vy = -17; f.boden = false; klang("schritt"); }
       if (yy >= 0 && yy < H && xx >= 0 && xx < B && KARTE[yy][xx] === "Z") return ende(true);
     }
     if (f.y > H + 1) return ende(false);

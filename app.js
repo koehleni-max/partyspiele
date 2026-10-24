@@ -1,6 +1,7 @@
 // Partyspiele: Lobby, Verbindung, Spielablauf. Der Gastgeber haelt den Spielstand und verteilt ihn.
 import { Gastgeber, Gast } from "./net.js";
 import { SPIELE, GRUPPEN } from "./spiele.js";
+import * as TON from "./ton.js";
 
 const app = document.getElementById("app");
 const BASIS = location.href.split("#")[0];
@@ -194,6 +195,7 @@ function konfetti(n = 90) {
     setTimeout(() => d.remove(), 4200);
   }
   vibriere(200);
+  TON.spiele("sieg");
 }
 
 function zeichnen() {
@@ -203,13 +205,16 @@ function zeichnen() {
   else if (raum && raum.spiel) {
     app.innerHTML = spielBild();
     const sp = SPIELE.find((x) => x.id === raum.spiel);
+    try { TON.musik(sp.musik ? sp.musik(raum.s, ich, raum) : null); } catch (e) { TON.musik(null); }
     if (sp.nach) try { sp.nach(raum.s, ich, senden, raum.spieler.map((x) => x.name), raum); } catch (e) { console.error(e); }
   }
   else if (raum) app.innerHTML = lobbyBild();
+  if (!(raum && raum.spiel)) TON.musik(null);
   // Animationen nur beim ersten Erscheinen, Konfetti bei Siegen
   document.querySelectorAll("[data-key]").forEach((el) => {
     const k = el.dataset.key;
-    if (gesehen.has(k)) el.classList.add("still"); else gesehen.add(k);
+    if (gesehen.has(k)) el.classList.add("still");
+    else { gesehen.add(k); if (el.dataset.ton) { const n = el.dataset.ton, v = Number(el.dataset.tonNach || 0); v ? setTimeout(() => TON.spiele(n), v) : TON.spiele(n); } }
   });
   document.querySelectorAll(".urteil").forEach((el) => {
     const k = "k:" + el.textContent.slice(0, 80);
@@ -301,6 +306,8 @@ function spielBild() {
 
 // ---------------------------------------------------------------- Klicks
 document.addEventListener("click", (ev) => {
+  const schalter = ev.target.closest("[data-ton-schalter]");
+  if (schalter) { const t = TON.umschalten(); schalter.outerHTML = TON.schalterHTML(); zeigeHinweis(t); return; }
   const el = ev.target.closest("[data-a],[data-teilen],[data-neu],[data-mehr],[data-sammellink],#antwortknopf");
   if (!el) return;
   if (el.dataset.teilen) return teilen(el.dataset.teilen, "Partyspiele");
@@ -328,7 +335,15 @@ document.addEventListener("click", (ev) => {
     if (f && el.dataset.leeren !== undefined) f.value = "";
   }
   vibriere(25);
+  TON.spiele(el.dataset.klang || "klick");
   senden(a);
 });
+
+document.body.insertAdjacentHTML("beforeend", TON.schalterHTML());
+function zeigeHinweis(text) {
+  let h = document.getElementById("ton-hinweis");
+  if (!h) { h = document.createElement("div"); h.id = "ton-hinweis"; document.body.appendChild(h); }
+  h.textContent = text; h.classList.remove("weg"); clearTimeout(h._t); h._t = setTimeout(() => h.classList.add("weg"), 1400);
+}
 
 startBild();

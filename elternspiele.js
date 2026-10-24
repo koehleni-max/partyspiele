@@ -1,4 +1,5 @@
 // Gemeinschaftsspiele ohne Trinkzwang: Begriffe erklaeren, Pantomime, Wer bin ich, Spion, Stadt-Land-Fluss, Quiz-Duell.
+import { spiele as klang } from "./ton.js";
 import { esc, knopf, zufall, mischen, name } from "./hilfe.js";
 import { BEGRIFFE, PANTOMIME, FIGUREN, ORTE, SLF_KAT, QUIZ } from "./inhalte2.js";
 
@@ -16,6 +17,8 @@ function countdown(schluessel, sekunden, beiEnde) {
   const zeichne = () => {
     const rest = Math.max(0, Math.ceil((u.ende - performance.now()) / 1000));
     document.querySelectorAll(`[data-uhr="${schluessel}"]`).forEach((el) => { el.textContent = `⏱️ ${rest}`; el.classList.toggle("knapp", rest <= 10); });
+    if (rest > 0 && rest <= 5 && u.tick !== rest) { u.tick = rest; klang("tick"); }
+    if (rest <= 0 && !u.gong) { u.gong = true; klang("gong"); }
     if (rest <= 0) { if (!u.gemeldet && beiEnde) { u.gemeldet = true; beiEnde(); } return; }
     requestAnimationFrame(() => setTimeout(zeichne, 200));
   };
@@ -201,6 +204,7 @@ export const quiz = {
     }).join("");
     return `${tafel}<div class="fragekarte" data-key="q${s.nr}" style="--k1:#0984e3;--k2:#2d1e8a"><span class="kat">Frage ${s.nr + 1}</span><div class="text" style="font-size:21px">${esc(q[0])}</div></div>
       <div class="quizraster">${knoepfe}</div>
+      ${s.phase === "aufloesung" ? `<i hidden data-key="qa${s.nr}" data-ton="${s.antworten[ich] && s.antworten[ich].w === 0 ? "richtig" : "falsch"}"></i>` : ""}
       ${s.phase === "aufloesung" ? knopf("Nächste Frage ➜", { typ: "weiter" }, "gross") : `<p class="mitte leise">${Object.keys(s.antworten).length}/${namen.length} haben geantwortet</p>`}`;
   },
   nach(s, ich, senden) {

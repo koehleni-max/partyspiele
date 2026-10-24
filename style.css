@@ -301,3 +301,12 @@ body.nachtmodus { background: #020208; } body.nachtmodus::before { opacity: .15;
 .fremd-buehne .bs-firing { display: flex !important; flex-direction: column-reverse; gap: 16px; }
 .fremd-buehne .bs-firing-col { width: 100%; }
 .fremd-buehne .bs-firing-col { display: flex; flex-direction: column; align-items: stretch; max-width: 360px; margin: 0 auto; }
+
+/* Ton-Schalter unten links */
+.ton-schalter { position: fixed; left: 12px; bottom: 12px; z-index: 50; width: 46px; height: 46px; padding: 0; border-radius: 50%;
+  font-size: 20px; line-height: 1; background: rgba(30, 31, 48, 0.85); border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  backdrop-filter: blur(8px); min-height: 0; }
+.ton-schalter:active { transform: scale(0.92); }
+#ton-hinweis { position: fixed; left: 66px; bottom: 22px; z-index: 50; background: rgba(30,31,48,0.95); color: #fff; padding: 6px 12px;
+  border-radius: 10px; font-size: 14px; font-weight: 700; transition: opacity .4s; pointer-events: none; }
+#ton-hinweis.weg { opacity: 0; }
