@@ -99,6 +99,26 @@ export const brett = {
     return `${tafel}${brettHtml}${meldung}${steuer}`;
   },
   musik(s) { return s.ende ? null : "brett"; },
+  // Computer-Mitspieler: wuerfeln, kaufen, duellieren und spielen die Minispiele mit glaubwuerdigen Werten
+  botPause: (s) => (s.phase === "weiter" ? 2800 : s.phase === "mini" ? 4500 : 1400),
+  bot(s, i) {
+    if (s.ende) return null;
+    const n = s.pos.length;
+    if (s.phase === "mini") {
+      const m = s.mini;
+      if (!m || m.fertig || m.werte[i] !== undefined) return null;
+      const r = (a, b) => a + zufall(b - a + 1);
+      const wert = m.art === "tappen" ? r(18, 36) : m.art === "farbwort" ? r(4, 11) : m.art === "gedaechtnis" ? r(4, 8)
+        : m.art === "reaktion" ? (Math.random() < 0.08 ? -1 : r(240, 470)) : Math.round(T.SCHAETZ[m.frage][1] * (0.55 + Math.random() * 0.9));
+      return { typ: "mini", wert };
+    }
+    if (s.dran !== i) return null;
+    if (s.phase === "wuerfeln") return { typ: "wuerfeln" };
+    if (s.phase === "stern") return { typ: "kaufen" };
+    if (s.phase === "duell") { const andere = [...Array(n).keys()].filter((j) => j !== i).sort((a, b) => s.muenzen[b] - s.muenzen[a]); return { typ: "duell", ziel: andere[0] }; }
+    if (s.phase === "weiter") return { typ: "weiter" };
+    return null;
+  },
   nach(s, ich, senden) {
     if (s.phase === "mini") return miniNach(s, ich, senden);
     const c = document.getElementById("brett3d");

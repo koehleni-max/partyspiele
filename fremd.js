@@ -8,6 +8,8 @@ import * as DAME from "./fremd/checkers.js";
 import * as SCHIFFE from "./fremd/battleship.js";
 
 const DE = [
+  [/'s fleet is waiting\.?/gi, "s Flotte wartet."], [/Your shot/gi, "Dein Schuss"], [/click anywhere on/gi, "tippe auf ein Feld in"], [/\bfire!/g, "schieß!"],
+  [/pick a column/gi, "wähle eine Spalte"], [/\bclick\b/gi, "tippe"], [/\btap\b/gi, "tippe"], [/ is thinking/gi, " überlegt"],
   [/ is firing at you/gi, " schießt auf dich"], [/ is aiming/gi, " zielt"], [/'s waters/gi, "s Gewässer"], [/firing at/gi, "schießt auf"], [/aiming/gi, "zielt"],
   [/Fire at/gi, "Schieß auf"], [/You sank/gi, "Du hast versenkt:"], [/sank your/gi, "versenkt dein"], [/You won/gi, "Du hast gewonnen"], [/You lost/gi, "Du hast verloren"],
   [/Unplaced ships/gi, "Noch nicht aufgestellt"], [/Press R while dragging to rotate\.?/gi, "Am PC ziehen (R dreht) – am Handy einfach oben zufällig aufstellen."],
@@ -43,10 +45,22 @@ function uebersetzen(knoten) {
 const buehnen = {};
 let aktuelleAnsicht = null;
 
-function fremdSpiel({ id, name, emoji, kurz, farben, M, regeln, gruppe }) {
+function fremdSpiel({ id, name, emoji, kurz, farben, M, regeln, gruppe, bot }) {
   const meta = M.LOGIK.getGameMetadata ? M.LOGIK.getGameMetadata() : { maxPlayers: 8 };
   return {
     id, name, emoji, kurz, farben, fremd: true,
+    ...(bot ? {
+      botPause: () => 1300,
+      bot(s, i) {
+        const uid = String(i);
+        if (i >= (s.st.players || []).length) return null;
+        if (s.st.status && s.st.status !== "playing") return null;
+        const gueltig = M.LOGIK.getValidActions ? M.LOGIK.getValidActions(s.st, uid).filter((x) => x !== "skipTurn") : [];
+        if (!gueltig.length) return null;
+        const zug = bot(s.st, uid, (action, payload) => { const r = M.LOGIK.applyAction(s.st, uid, action, payload || {}); return r.error ? null : r; }, gueltig);
+        return zug ? (zug.typ ? zug : { typ: "fremd", action: zug.action, payload: zug.payload }) : null;
+      },
+    } : {}),
     start(namen) {
       const config = M.LOGIK.loadConfig ? M.LOGIK.loadConfig() : M.LOGIK.getConfigCopy();
       const spieler = [];
@@ -123,17 +137,90 @@ function zufallsFlotte(M, s, uid) {
   }
   s.nr++; s.ereignisse = []; s.fehler = null;
 }
+// ---------------------------------------------------------------- Computer-Mitspieler fuer die fertigen Spiele
+// Sie probieren Zuege am Regelwerk selbst aus (ohne es zu veraendern) - so sind sie immer regelgerecht.
+const mischen = (a) => a.map((x) => [Math.random(), x]).sort((p, q) => p[0] - q[0]).map((x) => x[1]);
+function gewinntMit(r, uid) { const w = r && r.state && r.state.winner; return w === uid || (Array.isArray(w) && w.includes(uid)); }
+function botReihe(action, schluessel, werte) {
+  return (st, uid, probe) => {
+    const zuege = mischen(werte(st)).map((p) => ({ action, payload: p }));
+    // Mitte bevorzugen, sofort gewinnen, wenn moeglich
+    const sieg = zuege.find((z) => gewinntMit(probe(z.action, z.payload), uid));
+    if (sieg) return sieg;
+    const sortiert = zuege.sort((a, b) => schluessel(a.payload) - schluessel(b.payload));
+    return sortiert.find((z) => probe(z.action, z.payload)) || null;
+  };
+}
+const BOT_VIER = botReihe("dropPiece", (p) => Math.abs(p.column - 3) + Math.random() * 2.5, () => [0, 1, 2, 3, 4, 5, 6].map((column) => ({ column })));
+const BOT_TTT = botReihe("markCell", (p) => (p.row === 1 && p.col === 1 ? 0 : (p.row + p.col) % 2 === 0 ? 1 : 2) + Math.random() * 1.5,
+  () => [0, 1, 2].flatMap((row) => [0, 1, 2].map((col) => ({ row, col }))));
+function BOT_DAME(st, uid, probe) {
+  const n = st.config?.settings?.boardSize || 8, zuege = [];
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) for (const [dr, dc] of [[1, 1], [1, -1], [-1, 1], [-1, -1], [2, 2], [2, -2], [-2, 2], [-2, -2]]) {
+    const z = { action: "move", payload: { from: { row: r, col: c }, to: { row: r + dr, col: c + dc } } };
+    if (z.payload.to.row < 0 || z.payload.to.col < 0 || z.payload.to.row >= n || z.payload.to.col >= n) continue;
+    if (probe(z.action, z.payload)) zuege.push({ ...z, schlag: Math.abs(dr) === 2 });
+  }
+  if (!zuege.length) return null;
+  const schlaege = zuege.filter((z) => z.schlag);
+  const auswahl = schlaege.length ? schlaege : zuege;
+  return auswahl[Math.floor(Math.random() * auswahl.length)];
+}
+function BOT_WUERFEL(st, uid, probe, gueltig) {
+  const ts = st.turnState || {}, wuerfel = ts.dice || [], benutzt = ts.rollsUsed || 0;
+  const zaehl = {}; wuerfel.forEach((w) => (zaehl[w] = (zaehl[w] || 0) + 1));
+  const haeufig = Number(Object.keys(zaehl).sort((a, b) => zaehl[b] - zaehl[a] || b - a)[0]);
+  // bestes Feld bewerten
+  const ich = (st.players || []).find((p) => p.userId === uid) || {};
+  let bestes = null, bestPunkte = -1;
+  if (benutzt > 0 && gueltig.includes("scoreCategory")) {
+    for (const cat of Object.keys(ich.scoreSheet || {})) {
+      if (ich.scoreSheet[cat] !== null) continue;
+      const r = probe("scoreCategory", { category: cat });
+      if (!r) continue;
+      const nach = (r.state.players.find((p) => p.userId === uid) || {}).scoreSheet || {};
+      const punkte = (nach[cat] || 0) + (["ones", "twos", "threes"].includes(cat) ? 0.5 : 0) - (cat === "chance" ? 6 : 0) - (cat === "yahtzee" && !nach[cat] ? 8 : 0);
+      if (punkte > bestPunkte) { bestPunkte = punkte; bestes = cat; }
+    }
+  }
+  const nochWuerfeln = gueltig.includes("rollDice") && (benutzt === 0 || (bestPunkte < 20 && benutzt < 3));
+  if (nochWuerfeln) {
+    const held = wuerfel.length ? wuerfel.map((w) => w === haeufig) : undefined;
+    return { action: "rollDice", payload: held ? { held } : {} };
+  }
+  return bestes ? { action: "scoreCategory", payload: { category: bestes } } : null;
+}
+function BOT_SCHIFFE(st, uid, probe, gueltig) {
+  if (st.turnState?.phase === "setup") {
+    const ich = st.players.find((p) => p.userId === uid);
+    if (ich && !ich.ready && (ich.ships || []).length < (st.config.settings.ships || []).length) return { typ: "zufall" };
+    return gueltig.includes("commitPlacement") ? { action: "commitPlacement", payload: {} } : null;
+  }
+  if (!gueltig.includes("fireShot")) return null;
+  const ich = st.players.find((p) => p.userId === uid);
+  const geschossen = new Set((ich.shotsFired || []).map((x) => `${x.cell.x},${x.cell.y}`));
+  const treffer = (ich.shotsFired || []).filter((x) => x.result === "hit").map((x) => x.cell);
+  const ziele = [];
+  treffer.forEach((c) => [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([dx, dy]) => ziele.push({ x: c.x + dx, y: c.y + dy })));
+  for (const c of mischen(ziele)) if (!geschossen.has(`${c.x},${c.y}`) && probe("fireShot", { cell: c })) return { action: "fireShot", payload: { cell: c } };
+  for (let v = 0; v < 200; v++) {
+    const c = { x: Math.floor(Math.random() * 10), y: Math.floor(Math.random() * 10) };
+    if ((c.x + c.y) % 2 === 0 && v < 150 || v >= 150) if (!geschossen.has(`${c.x},${c.y}`) && probe("fireShot", { cell: c })) return { action: "fireShot", payload: { cell: c } };
+  }
+  return null;
+}
+
 function uebersetzt(t) { let x = String(t); for (const [re, de] of DE) x = x.replace(re, de); return x; }
 
 export const FREMDSPIELE = [
-  fremdSpiel({ id: "f-vier", name: "Vier in einer Reihe", emoji: "🔴", kurz: "Der Klassiker für zwei – Steine einwerfen, vier in einer Reihe gewinnt", farben: ["#e11d48", "#1e3a8a"], M: VIER,
+  fremdSpiel({ id: "f-vier", bot: BOT_VIER, name: "Vier in einer Reihe", emoji: "🔴", kurz: "Der Klassiker für zwei – Steine einwerfen, vier in einer Reihe gewinnt", farben: ["#e11d48", "#1e3a8a"], M: VIER,
     regeln: "<ul><li>Abwechselnd einen Stein in eine Spalte werfen (Pfeil antippen).</li><li>Wer zuerst vier in einer Reihe hat – waagerecht, senkrecht oder schräg – gewinnt.</li><li>Für 2 Spieler, die anderen schauen zu.</li></ul>" }),
-  fremdSpiel({ id: "f-wuerfel", name: "Würfelpoker", emoji: "🎲", kurz: "Fünf Würfel, drei Würfe, 13 Felder – für 2 bis 6 Spieler", farben: ["#f59e0b", "#7c2d12"], M: WUERFEL,
+  fremdSpiel({ id: "f-wuerfel", bot: BOT_WUERFEL, name: "Würfelpoker", emoji: "🎲", kurz: "Fünf Würfel, drei Würfe, 13 Felder – für 2 bis 6 Spieler", farben: ["#f59e0b", "#7c2d12"], M: WUERFEL,
     regeln: "<ul><li>Pro Zug bis zu dreimal würfeln. Würfel antippen = behalten.</li><li>Danach ein freies Feld auf dem Zettel wählen und eintragen.</li><li>Oben: Augen zählen (ab 63 gibt es Bonus). Unten: Pasch, Full House, Straßen, Fünferpasch, Chance.</li><li>Wer am Ende die meisten Punkte hat, gewinnt.</li></ul>" }),
-  fremdSpiel({ id: "f-schiffe", name: "Schiffe versenken", emoji: "🚢", kurz: "Flotte verstecken, dann abwechselnd schießen – für 2", farben: ["#0ea5e9", "#0c4a6e"], M: SCHIFFE,
+  fremdSpiel({ id: "f-schiffe", bot: BOT_SCHIFFE, name: "Schiffe versenken", emoji: "🚢", kurz: "Flotte verstecken, dann abwechselnd schießen – für 2", farben: ["#0ea5e9", "#0c4a6e"], M: SCHIFFE,
     regeln: "<ul><li>Zuerst stellt jeder seine Schiffe auf (oder lässt sie zufällig verteilen) und tippt „Fertig“.</li><li>Dann abwechselnd auf das gegnerische Feld schießen.</li><li>Wer zuerst alle Schiffe des anderen versenkt, gewinnt.</li></ul>" }),
-  fremdSpiel({ id: "f-dame", name: "Dame", emoji: "⚫", kurz: "Das klassische Brettspiel für zwei", farben: ["#78350f", "#1c1917"], M: DAME,
+  fremdSpiel({ id: "f-dame", bot: BOT_DAME, name: "Dame", emoji: "⚫", kurz: "Das klassische Brettspiel für zwei", farben: ["#78350f", "#1c1917"], M: DAME,
     regeln: "<ul><li>Steine ziehen schräg nach vorn. Gegnerische Steine werden übersprungen und geschlagen – Schlagen ist Pflicht.</li><li>Wer die andere Seite erreicht, wird zur Dame und darf auch rückwärts.</li><li>Wer keine Steine oder Züge mehr hat, verliert.</li></ul>" }),
-  fremdSpiel({ id: "f-ttt", name: "Tic-Tac-Toe", emoji: "❌", kurz: "Drei in einer Reihe – schnell zwischendurch", farben: ["#8b5cf6", "#312e81"], M: TTT,
+  fremdSpiel({ id: "f-ttt", bot: BOT_TTT, name: "Tic-Tac-Toe", emoji: "❌", kurz: "Drei in einer Reihe – schnell zwischendurch", farben: ["#8b5cf6", "#312e81"], M: TTT,
     regeln: "<ul><li>Abwechselnd ein Feld antippen. Drei in einer Reihe gewinnt.</li></ul>" }),
 ];

@@ -180,6 +180,12 @@ export const slf = {
 export const quiz = {
   id: "quiz", name: "Quiz-Duell", emoji: "🧠", kurz: "Alle antworten gleichzeitig – schnell und richtig gibt Punkte", farben: ["#0984e3", "#2d1e8a"],
   start: (namen) => { const s = { nr: 0, punkte: namen.map(() => 0), antworten: {}, phase: "frage" }; s.frage = stapelZiehen(s, QUIZ); s.reihe = mischen([0, 1, 2, 3]); return s; },
+  botPause: () => 4500,
+  bot(s, i) {
+    if (s.phase !== "frage" || s.antworten[i] !== undefined) return null;
+    const w = Math.random() < 0.55 ? 0 : 1 + Math.floor(Math.random() * 3);
+    return { typ: "antwort", w, ms: 2500 + Math.floor(Math.random() * 7000) };
+  },
   aktion(s, i, a, namen) {
     if (a.typ === "antwort" && s.phase === "frage" && s.antworten[i] === undefined) {
       s.antworten[i] = { w: a.w, ms: Number(a.ms) || 9999 };

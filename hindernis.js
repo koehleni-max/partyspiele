@@ -32,6 +32,28 @@ function belegt(s, x, y) { return s.teile.some((t) => t.x === x && t.y === y) ||
 export const hindernis = {
   id: "fiesbau", name: "Fiesbau", emoji: "🏗️", farben: ["#00b3a4","#13406e"], kurz: "Strecke reihum fies bebauen, dann laufen – nur wer ins Ziel kommt, punktet",
   start: (namen) => ({ runde: 1, phase: "bauen", teile: [], angebote: namen.map(() => angebot()), wahl: {}, gebaut: {}, ergebnis: {}, punkte: namen.map(() => 0), meldung: "" }),
+  // Computer-Mitspieler: baut etwas Fieses in die Laufbahn und "laeuft" mit einer Chance, die von der Strecke abhaengt
+  botPause: (s) => (s.phase === "laufen" ? 7000 : 2200),
+  bot(s, i) {
+    if (s.phase === "bauen" && !s.gebaut[i]) {
+      if (!s.wahl[i]) {
+        const vorlieben = ["stachel", "saege", "feder", "block", "eis", "brett", "bombe"];
+        return { typ: "wahl", teil: vorlieben.find((t) => s.angebote[i].includes(t)) };
+      }
+      for (let v = 0; v < 60; v++) {
+        const x = 3 + zufall(16), y = 6 + zufall(4);
+        if (s.wahl[i] === "bombe" || !belegt(s, x, y)) return { typ: "setzen", x, y };
+      }
+      return null;
+    }
+    if (s.phase === "laufen" && !s.ergebnis[i]) {
+      const gefahr = s.teile.filter((t) => t.typ === "stachel" || t.typ === "saege").length;
+      const hilfe = s.teile.filter((t) => t.typ === "block" || t.typ === "brett" || t.typ === "feder").length;
+      const chance = Math.max(0.15, Math.min(0.9, 0.8 - gefahr * 0.07 + hilfe * 0.03));
+      return { typ: "ergebnis", ziel: Math.random() < chance, zeit: 6000 + zufall(9000) };
+    }
+    return null;
+  },
   aktion(s, i, a, namen) {
     const n = s.punkte.length;
     if (a.typ === "neustart") return Object.assign(s, hindernis.start(namen));

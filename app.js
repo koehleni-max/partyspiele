@@ -122,8 +122,19 @@ function gastNachricht(platz, n) {
 
 function ausfuehren(idx, a) {
   if (idx < 0) return;
-  if (a.typ === "_spielwahl" && idx === 0) {
+  if (a.typ === "_botneu" && idx === 0 && !raum.spiel) {
+    const belegt = new Set([...raum.spieler.map((x) => x.platz), ...Object.keys(einladungen).filter((k) => einladungen[k].status !== "fehlgeschlagen").map(Number)]);
+    let platz = 1; while (belegt.has(platz) && platz < 20) platz++;
+    if (platz < 20) {
+      const frei = BOTNAMEN.filter((n) => !raum.spieler.some((x) => x.name === n));
+      raum.spieler.push({ name: frei[0] || `Bot ${platz + 1}`, platz, online: true, bot: true });
+      raum.spieler.sort((x, y) => x.platz - y.platz);
+    }
+  } else if (a.typ === "_botweg" && idx === 0 && !raum.spiel) {
+    raum.spieler = raum.spieler.filter((x) => !(x.bot && x.platz === a.platz));
+  } else if (a.typ === "_spielwahl" && idx === 0) {
     const sp = SPIELE.find((x) => x.id === a.id);
+    if (raum.spieler.some((x) => x.bot) && !sp.bot) { hinweis("Dieses Spiel geht nur mit echten Spielern – erst die Bots entfernen"); return; }
     raum.spiel = sp.id;
     raum.s = sp.start(raum.spieler.map((x) => x.name));
     raum.s.anzahl = raum.spieler.length;
@@ -143,8 +154,36 @@ function ausfuehren(idx, a) {
 
 function verteilen() {
   if (rolle !== "gastgeber") return;
-  raum.spieler.forEach((sp, i) => { if (i > 0) netz.senden(sp.platz, { t: "raum", raum, ich: i }); });
+  raum.spieler.forEach((sp, i) => { if (i > 0 && !sp.bot) netz.senden(sp.platz, { t: "raum", raum, ich: i }); });
   zeichnen();
+  botPlanen();
+}
+
+// ---------------------------------------------------------------- Computer-Mitspieler (nur beim Gastgeber)
+const BOTNAMEN = ["🤖 Robo-Rudi", "🤖 Bot Berta", "🤖 Cyber-Claus", "🤖 Pixel-Paula", "🤖 Byte-Bernd", "🤖 Chip-Charlie", "🤖 Neo-Nora", "🤖 Tin-Tina",
+  "🤖 Mecha-Max", "🤖 Data-Doris", "🤖 Servo-Sepp", "🤖 Laser-Lotte", "🤖 Turbo-Toni", "🤖 Giga-Gisela", "🤖 Robo-Rosi", "🤖 Kilo-Karl", "🤖 Mega-Mia", "🤖 Volt-Viktor", "🤖 Nano-Nele"];
+let botTimer = null;
+function botPlanen(warte) {
+  if (rolle !== "gastgeber" || !raum || !raum.spiel || botTimer) return;
+  if (!raum.spieler.some((x) => x.bot)) return;
+  const sp = SPIELE.find((x) => x.id === raum.spiel);
+  if (!sp || !sp.bot) return;
+  const pause = warte ?? (sp.botPause ? sp.botPause(raum.s) : 900);
+  botTimer = setTimeout(botZug, pause * (0.7 + Math.random() * 0.6));
+}
+function botZug() {
+  botTimer = null;
+  if (!raum || !raum.spiel) return;
+  const sp = SPIELE.find((x) => x.id === raum.spiel);
+  if (!sp || !sp.bot) return;
+  const namen = raum.spieler.map((x) => x.name);
+  const reihe = raum.spieler.map((x, i) => (x.bot ? i : -1)).filter((i) => i >= 0).sort(() => Math.random() - 0.5);
+  for (const i of reihe) {
+    let a = null;
+    try { a = sp.bot(raum.s, i, namen, raum); } catch (e) { console.error(e); }
+    if (a) { ausfuehren(i, a); return; }
+  }
+  botPlanen(1500); // gerade nichts zu tun - spaeter wieder nachsehen
 }
 
 // ---------------------------------------------------------------- Gast
@@ -253,6 +292,7 @@ function lobbyBild() {
       return sp ? `<li class="sp ${sp.online ? "an" : "aus"}"><span class="farbe f${platz}"></span>${esc(sp.name)}${raum.spieler.indexOf(sp) === ich ? " <span class='leise'>(du)</span>" : ""}</li>`
                 : `<li class="sp leer">Platz ${platz + 1} frei</li>`;
     }
+    if (sp && sp.bot) return `<li class="sp an bot"><span class="farbe f${platz}"></span>${esc(sp.name)} <span class="leise">(Computer)</span><span class="rechts"><button class="klein2" data-a='${JSON.stringify({ typ: "_botweg", platz })}'>✕</button></span></li>`;
     const e = einladungen[platz] || {};
     const status = sp && sp.online ? "verbunden" : e.status;
     let knopf = "";
@@ -263,10 +303,17 @@ function lobbyBild() {
     if (status === "fehlgeschlagen" || status === "getrennt") knopf = `<span class="fehler">getrennt</span><button data-neu="${platz}">Neu einladen</button>`;
     return `<li class="sp ${sp ? "an" : "leer"}"><span class="farbe f${platz}"></span>${sp ? esc(sp.name) : `Spieler ${platz + 1}`}<span class="rechts">${knopf}</span></li>`;
   }).join("");
-  const kachel = (sp, breit) => `
-    <button class="spielkachel ${rolle === "gastgeber" ? "" : "aus"} ${breit ? "breit" : ""}" style="--k1:${(sp.farben || [])[0] || "#3b2f8f"};--k2:${(sp.farben || [])[1] || "#1f1b4d"}" ${rolle === "gastgeber" ? `data-a='${JSON.stringify({ typ: "_spielwahl", id: sp.id })}'` : ""}>
-      <span class="emo">${sp.emoji}</span><b>${esc(sp.name)}</b><small>${esc(sp.kurz)}</small></button>`;
-  const auswahl = GRUPPEN.map((g) => `<div class="gruppentitel" style="grid-column:span 2">${g.titel}</div>` +
+  const mitBots = raum.spieler.some((x) => x.bot);
+  const kachel = (sp, breit) => {
+    const gesperrt = mitBots && !sp.bot;
+    const waehlbar = rolle === "gastgeber" && !gesperrt;
+    return `
+    <button class="spielkachel ${waehlbar ? "" : "aus"} ${gesperrt ? "ohnebots" : ""} ${breit ? "breit" : ""}" style="--k1:${(sp.farben || [])[0] || "#3b2f8f"};--k2:${(sp.farben || [])[1] || "#1f1b4d"}" ${waehlbar ? `data-a='${JSON.stringify({ typ: "_spielwahl", id: sp.id })}'` : ""}>
+      <span class="emo">${sp.emoji}</span><b>${esc(sp.name)}</b><small>${gesperrt ? "Nur mit echten Spielern" : esc(sp.kurz)}</small>${sp.bot && !gesperrt ? `<span class="botmarke" title="Computer-Mitspieler möglich">🤖</span>` : ""}</button>`;
+  };
+  const bereich = (g, k) => (k === 0 ? `<div class="bereichstitel" style="grid-column:span 2">✨ Von Jarvis gebaut<small>eigene Spiele, extra für euch entwickelt</small></div>`
+    : g.titel.startsWith("📦") ? `<div class="bereichstitel" style="grid-column:span 2">📦 Fertige Spiele<small>bewährte Klassiker aus freien Spielesammlungen</small></div>` : "");
+  const auswahl = GRUPPEN.map((g, k) => bereich(g, k) + `<div class="gruppentitel" style="grid-column:span 2">${g.titel.startsWith("📦") ? "🎯 Klassiker für zwei und mehr" : g.titel}</div>` +
     g.ids.map((id) => SPIELE.find((x) => x.id === id)).filter(Boolean).map((sp) => kachel(sp, g.ids.length < 3)).join("")).join("");
   return `
     <div class="karte">
@@ -278,7 +325,8 @@ function lobbyBild() {
           <button id="antwortknopf">Übernehmen</button></details>
         <div class="raster2" style="margin-top:10px">
           ${hoechster < 19 ? `<button data-mehr="1">➕ Weiterer Platz</button>` : ""}
-          ${hoechster < 19 ? `<button data-mehr="sammel">📨 Viele auf einmal</button>` : ""}</div>
+          ${hoechster < 19 ? `<button data-mehr="sammel">📨 Viele auf einmal</button>` : ""}
+          ${raum.spieler.length < 20 ? `<button data-a='{"typ":"_botneu"}' style="grid-column:span 2">🤖 Computer-Mitspieler dazu</button>` : ""}</div>
         ${Object.values(einladungen).filter((e) => e.link && e.status === "wartet").length > 1 ? `<button class="gross pink" data-sammellink="1">📲 Alle offenen Einladungen teilen</button>` : ""}` : ""}
       <div class="schalter" ${rolle === "gastgeber" ? `data-a='{"typ":"_ab18"}'` : ""}><input type="checkbox" ${raum.ab18 ? "checked" : ""} ${rolle === "gastgeber" ? "" : "disabled"} tabindex="-1">
         <span>🔞 Alle hier sind über 18<br><small class="leise">schaltet die Kategorien Spicy und 18+ frei</small></span></div>

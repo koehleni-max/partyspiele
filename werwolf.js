@@ -207,6 +207,55 @@ export const werwolf = {
       <p class="mitte leise">${l.filter((j) => s.stimmen[j] !== undefined).length}/${l.length} haben abgestimmt</p>${meineRolle}${geist}`;
   },
 
+  // Computer-Mitspieler: handeln nur ueber dieselben Aktionen wie Menschen, nachts mit Bedenkzeit
+  botPause: (s) => (s.phase === "nacht" ? 3500 : s.phase === "tag" ? 2500 : 1200),
+  bot(s, i) {
+    const istWolf = s.rolle && s.rolle[i] === "wolf";
+    const zufaellig = (liste) => (liste.length ? liste[zufall(liste.length)] : null);
+    s.botWissen = s.botWissen || {};
+    const wissen = (s.botWissen[i] = s.botWissen[i] || {});
+    if (s.phase === "rollen") return s.bereit[i] ? null : { typ: "bereit" };
+    if (!s.rolle || !lebt(s, i) && !(s.jaegerOffen === i)) return null;
+    if (s.phase === "nacht") {
+      const r = NACHT_REIHE[s.nachtSchritt];
+      if (s.rolle[i] !== r) return null;
+      const andere = lebende(s).filter((j) => j !== i);
+      if (r === "amor") { const z = mischen(lebende(s)).slice(0, 2); return z.length === 2 ? { typ: "liebe", ziele: z } : null; }
+      if (r === "wolf") {
+        if (s.aufgabe[i] !== undefined) return null;
+        const schonGewaehlt = mitRolle(s, "wolf").map((w) => s.aufgabe[w]).find((z) => z !== undefined);
+        return { typ: "wahl", ziel: schonGewaehlt !== undefined ? schonGewaehlt : zufaellig(andere.filter((j) => s.rolle[j] !== "wolf")) };
+      }
+      if (r === "seherin") {
+        if (s.aufgabe.gesehen === undefined) { const z = zufaellig(andere.filter((j) => !(j in (wissen.gesehen || {})))) ?? zufaellig(andere); return { typ: "wahl", ziel: z }; }
+        wissen.gesehen = { ...(wissen.gesehen || {}), [s.aufgabe.gesehen]: s.rolle[s.aufgabe.gesehen] };
+        return { typ: "fertig" };
+      }
+      if (r === "waechter") return { typ: "wahl", ziel: zufaellig(lebende(s).filter((j) => j !== s.letzterSchutz)) };
+      if (r === "hexe") {
+        if (s.heiltrank && s.wolfZiel !== null && !s.geheilt && (s.wolfZiel === i || Math.random() < 0.35)) return { typ: "heilen" };
+        if (s.gifttrank && s.giftZiel === null && s.nacht > 1 && Math.random() < 0.2) return { typ: "gift", ziel: zufaellig(andere) };
+        return { typ: "fertig" };
+      }
+      return null;
+    }
+    if ((s.phase === "morgen" || s.phase === "hinrichtung") && s.jaegerOffen === i) {
+      const verdacht = Object.entries(wissen.gesehen || {}).filter(([j, r]) => r === "wolf" && lebt(s, Number(j))).map(([j]) => Number(j));
+      return { typ: "schuss", ziel: verdacht[0] ?? zufaellig(lebende(s).filter((j) => j !== i && !(istWolf && s.rolle[j] === "wolf"))) };
+    }
+    if (s.phase === "tag" && s.stimmen[i] === undefined) {
+      const andere = lebende(s).filter((j) => j !== i);
+      const bekannteWoelfe = Object.entries(wissen.gesehen || {}).filter(([j, r]) => r === "wolf" && lebt(s, Number(j))).map(([j]) => Number(j));
+      if (bekannteWoelfe.length && !istWolf) return { typ: "stimme", ziel: bekannteWoelfe[0] };
+      // sonst der Mehrheit folgen, wenn es eine gibt - Woelfe schuetzen ihresgleichen
+      const z = {}; Object.values(s.stimmen).forEach((v) => (z[v] = (z[v] || 0) + 1));
+      const fuehrend = Object.keys(z).map(Number).filter((j) => j !== i && !(istWolf && s.rolle[j] === "wolf")).sort((a, b) => z[b] - z[a])[0];
+      const ziel = fuehrend !== undefined && Math.random() < 0.6 ? fuehrend : zufaellig(andere.filter((j) => !(istWolf && s.rolle[j] === "wolf")));
+      return ziel === null ? null : { typ: "stimme", ziel };
+    }
+    return null;
+  },
+
   musik(s) { return s.phase === "nacht" ? "nacht" : ["morgen", "tag", "hinrichtung"].includes(s.phase) ? "dorf" : null; },
 
   nach(s, ich, senden, namen) {
@@ -226,9 +275,9 @@ export const werwolf = {
     window.__wwStimme = schluessel;
     let text = "";
     if (s.phase === "nacht") text = { amor: `Nacht ${s.nacht}. Das Dorf schläft ein. Amor erwacht und verliebt zwei Menschen.`, wolf: "Die Werwölfe erwachen und suchen sich ein Opfer.", seherin: "Die Seherin erwacht und blickt in die Seele eines Spielers.", waechter: "Der Wächter erwacht und beschützt jemanden.", hexe: "Die Hexe erwacht und betrachtet ihre Tränke." }[NACHT_REIHE[s.nachtSchritt]] || "";
-    else if (s.phase === "morgen") text = s.tode.length ? `Die Sonne geht auf. ${s.tode.map((d) => `${namen[d.j]} ${d.grund}.`).join(" ")}` : "Die Sonne geht auf. Wunder, heute Nacht ist niemand gestorben.";
+    else if (s.phase === "morgen") text = s.tode.length ? `Die Sonne geht auf. ${s.tode.map((d) => `${namen[d.j].replace(/🤖\s*/u, "")} ${d.grund}.`).join(" ")}` : "Die Sonne geht auf. Wunder, heute Nacht ist niemand gestorben.";
     else if (s.phase === "tag") text = "Das Dorf versammelt sich. Diskutiert und stimmt ab, wer gehängt wird.";
-    else if (s.phase === "hinrichtung") text = s.unentschieden ? "Das Dorf ist sich uneinig. Heute stirbt niemand." : `Das Dorf hat entschieden. ${s.tode.map((d) => `${namen[d.j]} ist tot.`).join(" ")}`;
+    else if (s.phase === "hinrichtung") text = s.unentschieden ? "Das Dorf ist sich uneinig. Heute stirbt niemand." : `Das Dorf hat entschieden. ${s.tode.map((d) => `${namen[d.j].replace(/🤖\s*/u, "")} ist tot.`).join(" ")}`;
     if (s.gewinner) text = { dorf: "Das Dorf hat gewonnen.", wolf: "Die Werwölfe haben gewonnen.", liebe: "Das Liebespaar hat gewonnen." }[s.gewinner];
     if (!text) return;
     try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = "de-DE"; u.rate = 0.95; u.pitch = 0.8; speechSynthesis.speak(u); } catch (e) {}

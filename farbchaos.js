@@ -59,6 +59,30 @@ export const farbchaos = {
     return s;
   },
 
+  // Computer-Mitspieler: spielt nach einfachen, menschlichen Faustregeln
+  botPause: () => 1500,
+  bot(s, i) {
+    if (s.sieger !== null) return null;
+    const n = s.haende.length, hand = s.haende[i];
+    const lieblingsfarbe = () => { const z = {}; hand.forEach((k) => k.f !== "schwarz" && (z[k.f] = (z[k.f] || 0) + 1)); return Object.keys(z).sort((a, b) => z[b] - z[a])[0] || FARBEN[Math.floor(Math.random() * 4)]; };
+    if (s.warte) {
+      if (s.warte.wer !== i) return null;
+      if (s.warte.art === "farbe") return { typ: "farbe", f: lieblingsfarbe() };
+      const andere = s.haende.map((h, j) => [j, h.length]).filter(([j]) => j !== i).sort((a, b) => a[1] - b[1]);
+      return { typ: "tausch", ziel: andere[0][0] };
+    }
+    // jemanden erwischen, der die letzte Karte nicht angesagt hat
+    const ertappt = s.haende.findIndex((h, j) => j !== i && h.length === 1 && !s.gerufen[j]);
+    if (ertappt >= 0 && Math.random() < 0.3) return { typ: "erwischt", ziel: ertappt };
+    if (s.dran !== i) return null;
+    const moeglich = hand.map((k, idx) => ({ k, idx })).filter(({ k, idx }) => spielbar(s, k) && (!s.gezogen || idx === hand.length - 1));
+    if (!moeglich.length) return s.gezogen ? { typ: "passen" } : { typ: "ziehen" };
+    const naechster = s.haende[(((s.dran + s.richtung) % n) + n) % n];
+    const wert = ({ k }) => (k.f === "schwarz" ? (naechster.length <= 2 ? 50 : -20) : typeof k.w === "number" ? k.w : naechster.length <= 2 ? 40 : 10) + Math.random() * 3;
+    moeglich.sort((a, b) => wert(b) - wert(a));
+    return { typ: "spielen", k: moeglich[0].idx };
+  },
+
   aktion(s, i, a, namen) {
     const n = s.haende.length;
     if (a.typ === "neustart") return Object.assign(s, farbchaos.start(namen));

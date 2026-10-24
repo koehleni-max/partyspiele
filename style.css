@@ -310,3 +310,14 @@ body.nachtmodus { background: #020208; } body.nachtmodus::before { opacity: .15;
 #ton-hinweis { position: fixed; left: 66px; bottom: 22px; z-index: 50; background: rgba(30,31,48,0.95); color: #fff; padding: 6px 12px;
   border-radius: 10px; font-size: 14px; font-weight: 700; transition: opacity .4s; pointer-events: none; }
 #ton-hinweis.weg { opacity: 0; }
+
+/* Computer-Mitspieler */
+.sp.bot { background: linear-gradient(90deg, rgba(109,93,252,0.14), transparent); }
+.spielkachel { position: relative; }
+.spielkachel .botmarke { position: absolute; top: 8px; right: 10px; font-size: 15px; opacity: 0.85; }
+.spielkachel.ohnebots { filter: grayscale(0.85) brightness(0.6); }
+body { padding-bottom: 72px; }
+.bereichstitel { margin: 18px 0 2px; font-size: 21px; font-weight: 900; letter-spacing: -0.01em;
+  background: linear-gradient(90deg, #fff, #c9c2ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.bereichstitel small { display: block; font-size: 13px; font-weight: 600; color: var(--leise, #9aa0c0); -webkit-text-fill-color: var(--leise, #9aa0c0); }
+.bereichstitel:first-child { margin-top: 2px; }
