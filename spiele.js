@@ -178,7 +178,12 @@ const busfahrer = {
 };
 
 // ================================================================ Pferderennen
-const ZIEL = 7;
+export const ZIEL = 7;
+// Abrechnung nach dem Rennen (Handy und Beamer): wer aufs Sieger-Ass gesetzt hat, verteilt das Doppelte, alle anderen trinken
+export function pferdeAbrechnung(wetten, sieger) {
+  const e = Object.entries(wetten || {}).map(([j, w]) => [Number(j), w]);
+  return { gew: e.filter(([, w]) => w.f === sieger).map(([j, w]) => [j, w.n * 2]), verl: e.filter(([, w]) => w.f !== sieger).map(([j, w]) => [j, w.n]) };
+}
 const pferderennen = {
   id: "pferde", name: "Pferderennen", emoji: "🏇", farben: ["#16a34a","#14532d"], kurz: "Wetten auf die Asse – Sieger verteilen",
   start: (namen) => ({ phase: "wetten", wetten: {}, pos: { "♠": 0, "♥": 0, "♦": 0, "♣": 0 }, stapel: null, seite: [], aufgedeckt: 0, letzte: null, sieger: null }),
@@ -222,8 +227,9 @@ const pferderennen = {
     }
     const letzte = s.letzte ? `<p class="mitte">Gezogen: <b class="${K.rot(s.letzte) ? "rotk" : ""}">${K.zeige(s.letzte)}</b>${s.letzte.rueck ? ` – Seitenkarte: ${s.letzte.rueck} muss einen Schritt zurück!` : ""}</p>` : "";
     if (s.phase === "ende") {
-      const gew = Object.entries(s.wetten).filter(([, w]) => w.f === s.sieger).map(([j, w]) => `${name(namen, Number(j))} verteilt ${schlucke(w.n * 2)}`);
-      const verl = Object.entries(s.wetten).filter(([, w]) => w.f !== s.sieger).map(([j, w]) => `${name(namen, Number(j))} trinkt ${schlucke(w.n)}`);
+      const { gew: g, verl: v } = pferdeAbrechnung(s.wetten, s.sieger);
+      const gew = g.map(([j, n]) => `${name(namen, j)} verteilt ${schlucke(n)}`);
+      const verl = v.map(([j, n]) => `${name(namen, j)} trinkt ${schlucke(n)}`);
       return `<div class="rennbahn">${bahn}</div>${letzte}<div class="urteil">🏆 ${s.sieger} gewinnt!</div><p class="mitte">${[...gew, ...verl].join("<br>")}</p>
         ${knopf("Neues Rennen", { typ: "neustart" }, "gross")}`;
     }

@@ -632,3 +632,147 @@ body.beamer[data-look="halloween"] .bm-e-gross { color: #ffb15c; text-shadow: 0 
   background: var(--blurple); box-shadow: 0 .25em 0 var(--blurple-lippe), 0 0 2em #000a; border-radius: .7em; max-width: 40vw; }
 .bm-start small { font-size: .6em; font-weight: 700; opacity: .9; }
 body.beamer .fledermaus { z-index: 75; }
+
+/* ================================================================ Schritt C (26.10.2026): Gluecksrad mit Joker */
+/* Handy: schlicht; das Rad ist nur waehrend eines Drehs da (klein mit Beamer, gross ohne) */
+.glueckkarte { text-align: center; }
+.glueckkarte h2 { text-align: left; }
+.rad-handy svg { display: block; margin: 4px auto 8px; }
+.rad-handy.klein svg { width: 120px; height: 120px; }
+.rad-handy.gross svg { width: min(100%, 320px); height: auto; aspect-ratio: 1; }
+.rad-erg { overflow-wrap: anywhere; }
+.rad-erg p { margin: 6px 0; }
+.rad-dreht { font-size: 17px; font-weight: 800; color: var(--leise); }
+.rad-ergebnis { font-size: 22px; font-weight: 900; line-height: 1.2; }
+.rad-ergebnis b { color: var(--gelb); }
+.rad-text, .rad-aufgabe { font-size: 16px; font-weight: 700; }
+.rad-aufgabe { background: #0f1022; border: 2px solid var(--rand); border-radius: 14px; padding: 10px 12px; }
+.rad-joker, .rad-schub { font-weight: 800; color: #ffe27a; }
+.rad-jokerzeile { display: flex; flex-direction: column; gap: 2px; margin: 6px 0 0; font-weight: 700; }
+.rad-jokerzeile small { color: var(--leise); font-size: 13px; }
+button.rad-dreh { background: var(--orange); box-shadow: 0 6px 0 #b86c00; }
+button.rad-dreh:disabled { font-size: 16px; }
+body[data-look="halloween"] button.rad-dreh:not(:disabled) { background: #ff7518; box-shadow: 0 6px 0 #a3420a; }
+body[data-look="edel"] button.rad-dreh:not(:disabled) { background: #b8964f; box-shadow: 0 6px 0 #7d6431; }
+.rad-eigen { justify-content: space-between; }
+.rad-eigen > span { min-width: 0; overflow-wrap: anywhere; }
+.steuer-glueck select, select.rad-schubwahl { width: 100%; font: inherit; font-size: 17px; color: var(--text); background: #0f1022; border: 2px solid var(--rand); border-radius: 14px; padding: 12px 10px; margin-top: 6px; }
+select.rad-schubwahl { font-size: 16px; padding: 9px 8px; }
+.ansage-knoepfe.rad-wahl { flex-wrap: wrap; }
+/* Beamer: grosses Rad links, Ergebnis rechts */
+.bm-e-rad { display: flex; align-items: center; gap: 3vw; max-width: 94vw; text-align: left; }
+.bm-rad-bild { flex: none; }
+.bm-rad-bild svg { width: min(76vh, 46vw); height: min(76vh, 46vw); display: block; filter: drop-shadow(0 0 3vh #000); }
+body.beamer[data-look="halloween"] .bm-rad-bild svg { filter: drop-shadow(0 0 4vh #ff751866); }
+.bm-rad-text { width: min(42vw, 24em); min-width: 0; }
+.rad-erg.gross .rad-dreht { font-size: 1.5em; color: var(--text); line-height: 1.2; }
+.rad-erg.gross .rad-ergebnis { font-size: 1.45em; display: flex; flex-direction: column; animation: aufploppen .6s cubic-bezier(.2, 1.6, .4, 1); }
+.rad-erg.gross .rad-ergebnis b { font-size: 1.35em; line-height: 1.05; }
+.rad-erg.gross .rad-text, .rad-erg.gross .rad-aufgabe { font-size: 1em; }
+.rad-erg.gross .rad-aufgabe { background: #ffffff12; border: .08em solid var(--rand); border-radius: .5em; padding: .4em .6em; }
+.rad-erg.gross .rad-joker, .rad-erg.gross .rad-schub { font-size: 1em; }
+body.beamer[data-look="halloween"] .rad-erg.gross .rad-ergebnis b { color: #ffb15c; text-shadow: 0 0 .5em #ff7518aa; }
+.bm-e-schub .bm-e-gross { max-width: 24em; margin-left: auto; margin-right: auto; }
+.bm-gl-liste { list-style: none; padding: 0; margin: .6em auto 0; display: grid; gap: .25em; max-width: 30em; font-size: .85em; }
+.bm-gl-liste li { display: flex; gap: .6em; justify-content: space-between; background: var(--flaeche2); border: .08em solid var(--rand); border-radius: .5em; padding: .2em .7em; text-align: left; }
+.bm-gl-liste li b { flex: none; max-width: 45%; overflow-wrap: anywhere; } .bm-gl-liste li span { min-width: 0; overflow-wrap: anywhere; text-align: right; color: var(--leise); font-weight: 700; }
+
+/* ================================================================ Schritt D (26.10.2026): Spiele gross am Beamer */
+/* Effekte nie ueber Text: Konfetti und Fledermaeuse fliegen in einer Ebene HINTER der Seite (.bm-effekte) bzw. im
+   Ereignis-Fenster hinter der Box - Text, Karten und Ergebnisse liegen immer darueber. */
+.bm-effekte { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+body.beamer .bm { z-index: 1; }
+.bm-ereignis > .bm-e-box { position: relative; z-index: 2; }
+body.beamer .bm-ereignis > .konfetti, body.beamer .bm-ereignis > .fledermaus { z-index: 1; }
+
+.bs { display: grid; gap: .45em; text-align: left; }
+.bs .mitte { text-align: center; }
+.bs-kopf { display: flex; align-items: center; justify-content: center; gap: .5em; font-size: 1.05em; min-width: 0; }
+.bs-kopf > span:last-child { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.bs-kopf small { font-size: .55em; color: var(--leise); font-weight: 800; }
+.bs-emo { font-size: 1.5em; flex: none; }
+.bs-riesig { font-size: 5em; line-height: 1.1; display: inline-block; animation: bm-schweben 4s ease-in-out infinite; }
+.bs-sieg { text-align: center; font-size: 1.7em; font-weight: 900; line-height: 1.15; color: #7ee787; overflow-wrap: anywhere; animation: aufploppen .6s cubic-bezier(.2, 1.6, .4, 1); }
+body.beamer[data-look="halloween"] .bs-sieg { color: #ffb15c; text-shadow: 0 0 .5em #ff7518aa; }
+.bs-vorbei { justify-self: center; font-weight: 900; font-size: .75em; background: var(--flaeche3); border: .08em solid var(--rand); border-radius: 99px; padding: .2em 1em; }
+
+/* Werwolf: Dorf mit Lebenden und Gefressenen, Nacht- oder Tagstimmung - nie eine Rolle (erst nach dem Spielende) */
+.bsw { border-radius: .8em; padding: .5em 1em .9em; display: grid; gap: .45em; }
+.bsw.nacht { background: radial-gradient(50% 60% at 85% 0%, #4a5aa055, transparent 70%), linear-gradient(180deg, #0a0f2ecc, #04050ccc); }
+.bsw.tag { background: radial-gradient(50% 60% at 15% 0%, #ffd23f33, transparent 70%), linear-gradient(180deg, #3a2a10b0, #160f06b0); }
+.bsw-mitte { text-align: center; }
+.bsw-himmel { display: flex; align-items: center; justify-content: center; gap: .4em; }
+.bsw-gestirn { font-size: 2.2em; line-height: 1; filter: drop-shadow(0 0 .4em #fff8); }
+.bsw-titel { font-size: 2em; font-weight: 900; }
+body.beamer[data-look="halloween"] .bsw-titel { color: #ffd9b0; }
+.bsw-dorf { display: grid; grid-template-columns: repeat(auto-fit, minmax(6.4em, 1fr)); gap: .4em; }
+.bsw-dorf.viele { grid-template-columns: repeat(auto-fit, minmax(5.2em, 1fr)); font-size: .85em; }
+.bsw-haus { background: #ffffff10; border: .08em solid var(--rand); border-radius: .5em; padding: .25em .4em; display: grid; justify-items: center; align-content: start; text-align: center; min-width: 0; }
+.bsw-haus b { font-size: .8em; line-height: 1.15; overflow-wrap: anywhere; max-width: 100%; }
+.bsw-haus small { font-size: .55em; color: var(--leise); font-weight: 800; overflow-wrap: anywhere; }
+.bsw-h { font-size: 1.6em; line-height: 1.15; }
+.bsw-haus.tot { opacity: .5; } .bsw-haus.tot b { text-decoration: line-through; }
+.bsw-haus.vorn { border-color: var(--rot); box-shadow: 0 0 .7em #ff4b4b66; }
+.bsw-st { font-style: normal; font-weight: 900; font-size: .8em; color: #ffe27a; min-height: 1.2em; }
+.bsw-tod { justify-self: center; text-align: center; font-size: 1.15em; font-weight: 800; background: #3a0d0dcc; border: .08em solid #ff4b4b88; border-radius: .5em; padding: .2em .7em; overflow-wrap: anywhere; max-width: 100%; }
+.bsw-schuss { color: #ffb15c; }
+
+/* Wer bin ich? */
+.bsb-figur { text-align: center; font-size: 3.2em; font-weight: 900; line-height: 1.1; padding: .25em .5em; border-radius: .3em; overflow-wrap: anywhere;
+  background: linear-gradient(135deg, var(--flaeche3), var(--flaeche2)); border: .06em solid var(--blurple); box-shadow: 0 0 1em #000a; }
+body.beamer[data-look="halloween"] .bsb-figur { color: #ffd9b0; text-shadow: 0 0 .4em #ff751888; }
+.bsb-uhr { text-align: center; font-size: 1.5em; font-weight: 900; font-variant-numeric: tabular-nums; }
+.bsb-uhr .knapp { color: #ff8f8f; }
+.bsb-stand { display: grid; grid-template-columns: repeat(auto-fit, minmax(7em, 1fr)); gap: .35em; font-size: .8em; }
+.bsb-sp { background: var(--flaeche2); border: .08em solid var(--rand); border-radius: .5em; padding: .2em .5em; display: grid; justify-items: center; text-align: center; min-width: 0; }
+.bsb-sp b { overflow-wrap: anywhere; max-width: 100%; } .bsb-sp small { color: var(--leise); font-weight: 700; font-size: .7em; }
+.bsb-sp.dran { border-color: var(--blurple); box-shadow: 0 0 .7em #ff751866; } .bsb-sp.geschafft { border-color: var(--gruen); }
+.bsb-alle { display: grid; grid-template-columns: repeat(auto-fit, minmax(9em, 1fr)); gap: .4em; }
+.bsb-alle div { background: var(--flaeche2); border: .08em solid var(--rand); border-radius: .5em; padding: .3em .6em; display: grid; text-align: center; min-width: 0; overflow-wrap: anywhere; }
+.bsb-alle span { font-weight: 900; color: #ffe27a; } .bsb-alle em { font-style: normal; }
+
+/* Malen & Raten: Leinwand links, Raten und Punkte rechts */
+.bsm-reihe { display: flex; gap: 1.2em; align-items: flex-start; }
+.bsm-blatt { flex: none; }
+.bsm-lw { width: min(62vh, 44vw); height: min(62vh, 44vw); display: block; border-radius: .4em; background: #fffdf8; box-shadow: 0 0 1.2em #000a; }
+.bsm-text { flex: 1; min-width: 0; display: grid; gap: .3em; align-content: start; overflow-wrap: anywhere; }
+.bsm-muster { font-size: 1.8em; font-weight: 900; letter-spacing: .25em; color: #ffe27a; overflow-wrap: anywhere; margin: .1em 0; }
+.bsm-tipps { display: flex; flex-wrap: wrap; gap: .3em; font-size: .75em; }
+.bsm-tipps span { background: var(--flaeche3); border-radius: 99px; padding: .15em .7em; overflow-wrap: anywhere; max-width: 100%; }
+
+/* Blitzreaktion: rot -> gruen, danach Rangliste in Millisekunden */
+.bsr-flaeche { border-radius: .8em; min-height: 44vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .3em; padding: .6em; text-align: center; }
+.bsr-flaeche b { font-size: 3.4em; font-weight: 900; line-height: 1; }
+.bsr-flaeche small { font-size: .9em; font-weight: 800; opacity: .9; }
+.bsr-flaeche.rot { background: radial-gradient(circle, #d62828, #5e0b0b); box-shadow: inset 0 0 2em #ff000066; }
+.bsr-flaeche.gruen { background: radial-gradient(circle, #5ef08a, #138a3a); color: #04210f; box-shadow: 0 0 3em #5ef08aaa; }
+.bsr-flaeche.bereit { background: linear-gradient(135deg, var(--flaeche3), var(--flaeche2)); border: .08em solid var(--rand); }
+.bsr-rang li.raus { opacity: .65; } .bsr-rang li.raus .bm-wert { color: #ff8f8f; font-size: .8em; }
+.bsr-raus { color: #ff8f8f; } .bsr-joker { color: #ffe27a; }
+
+/* Pferderennen: vier Bahnen, das Pferd laeuft von der alten zur neuen Stelle */
+.bsp-bahn { display: flex; align-items: center; gap: .5em; margin: .12em 0; }
+.bsp-ass { flex: none; width: 2.4em; text-align: center; font-size: 1.2em; font-weight: 900; background: #fffdf8; color: #1b1f2a; border-radius: .3em; padding: .05em 0; }
+.bsp-spur { position: relative; flex: 1; height: 2.3em; display: grid; grid-template-columns: repeat(var(--ziel), 1fr); border-radius: .4em; overflow: hidden;
+  background: linear-gradient(180deg, #3d6b2a, #24461a); }
+body.beamer[data-look="halloween"] .bsp-spur { background: linear-gradient(180deg, #3a2414, #1c1009); }
+.bsp-spur i { border-right: .08em dashed #ffffff40; } .bsp-spur i.auf { background: #00000030; }
+.bsp-pferd { position: absolute; top: 50%; width: 1.4em; font-size: 1.5em; line-height: 1; text-align: center; transform: translateY(-50%) scaleX(-1);
+  left: calc(var(--nach) / var(--ziel) * (100% - 1.4em)); animation: bsp-lauf .9s cubic-bezier(.3, 1.4, .5, 1); }
+@keyframes bsp-lauf { from { left: calc(var(--von) / var(--ziel) * (100% - 1.4em)); } }
+.bsp-zielfahne { position: absolute; right: .1em; top: 50%; transform: translateY(-50%); font-size: 1.1em; opacity: .8; }
+.bsp-bahn.sieger .bsp-spur { box-shadow: 0 0 1em #ffe27a; }
+.bsp-seite { display: flex; justify-content: center; gap: .4em; margin: .25em 0; }
+.bsp-seite span { width: 1.8em; height: 2.3em; display: grid; place-items: center; border-radius: .3em; background: #2a3a8a; font-weight: 900; }
+.bsp-seite span.auf { background: #fffdf8; color: #1b1f2a; }
+.bm-pille.gewinnt { background: var(--gruen); color: #fff; }
+.bsp-wetten { font-size: .85em; }
+.bsp-ab { margin: .1em 0; } .bsp-ab.gut b { color: #7ee787; }
+
+/* Schaetzmeister */
+.bss-frage { text-align: center; font-size: 2.1em; font-weight: 900; line-height: 1.15; overflow-wrap: anywhere; padding: .2em .4em; }
+.bss-frage.klein { font-size: 1.1em; color: var(--leise); padding: 0; }
+.bss-loesung { text-align: center; font-size: 3.4em; font-weight: 900; line-height: 1; color: #ffe27a; font-variant-numeric: tabular-nums; }
+.bss-wer .bm-pille.da { background: var(--gruen); color: #fff; }
+.bss-rang { max-width: 30em; }
+.bss-ab { flex: none; min-width: 3.6em; text-align: right; font-size: .7em; font-weight: 800; color: var(--leise); }

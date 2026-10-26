@@ -131,16 +131,20 @@ export class Verbindung {
 }
 
 // Stand <-> JSON-Texte. Der Gastgeber merkt sich, was er zuletzt geschrieben hat, und schickt nur Aenderungen.
-export function standTeile(raum) {
+// stand/beamer (Schritt D): Auszug fuer den Beamer (beamer_spiele.js) - Spiele ohne ihren vollen Stand, also ohne
+// Werwolf-Rollen, Mal-Begriff oder Schaetz-Tipps; der Beamer liest nur lobby, tafel und beamer, nie stand/partien.
+export function standTeile(raum, beamer) {
   const { partien, tafel, ...lobby } = raum;
   const teile = { lobby: JSON.stringify(lobby), tafel: JSON.stringify(tafel || null), partien: {} };
   Object.entries(partien || {}).forEach(([pid, p]) => { teile.partien[pid] = JSON.stringify(p); });
+  if (beamer !== undefined) teile.beamer = JSON.stringify(beamer);
   return teile;
 }
 export function standAenderung(alt, neu) {
   const upd = {};
   if (!alt || alt.lobby !== neu.lobby) upd["stand/lobby"] = neu.lobby;
   if (!alt || alt.tafel !== neu.tafel) upd["stand/tafel"] = neu.tafel;
+  if (neu.beamer !== undefined && (!alt || alt.beamer !== neu.beamer)) upd["stand/beamer"] = neu.beamer;
   const vorher = (alt && alt.partien) || {};
   Object.entries(neu.partien).forEach(([pid, t]) => { if (vorher[pid] !== t) upd[`stand/partien/${pid}`] = t; });
   Object.keys(vorher).forEach((pid) => { if (!(pid in neu.partien)) upd[`stand/partien/${pid}`] = null; });
@@ -161,4 +165,13 @@ export function standLesen(stand, merker = {}) {
   let lobby, tafel;
   try { lobby = JSON.parse(stand.lobby); tafel = stand.tafel ? JSON.parse(stand.tafel) : null; } catch (e) { return null; }
   return { raum: { ...lobby, tafel, partien }, aend, merker: { lobby: stand.lobby, tafel: stand.tafel, partien: { ...texte } } };
+}
+// Beamer: Raum aus lobby, tafel und dem Beamer-Auszug (Spiele nur als Kurzfassung mit "bm" = was die Wand zeigen darf)
+export function beamerLesen(t) {
+  if (!t || typeof t.lobby !== "string") return null;
+  let lobby, tafel = null, bm = null;
+  try { lobby = JSON.parse(t.lobby); } catch (e) { return null; }
+  try { tafel = t.tafel ? JSON.parse(t.tafel) : null; } catch (e) { tafel = null; }
+  try { bm = t.beamer ? JSON.parse(t.beamer) : null; } catch (e) { bm = null; }
+  return { ...lobby, tafel, partien: (bm && bm.partien) || {} };
 }

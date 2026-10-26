@@ -1,0 +1,353 @@
+// Spielansichten am Beamer (Halloween-Fassung Schritt D, Nico 26.10.2026; Huettenplan 18.1/2/3/5/6/11).
+//
+// Die Spiele selbst bleiben, wie sie sind (Logik und Stand nur beim Gastgeber, Handys sind Fernbedienung). Neu ist nur,
+// was die Wand zeigt:
+//   auszug(raum)        Gastgeber: Kurzfassung aller Spiele fuer stand/beamer. Je Spiel nur, was ohnehin alle sehen
+//                       duerfen - keine Werwolf-Rolle, kein Nachtziel, kein Mal-Begriff vor dem Erraten, keine Schaetz-Tipps
+//                       vor der Aufloesung. Der Beamer liest nur diesen Auszug, nie den vollen Spielstand.
+//   gezeigt(raum, t)    welches Spiel die Wand gerade zeigt (neuestes laufendes Beamer-Spiel; ein fertiges Ergebnis bleibt
+//                       ENDE_ZEIT stehen, danach wieder Diashow). Gleiche Rechnung am Handy (Handy bleibt dann still).
+//   html / nach         Ansicht je Spiel; vergleichen(): Klaenge und Effekte bei Aenderungen (nur am Beamer).
+import { SPIELE, pferdeAbrechnung, ZIEL } from "./spiele.js";
+import * as P from "./partien.js";
+import * as T from "./texte.js";
+import { FIGUREN } from "./inhalte2.js";
+import { werbinich } from "./elternspiele.js";
+import * as WW from "./werwolf.js";
+import { esc, schlucke, ohneAlkohol } from "./hilfe.js";
+
+export const BEAMER_SPIELE = ["werwolf", "werbinich", "malen", "reaktion", "pferde", "schaetzen"];
+// so lange bleibt ein fertiges Ergebnis (Spielende bzw. Rundenergebnis ohne neue Runde) an der Wand
+export const ENDE_ZEIT = { werwolf: 30000, werbinich: 30000, pferde: 30000, reaktion: 120000, schaetzen: 120000, malen: 120000 };
+export const NACHLAUF = 10000;   // beendetes Spiel (Beenden-Knopf): Ergebnis noch so lange, dann Diashow
+export const REAKTION_PUFFER = 600;   // Beamer wird etwas NACH den Handys gruen - wer auf die Wand schaut, ist nie "zu frueh"
+const MED = { 1: "🥇", 2: "🥈", 3: "🥉" };
+const spiel = (id) => SPIELE.find((x) => x.id === id);
+
+// ---------------------------------------------------------------- Auszug (beim Gastgeber)
+const AUSZUG = {
+  werwolf(s, namen) {
+    const n = namen.length;
+    if (!s.rolle) return { phase: s.phase || "einstellen", n, stimme: !!s.stimme };
+    const d = { ...WW.oeffentlich(s), n, nacht: s.nacht || 0, lebt: namen.map((_, j) => !(s.tot || []).includes(j)), stimme: !!s.stimme };
+    if (s.phase === "rollen") d.bereit = Object.keys(s.bereit || {}).length;
+    if (s.phase === "tag") {
+      const l = WW.lebende(s), zaehl = {};
+      l.forEach((j) => { const z = (s.stimmen || {})[j]; if (z !== undefined) zaehl[z] = (zaehl[z] || 0) + 1; });
+      d.stimmen = zaehl; d.abgestimmt = l.filter((j) => (s.stimmen || {})[j] !== undefined).length; d.waehler = l.length;
+    }
+    // erst nach dem Spielende: alle Rollen (Aufloesung)
+    if (s.gewinner) { d.rollen = s.rolle.slice(); d.liebe = s.liebe ? s.liebe.slice() : null; }
+    return d;
+  },
+  werbinich(s) {
+    const alle = s.erraten.every((x) => x);
+    return { dran: s.dran, figur: FIGUREN[s.figur[s.dran]] || "", erraten: s.erraten.slice(), fragen: (s.fragen || []).slice(), seit: s.seit || 0,
+      zeit: werbinich.zeit, alle, figuren: alle ? s.figur.map((f) => FIGUREN[f]) : null };
+  },
+  malen(s) {
+    const fertig = s.geloest !== null;
+    return { maler: s.maler, runde: s.runde, striche: s.striche, tipps: s.tipps.slice(-6), geloest: s.geloest,
+      wort: fertig ? s.wort : null, muster: fertig ? null : String(s.wort).replace(/[^\s-]/g, "_"), wertung: s.wertung || {} };
+  },
+  reaktion(s, namen, p) {
+    const d = { runde: s.runde, phase: s.phase, warte: s.warte, zeiten: s.zeiten };
+    if (p && p.joker && p.joker.key && p.joker.key === p.zuletzt) d.joker = p.joker;
+    return d;
+  },
+  pferde(s) {
+    return { phase: s.phase, pos: s.pos, wetten: s.wetten, aufgedeckt: s.aufgedeckt || 0, seite: (s.seite || []).slice(0, s.aufgedeckt || 0).map((k) => k.f),
+      seiteN: ZIEL - 1, letzte: s.letzte, sieger: s.sieger, rest: s.stapel ? s.stapel.length : null };
+  },
+  schaetzen(s) {
+    const [frage, loesung] = T.SCHAETZ[s.nr];
+    const auf = s.phase === "aufloesung";
+    return { nr: s.nr, rest: (s.rest || []).length, frage, phase: s.phase, abgegeben: Object.keys(s.tipps).map(Number),
+      tipps: auf ? s.tipps : null, loesung: auf ? loesung : null };
+  },
+};
+
+export function auszug(raum) {
+  const partien = {};
+  Object.values((raum && raum.partien) || {}).forEach((p) => {
+    const k = { pid: p.pid, spiel: p.spiel, phase: p.phase, mit: p.mit, bots: p.bots || {}, von: p.von, start: p.start, runde: p.runde || 1, t: p.t || 0 };
+    if (p.phase === "laeuft" && p.s && AUSZUG[p.spiel]) {
+      try { k.bm = AUSZUG[p.spiel](p.s, P.namen(raum, p), p, raum); } catch (e) { k.bm = null; }
+    }
+    partien[p.pid] = k;
+  });
+  return { partien };
+}
+
+// Auszug einer Partie: am Beamer steht er schon drin (bm), am Handy wird er aus dem vollen Stand gerechnet
+function bmVon(p, raum) {
+  if (p.bm !== undefined) return p.bm;
+  if (p.phase !== "laeuft" || !p.s || !AUSZUG[p.spiel]) return null;
+  try { return AUSZUG[p.spiel](p.s, P.namen(raum, p), p, raum); } catch (e) { return null; }
+}
+
+export function fertig(id, d) {
+  if (!d) return true;
+  if (id === "werwolf") return !!d.gewinner;
+  if (id === "werbinich") return !!d.alle;
+  if (id === "pferde") return d.phase === "ende";
+  if (id === "reaktion") return d.phase !== "laeuft";
+  if (id === "schaetzen") return d.phase === "aufloesung";
+  if (id === "malen") return d.geloest !== null;
+  return true;
+}
+
+export const ausgeblendet = (raum) => ((raum && raum.beamer && Array.isArray(raum.beamer.aus)) ? raum.beamer.aus : []);
+
+// Welches Spiel zeigt die Wand? -> {p, d} oder null (Uhr des Gastgebers)
+export function gezeigt(raum, jetzt) {
+  if (!raum) return null;
+  const aus = ausgeblendet(raum);
+  for (const p of P.liste(raum)) {
+    if (p.phase !== "laeuft" || !BEAMER_SPIELE.includes(p.spiel) || aus.includes(p.pid)) continue;
+    const d = bmVon(p, raum);
+    if (!d) continue;
+    if (fertig(p.spiel, d) && jetzt - (p.t || p.start || 0) > ENDE_ZEIT[p.spiel]) continue;
+    return { p, d };
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------- Klaenge und Effekte (nur am Beamer)
+// alt/neu = Auszug derselben Partie vorher/jetzt -> {toene: [...], effekt: Anzahl Konfetti, musik}
+export function vergleichen(id, alt, neu) {
+  const r = { toene: [], effekt: 0, musik: musik(id, neu) };
+  if (!alt || !neu) return r;
+  const t = (x) => r.toene.push(x);
+  if (id === "werwolf") {
+    if (neu.phase === "nacht" && (alt.phase !== "nacht" || alt.zug !== neu.zug)) t("gong");
+    if (neu.phase === "nacht" && neu.wach && neu.wach !== alt.wach) t(neu.wach === "wolf" ? "heulen" : neu.wach === "amor" ? "herz" : "magie");
+    if (neu.phase === "morgen" && alt.phase !== "morgen") t(neu.tode.length ? "tod" : "morgen");
+    if (neu.phase === "hinrichtung" && alt.phase !== "hinrichtung") t(neu.unentschieden ? "falsch" : "tod");
+    if (neu.phase === alt.phase && (neu.tode || []).length > (alt.tode || []).length && alt.schuss) t("schuss");
+    if (neu.phase === "tag" && neu.abgestimmt > (alt.abgestimmt || 0)) t("klick");
+    if (neu.gewinner && !alt.gewinner) { t("sieg"); r.effekt = 160; }
+  } else if (id === "werbinich") {
+    if (neu.dran !== alt.dran) t("dran");
+    if (neu.erraten.filter(Boolean).length > alt.erraten.filter(Boolean).length) { t("richtig"); r.effekt = 50; }
+    if (neu.alle && !alt.alle) { t("sieg"); r.effekt = 160; }
+  } else if (id === "malen") {
+    if (neu.runde !== alt.runde) t("dran");
+    else if (neu.striche.length > alt.striche.length) t("schritt");
+    if (neu.tipps.length && JSON.stringify(neu.tipps) !== JSON.stringify(alt.tipps) && neu.geloest === null) t("klick");
+    if (neu.geloest !== null && alt.geloest === null) { if (neu.geloest >= 0) { t("tada"); r.effekt = 120; } else t("falsch"); }
+  } else if (id === "reaktion") {
+    if (neu.phase === "laeuft" && (alt.phase !== "laeuft" || alt.runde !== neu.runde)) t("spannung");
+    if (neu.phase === "laeuft" && Object.values(neu.zeiten).filter((x) => x < 0).length > Object.values(alt.zeiten || {}).filter((x) => x < 0).length) t("falsch");
+    if (neu.phase === "ergebnis" && (alt.phase !== "ergebnis" || alt.runde !== neu.runde)) { t("fanfare"); r.effekt = 120; }
+  } else if (id === "pferde") {
+    if (neu.phase === "rennen" && alt.phase === "wetten") t("los");
+    if (neu.rest !== null && alt.rest !== null && neu.rest < alt.rest) { t("karte"); t(neu.letzte && neu.letzte.rueck ? "aua" : "schritt"); }
+    if (Object.keys(neu.wetten).length > Object.keys(alt.wetten).length) t("klick");
+    if (neu.phase === "ende" && alt.phase !== "ende") { t("ziel"); t("sieg"); r.effekt = 180; }
+  } else if (id === "schaetzen") {
+    if (neu.nr !== alt.nr || neu.rest !== alt.rest) t("dran");
+    else if (neu.abgegeben.length > alt.abgegeben.length) t("klick");
+    if (neu.phase === "aufloesung" && alt.phase !== "aufloesung") { t("tada"); r.effekt = 100; }
+  }
+  return r;
+}
+export function musik(id, d) {
+  if (!d) return null;
+  if (id === "werwolf") return d.phase === "nacht" ? "nacht" : ["morgen", "tag", "hinrichtung"].includes(d.phase) && !d.gewinner ? "dorf" : null;
+  if (id === "pferde") return d.phase === "rennen" ? "spannung" : null;
+  return null;
+}
+
+// Werwolf-Erzaehler an der Wand (gleiche Saetze wie am Gastgeber-Handy, ohne Namen und Rollen)
+const wwMerk = {};
+export function erzaehlerFolge(d) {
+  if (!d || !d.stimme || ["einstellen", "rollen"].includes(d.phase) || d.zug === undefined) return null;
+  return WW.erzaehlerFolge({ phase: d.phase, zug: d.zug, wach: d.wach, tode: d.tode || [], schuss: !!d.schuss, unentschieden: !!d.unentschieden, gewinner: d.gewinner || null }, wwMerk);
+}
+
+// ---------------------------------------------------------------- Ansichten (HTML)
+const WACH = { amor: "💘 Amor ist wach …", wolf: "🐺 Die Werwölfe sind wach …", seherin: "🔮 Die Seherin ist wach …", waechter: "🛡️ Der Wächter ist wach …", hexe: "🧪 Die Hexe ist wach …" };
+const SIEG = { dorf: "🏡 Das Dorf hat gewonnen! Alle Wölfe sind tot.", wolf: "🐺 Die Werwölfe haben gewonnen!", liebe: "💘 Das Liebespaar hat gewonnen!" };
+const kopf = (sp, text) => `<div class="bs-kopf"><span class="bs-emo">${sp.emoji}</span><span><b>${esc(sp.name)}</b>${text ? `<small>${text}</small>` : ""}</span></div>`;
+
+function htmlWerwolf(d, nm, sp) {
+  const nacht = d.phase === "nacht";
+  const lebt = (j) => !d.lebt || d.lebt[j];
+  if (d.phase === "einstellen" || d.phase === "rollen") {
+    return `<div class="bsw nacht">${kopf(sp, "automatischer Spielleiter")}
+      <div class="bsw-mitte"><div class="bs-riesig">${d.phase === "rollen" ? "🃏" : "🐺"}</div>
+      <p class="bm-gross">${d.phase === "rollen" ? "Schaut heimlich aufs Handy – das ist eure Rolle!" : "Die Rollen werden eingestellt …"}</p>
+      <p class="bm-zeile">${d.phase === "rollen" ? `${d.bereit || 0} von ${d.n} sind bereit` : `${d.n} Spieler · gleich bekommt jeder seine geheime Rolle`}</p></div></div>`;
+  }
+  let titel, zeile = "";
+  if (nacht) { titel = `🌙 Nacht ${d.nacht}`; zeile = `Das Dorf schläft. ${WACH[d.wach] || ""}`; }
+  else if (d.phase === "morgen") { titel = `☀️ Tag ${d.nacht}`; zeile = d.tode.length ? "" : "🌅 Ein Wunder – heute Nacht ist niemand gestorben."; }
+  else if (d.phase === "tag") { titel = "⚖️ Abstimmung"; zeile = `Wer ist ein Werwolf? ${d.abgestimmt || 0} von ${d.waehler || 0} haben abgestimmt.`; }
+  else { titel = "🪢 Urteil"; zeile = d.unentschieden ? "⚖️ Unentschieden – heute wird niemand gehängt." : ""; }
+  const stimmen = d.stimmen || {};
+  const max = Math.max(1, ...Object.values(stimmen));
+  const haus = (n, j) => {
+    const tot = !lebt(j), st = stimmen[j] || 0;
+    const rolle = d.rollen ? WW.ROLLEN[d.rollen[j]] : null;
+    return `<div class="bsw-haus ${tot ? "tot" : ""} ${d.phase === "tag" && st === max && st > 0 ? "vorn" : ""}">
+      <span class="bsw-h">${rolle ? rolle.emoji : tot ? "🪦" : nacht ? "🏚️" : "🏠"}</span><b>${esc(n)}</b>
+      ${rolle ? `<small>${esc(rolle.name)}${d.liebe && d.liebe.includes(j) ? " 💘" : ""}</small>` : ""}
+      ${d.phase === "tag" && !tot ? `<em class="bsw-st">${st ? "🗳️ " + st : ""}</em>` : ""}</div>`;
+  };
+  const tode = (d.phase === "morgen" || d.phase === "hinrichtung") && !d.gewinner ? d.tode.map((x) => `<div class="bsw-tod">✝ <b>${esc(nm[x.j])}</b> ${esc(x.grund)}.</div>`).join("") : "";
+  const ende = d.gewinner ? `<div class="bs-sieg">🏆 ${SIEG[d.gewinner]}</div><p class="bm-leise mitte">Alle Rollen aufgedeckt:</p>` : "";
+  return `<div class="bsw ${nacht ? "nacht" : "tag"}">${kopf(sp, nacht ? "" : "")}
+      <div class="bsw-himmel"><span class="bsw-gestirn">${nacht ? "🌕" : "☀️"}</span><span class="bsw-titel">${titel}</span></div>
+      ${zeile ? `<p class="bm-zeile mitte">${zeile}</p>` : ""}${tode}${ende}
+      ${d.schuss && !d.gewinner ? `<p class="bm-zeile mitte bsw-schuss">🏹 Ein letzter Schuss steht noch aus …</p>` : ""}
+      <div class="bsw-dorf ${nm.length > 10 ? "viele" : ""}">${nm.map(haus).join("")}</div></div>`;
+}
+
+function htmlWerbinich(d, nm, sp) {
+  const platz = (j) => (d.erraten[j] ? `${MED[d.erraten[j]] || d.erraten[j] + "."}` : "");
+  const stand = `<div class="bsb-stand">${nm.map((n, j) => `<div class="bsb-sp ${j === d.dran ? "dran" : ""} ${d.erraten[j] ? "geschafft" : ""}">
+      <b>${esc(n)}</b><span>${d.erraten[j] ? `✅ ${platz(j)}` : "❓"}</span><small>${d.fragen[j] || 0} ${(d.fragen[j] || 0) === 1 ? "Zug" : "Züge"}</small></div>`).join("")}</div>`;
+  if (d.alle) {
+    const sieger = d.erraten.indexOf(1);
+    return `<div class="bsb">${kopf(sp, "alle haben sich erraten")}<div class="bs-sieg">🏆 ${esc(nm[sieger] || "")} war am schnellsten!</div>
+      <div class="bsb-alle">${nm.map((n, j) => `<div><b>${esc(n)}</b><span>${esc((d.figuren || [])[j] || "")}</span><em>${platz(j)}</em></div>`).join("")}</div></div>`;
+  }
+  const ende = d.seit + d.zeit * 1000;
+  return `<div class="bsb">${kopf(sp, "Spieler mit dem Rücken zur Wand – die anderen sehen hin")}
+      <p class="bm-zeile mitte"><b>${esc(nm[d.dran] || "")}</b> fragt: „Bin ich …?“ – nur Ja oder Nein</p>
+      <div class="bsb-figur">${esc(d.figur)}</div>
+      <div class="bsb-uhr"><b data-bsek="${ende}">⏱️ ${d.zeit}</b></div>
+      ${d.erraten[d.dran] ? `<p class="bm-leise mitte">✅ ${esc(nm[d.dran])} hat sich schon erraten</p>` : ""}
+      ${stand}</div>`;
+}
+
+function htmlMalen(d, nm, sp) {
+  const maler = esc(nm[d.maler] || "");
+  let info;
+  if (d.geloest === null) info = `<p class="bm-gross">${maler} malt …</p><p class="bsm-muster">${esc(d.muster || "")}</p><p class="bm-leise">Ratet am Handy – wer es zuerst hat, bekommt einen Punkt, ${maler} auch.</p>`;
+  else if (d.geloest >= 0) info = `<div class="bs-sieg">🎉 ${esc(nm[d.geloest] || "")} hat es!</div><p class="bm-gross">${esc(d.wort)}</p>
+    <p class="bm-zeile">+1 Punkt für ${esc(nm[d.geloest] || "")} und ${maler} · alle anderen trinken 1, ${maler} verteilt 2</p>`;
+  else info = `<p class="bm-gross">Aufgegeben – es war: <b>${esc(d.wort)}</b></p><p class="bm-zeile">${maler} trinkt 2</p>`;
+  const punkte = Object.entries(d.wertung || {}).map(([j, n]) => [Number(j), n]).filter(([j]) => nm[j] !== undefined).sort((x, y) => y[1] - x[1]);
+  return `<div class="bsm">${kopf(sp, `Runde ${d.runde}`)}<div class="bsm-reihe">
+      <div class="bsm-blatt"><canvas class="bsm-lw" width="900" height="900" data-bs-leinwand data-striche="${d.striche.length}"></canvas></div>
+      <div class="bsm-text">${info}
+        ${d.tipps.length ? `<div class="bsm-tipps">${d.tipps.map((x) => `<span><b>${esc(nm[x.von] || "")}:</b> ${esc(x.t)}</span>`).join("")}</div>` : ""}
+        ${punkte.length ? `<p class="bm-leise">🏅 Punkte: ${punkte.map(([j, n]) => `${esc(nm[j])} ${n}`).join(" · ")}</p>` : ""}</div></div></div>`;
+}
+
+function reaktionsListe(d, nm) {
+  return nm.map((n, j) => [j, d.zeiten[j]]).filter(([, ms]) => ms !== undefined).sort((x, y) => (x[1] < 0 ? 1e9 : x[1]) - (y[1] < 0 ? 1e9 : y[1]));
+}
+function htmlReaktion(d, nm, sp) {
+  if (d.phase === "bereit") {
+    return `<div class="bsr">${kopf(sp, "Reaktionstest")}<div class="bsr-flaeche bereit"><b>Gleich geht's los!</b><small>Am Handy tippen, sobald es <u>grün</u> wird – zu früh = raus</small></div></div>`;
+  }
+  if (d.phase === "laeuft") {
+    const raus = nm.map((n, j) => (d.zeiten[j] !== undefined && d.zeiten[j] < 0 ? n : null)).filter(Boolean);
+    const da = Object.keys(d.zeiten).length;
+    return `<div class="bsr">${kopf(sp, `Runde ${d.runde}`)}<div class="bsr-flaeche rot" data-bs-reaktion><b>Warte …</b><small>Augen aufs Handy – tippen, sobald es grün wird!</small></div>
+      <p class="bm-zeile mitte">${da} von ${nm.length} haben getippt</p>
+      ${raus.length ? `<p class="bm-zeile mitte bsr-raus">😬 Zu früh – raus: ${raus.map((n) => `<b>${esc(n)}</b>`).join(", ")}</p>` : ""}</div>`;
+  }
+  const liste = reaktionsListe(d, nm);
+  const letzter = liste[liste.length - 1], erster = liste[0];
+  const joker = d.joker && d.joker.neu && d.joker.neu.length ? `<p class="bm-zeile mitte bsr-joker">🃏 Joker fürs Glücksrad: ${d.joker.neu.map((n) => `<b>${esc(n)}</b>`).join(" & ")}</p>`
+    : d.joker && d.joker.alle && d.joker.alle.length ? `<p class="bm-leise mitte">🃏 ${d.joker.alle.map(esc).join(" & ")} hat schon die höchste Zahl Joker</p>` : "";
+  return `<div class="bsr">${kopf(sp, `Runde ${d.runde} – Rangliste`)}
+      <ol class="bm-rang bsr-rang">${liste.map(([j, ms], k) => `<li class="${ms >= 0 && k === 0 ? "p1" : ""} ${ms < 0 ? "raus" : ""}"><span class="bm-platz">${ms < 0 ? "😬" : MED[k + 1] || k + 1 + "."}</span>
+        <span class="bm-name">${esc(nm[j])}</span><b class="bm-wert">${ms < 0 ? "zu früh – raus" : ms + " ms"}</b></li>`).join("")}</ol>
+      ${letzter ? `<p class="bm-zeile mitte">${esc(nm[letzter[0]])} trinkt ${schlucke(letzter[1] < 0 ? 2 : 1)} · ${esc(nm[erster[0]])} verteilt 1</p>` : ""}${joker}</div>`;
+}
+
+const ROT = (f) => f === "♥" || f === "♦";
+function htmlPferde(d, nm, sp, merk) {
+  const vorher = (merk && merk.pos) || d.pos;
+  const bahn = ["♠", "♥", "♦", "♣"].map((f) => `<div class="bsp-bahn ${d.sieger === f ? "sieger" : ""}"><span class="bsp-ass ${ROT(f) ? "rotk" : ""}">A${f}</span>
+      <div class="bsp-spur" style="--ziel:${ZIEL}">${Array.from({ length: ZIEL }, (_, k) => `<i class="${k + 1 <= d.aufgedeckt ? "auf" : ""}"></i>`).join("")}
+        <span class="bsp-pferd" style="--von:${vorher[f] || 0};--nach:${d.pos[f] || 0}">🐎</span><span class="bsp-zielfahne">🏁</span></div></div>`).join("");
+  const seite = `<div class="bsp-seite">${Array.from({ length: d.seiteN }, (_, k) => `<span class="${k < d.seite.length ? "auf" : ""} ${k < d.seite.length && ROT(d.seite[k]) ? "rotk" : ""}">${k < d.seite.length ? d.seite[k] : "🂠"}</span>`).join("")}</div>`;
+  const wetten = Object.entries(d.wetten).map(([j, w]) => `<span class="bm-pille ${d.sieger && w.f === d.sieger ? "gewinnt" : ""}">${esc(nm[j] || "")}: <b class="${ROT(w.f) ? "rotk" : ""}">${w.f}</b> × ${w.n}</span>`).join("");
+  if (d.phase === "wetten") {
+    return `<div class="bsp">${kopf(sp, "Setzt am Handy auf ein Ass!")}${bahn}<div class="bm-pillen mitte bsp-wetten">${wetten || `<span class="bm-leise">Noch keine Wetten …</span>`}</div></div>`;
+  }
+  const l = d.letzte;
+  const gezogen = l ? `<p class="bm-zeile mitte">Gezogen: <b class="${ROT(l.f) ? "rotk" : ""}">${esc(String(l.w))}${l.f}</b>${l.rueck ? ` – Seitenkarte: <b class="${ROT(l.rueck) ? "rotk" : ""}">${l.rueck}</b> muss einen Schritt zurück!` : ""}</p>` : "";
+  let ende = "";
+  if (d.phase === "ende") {
+    // kurz, damit es auch mit vielen Wetten gross bleibt: Zahl in Klammern = Schlucke
+    const { gew, verl } = pferdeAbrechnung(d.wetten, d.sieger);
+    const liste = (l) => l.map(([j, n]) => `<b>${esc(nm[j] || "")}</b>&nbsp;(${n})`).join(" · ");
+    ende = `<div class="bs-sieg">🏆 Ass <span class="${ROT(d.sieger) ? "rotk" : ""}">${d.sieger}</span> gewinnt!</div>
+      ${gew.length ? `<p class="bm-zeile mitte bsp-ab gut">🏆 Gewinner verteilen: ${liste(gew)}</p>` : ""}
+      ${verl.length ? `<p class="bm-zeile mitte bsp-ab">🍺 Verlierer trinken: ${liste(verl)}</p>` : ""}
+      <p class="bm-leise mitte">${gew.length || verl.length ? "Zahl in Klammern = Schlucke" : "Niemand hatte gesetzt."}</p>`;
+  }
+  return `<div class="bsp">${kopf(sp, "Gewinner verteilen, Verlierer trinken")}${bahn}${seite}${gezogen}${ende}${d.phase === "ende" ? "" : `<div class="bm-pillen mitte bsp-wetten">${wetten}</div>`}</div>`;
+}
+
+function htmlSchaetzen(d, nm, sp) {
+  if (d.phase === "tippen") {
+    return `<div class="bss">${kopf(sp, "Zahl am Handy tippen – wer am nächsten dran ist, gewinnt")}<div class="bss-frage">${esc(d.frage)}</div>
+      <div class="bm-pillen mitte bss-wer">${nm.map((n, j) => `<span class="bm-pille ${d.abgegeben.includes(j) ? "da" : "leise"}">${d.abgegeben.includes(j) ? "✅" : "⏳"} ${esc(n)}</span>`).join("")}</div>
+      <p class="bm-zeile mitte">${d.abgegeben.length} von ${nm.length} haben getippt</p></div>`;
+  }
+  const abst = nm.map((_, j) => [j, (d.tipps || {})[j]]).filter(([, t]) => t !== undefined).map(([j, t]) => [j, t, t - d.loesung]).sort((x, y) => Math.abs(x[2]) - Math.abs(y[2]));
+  const zahl = (x) => Number(x).toLocaleString("de-DE");
+  const bestes = abst.length ? Math.abs(abst[0][2]) : null;
+  return `<div class="bss">${kopf(sp, "Auflösung")}<div class="bss-frage klein">${esc(d.frage)}</div>
+      <div class="bss-loesung">${zahl(d.loesung)}</div>
+      <ol class="bm-rang bss-rang">${abst.map(([j, t, u]) => `<li class="${Math.abs(u) === bestes ? "p1" : ""}"><span class="bm-platz">${Math.abs(u) === bestes ? "🎯" : ""}</span>
+        <span class="bm-name">${esc(nm[j])}</span><b class="bm-wert">${zahl(t)}</b><small class="bss-ab">${u === 0 ? "genau!" : (u > 0 ? "+" : "−") + zahl(Math.abs(u))}</small></li>`).join("")}</ol>
+      ${abst.length ? `<p class="bm-zeile mitte">${esc(nm[abst[abst.length - 1][0]])} trinkt 2 · ${esc(nm[abst[0][0]])} verteilt 2</p>` : ""}</div>`;
+}
+
+const HTML = { werwolf: htmlWerwolf, werbinich: htmlWerbinich, malen: htmlMalen, reaktion: htmlReaktion, pferde: htmlPferde, schaetzen: htmlSchaetzen };
+
+// raum (Beamer-Stand), p (Kurzfassung der Partie), d (Auszug), merk (was der Beamer sich je Partie merkt), vorbei = beendet
+export function html(raum, p, d, merk, vorbei = false) {
+  const sp = spiel(p.spiel);
+  if (!sp || !HTML[p.spiel]) return "";
+  let h;
+  try { h = HTML[p.spiel](d, P.namen(raum, p), sp, merk); } catch (e) { console.error(e); return ""; }
+  if (vorbei) h = `<div class="bs-vorbei">⏹️ ${esc(sp.name)} ist beendet – gleich geht die Diashow weiter</div>${h}`;
+  h = `<div class="bs bs-${p.spiel}" data-bs-spiel="${p.spiel}">${h}</div>`;
+  return raum.ohneAlkohol ? ohneAlkohol(h) : h;
+}
+
+// Nach dem Einsetzen: Leinwand zeichnen, Reaktions-Flaeche schalten. lokal = {gruen: {key: Zeitpunkt}} des Beamers
+export function nach(el, p, d, lokal, beiGruen) {
+  const c = el.querySelector("[data-bs-leinwand]");
+  if (c && d.striche) {
+    const g = c.getContext("2d");
+    g.fillStyle = "#fffdf8"; g.fillRect(0, 0, c.width, c.height);
+    g.lineCap = g.lineJoin = "round"; g.lineWidth = 11; g.strokeStyle = "#1b1f2a";
+    d.striche.forEach((pf) => { if (!Array.isArray(pf) || pf.length < 2) return; g.beginPath(); g.moveTo(pf[0][0] * 9, pf[0][1] * 9); pf.forEach(([x, y]) => g.lineTo(x * 9, y * 9)); g.stroke(); });
+  }
+  const f = el.querySelector("[data-bs-reaktion]");
+  if (f && d.phase === "laeuft") {
+    const key = `${p.pid}:${d.runde}`;
+    if (!lokal.gruen[key]) lokal.gruen[key] = performance.now() + (Number(d.warte) || 0) + REAKTION_PUFFER;
+    const um = lokal.gruen[key];
+    const gruen = () => { const x = document.querySelector("[data-bs-reaktion]"); if (x && !x.classList.contains("gruen")) { x.className = "bsr-flaeche gruen"; x.innerHTML = "<b>JETZT!</b>"; if (beiGruen) beiGruen(); } };
+    clearTimeout(lokal.timer);
+    if (performance.now() >= um) gruen(); else lokal.timer = setTimeout(gruen, um - performance.now());
+  }
+}
+
+// Sekunden-Uhren (Wer bin ich): -> Klaenge (tick in den letzten 5 s, Gong bei 0)
+const gegongt = new Set();
+export function uhren(root, jetzt) {
+  const toene = [];
+  (root || document).querySelectorAll("[data-bsek]").forEach((el) => {
+    const ende = Number(el.dataset.bsek), rest = Math.ceil((ende - jetzt) / 1000);
+    const t = rest > 0 ? `⏱️ ${rest}` : "⏰ Zeit um – der Nächste fragt!";
+    if (el.textContent === t) return;
+    el.textContent = t;
+    el.classList.toggle("knapp", rest <= 10);
+    if (rest > 0 && rest <= 5) toene.push("tick");
+    if (rest <= 0 && !gegongt.has(ende)) { gegongt.add(ende); toene.push("gong"); }
+  });
+  return toene;
+}

@@ -2,6 +2,7 @@
 // Nachts wird jeder Bildschirm dunkel; jeder bekommt eine Aufgabe (auch Dorfbewohner tippen Sterne), damit niemand
 // am Handy des Nachbarn erkennt, wer gerade wirklich handelt. Erzaehler-Stimme optional auf dem Gastgeber-Handy.
 import { esc, knopf, zufall, mischen, name } from "./hilfe.js";
+import { still } from "./ton.js";
 
 const ROLLEN = {
   wolf: { name: "Werwolf", emoji: "🐺", team: "wolf", text: "Nachts sucht ihr Wölfe gemeinsam ein Opfer aus. Tagsüber tut ihr unschuldig." },
@@ -310,32 +311,48 @@ export const werwolf = {
         b.onclick = () => { const j = Number(b.dataset.amor); window.__amor = window.__amor.includes(j) ? window.__amor.filter((x) => x !== j) : [...window.__amor, j].slice(-2); amor.forEach((x) => x.classList.toggle("gewaehlt", window.__amor.includes(Number(x.dataset.amor)))); }; });
       const ok = document.getElementById("amor-ok"); if (ok) ok.onclick = () => { if (window.__amor.length === 2) senden({ typ: "liebe", ziele: window.__amor }); };
     }
-    // Erzaehler mit Jarvis' Stimme (einmal aufgenommen, stimme_bauen.py), nur auf dem Gastgeber-Handy.
-    // Er nennt nie Namen oder Rollen von Spielern - wer gestorben ist, steht auf dem Bildschirm.
-    if (ich !== 0 || !s.stimme || !s.rolle) return;
-    const schluessel = `${s.phase}-${s.zug}-${s.nachtSchritt}-${s.jaegerOffen}-${s.gewinner}-${(s.tode || []).length}`;
-    if (window.__wwStimme === schluessel) return;
-    window.__wwStimme = schluessel;
-    const folge = [];
-    const tod = (d) => (/Werwölfen/.test(d.grund) ? "t_wolf" : /vergiftet/.test(d.grund) ? "t_gift" : /Liebeskummer/.test(d.grund) ? "t_liebe" : /Jäger/.test(d.grund) ? "t_jaeger" : "t_dorf");
-    const gesagt = window.__wwTode && window.__wwTode.zug === s.zug ? window.__wwTode.n : 0;
-    const neueTode = (s.tode || []).slice(gesagt);
-    window.__wwTode = { zug: s.zug, n: (s.tode || []).length };
-    if (s.phase === "nacht") {
-      if (window.__wwNacht !== s.zug) { window.__wwNacht = s.zug; folge.push("nacht"); }
-      folge.push(NACHT_REIHE[s.nachtSchritt]);
-    } else if (s.phase === "morgen") {
-      if (!gesagt) folge.push("morgen");
-      if (!gesagt && !neueTode.length) folge.push("keiner");
-      neueTode.forEach((d) => folge.push(tod(d)));
-      if (neueTode.length) folge.push(s.jaegerOffen !== null ? "jaeger" : "schauen");
-    } else if (s.phase === "tag") folge.push("tag");
-    else if (s.phase === "hinrichtung") {
-      if (!gesagt) folge.push(s.unentschieden ? "uneinig" : "entschieden");
-      neueTode.forEach((d) => folge.push(tod(d)));
-      if (neueTode.length) folge.push(s.jaegerOffen !== null ? "jaeger" : "schauen");
-    }
-    if (s.gewinner) folge.push(`sieg_${s.gewinner}`);
-    erzaehlen(folge.filter(Boolean));
+    // Erzaehler mit Jarvis' Stimme (einmal aufgenommen, stimme_bauen.py), nur auf dem Gastgeber-Handy - zeigt der Beamer
+    // das Spiel, spricht er dort (beamer_spiele.js) und das Handy bleibt still. Er nennt nie Namen oder Rollen von Spielern.
+    if (ich !== 0 || !s.stimme || !s.rolle || still()) return;
+    const folge = erzaehlerFolge(oeffentlich(s), handyMerk);
+    if (folge) erzaehlen(folge);
   },
 };
+
+// ---------------------------------------------------------------- oeffentlicher Stand (fuer Erzaehler und Beamer)
+// Nur, was ohnehin alle sehen oder hoeren: Phase, wer gerade gerufen wird (wie der Erzaehler), Todesursachen, ob ein
+// letzter Schuss aussteht, Sieger. Keine Rolle einer Person, kein Ziel der Nacht, kein Liebespaar.
+export function oeffentlich(s) {
+  return { phase: s.phase, zug: s.zug || 0, wach: s.phase === "nacht" ? NACHT_REIHE[s.nachtSchritt] : null,
+    tode: ["morgen", "hinrichtung"].includes(s.phase) ? (s.tode || []).map((d) => ({ j: d.j, grund: d.grund })) : [],
+    schuss: s.jaegerOffen !== null && s.jaegerOffen !== undefined, unentschieden: !!s.unentschieden, gewinner: s.gewinner || null };
+}
+const handyMerk = {};
+// Saetze fuer einen neuen Stand (null = schon gesagt). merk = Gedaechtnis des Geraets, das spricht.
+export function erzaehlerFolge(z, merk) {
+  const schluessel = `${z.phase}-${z.zug}-${z.wach}-${z.schuss}-${z.gewinner}-${z.tode.length}`;
+  if (merk.stimme === schluessel) return null;
+  merk.stimme = schluessel;
+  const folge = [];
+  const tod = (d) => (/Werwölfen/.test(d.grund) ? "t_wolf" : /vergiftet/.test(d.grund) ? "t_gift" : /Liebeskummer/.test(d.grund) ? "t_liebe" : /Jäger/.test(d.grund) ? "t_jaeger" : "t_dorf");
+  const gesagt = merk.tode && merk.tode.zug === z.zug ? merk.tode.n : 0;
+  const neueTode = z.tode.slice(gesagt);
+  merk.tode = { zug: z.zug, n: z.tode.length };
+  if (z.phase === "nacht") {
+    if (merk.nacht !== z.zug) { merk.nacht = z.zug; folge.push("nacht"); }
+    folge.push(z.wach);
+  } else if (z.phase === "morgen") {
+    if (!gesagt) folge.push("morgen");
+    if (!gesagt && !neueTode.length) folge.push("keiner");
+    neueTode.forEach((d) => folge.push(tod(d)));
+    if (neueTode.length) folge.push(z.schuss ? "jaeger" : "schauen");
+  } else if (z.phase === "tag") folge.push("tag");
+  else if (z.phase === "hinrichtung") {
+    if (!gesagt) folge.push(z.unentschieden ? "uneinig" : "entschieden");
+    neueTode.forEach((d) => folge.push(tod(d)));
+    if (neueTode.length) folge.push(z.schuss ? "jaeger" : "schauen");
+  }
+  if (z.gewinner) folge.push(`sieg_${z.gewinner}`);
+  return folge.filter(Boolean);
+}
+export { erzaehlen, ROLLEN, NACHT_REIHE, lebende };

@@ -78,14 +78,20 @@ export const begriffe = erklaerSpiel("begriffe", "Begriffe-Rallye", "🗣️", "
 export const pantomime = erklaerSpiel("pantomime", "Pantomime", "🤹", "Vorspielen ohne Worte – die anderen raten", ["#fd79a8", "#8e2d6b"], PANTOMIME, false, 60);
 
 // ================================================================ Wer bin ich?
+// Am Beamer (Schritt D): die Figur dessen, der fragt, steht gross an der Wand (er sitzt mit dem Ruecken dazu), dazu die
+// Zeit je Zug (zeit Sekunden ab seit, Uhr des Gastgebers) und wie viele Zuege jeder schon gebraucht hat (fragen).
 export const werbinich = {
   id: "werbinich", name: "Wer bin ich?", emoji: "🎭", kurz: "Alle sehen deine Figur – nur du nicht. Ja/Nein-Fragen stellen!", farben: ["#a29bfe", "#4834d4"],
-  start: (namen) => { const f = mischen(FIGUREN.map((_, i) => i)).slice(0, namen.length); return { figur: f, erraten: namen.map(() => 0), dran: 0, nr: 0 }; },
+  zeit: 60,
+  start: (namen) => { const f = mischen(FIGUREN.map((_, i) => i)).slice(0, namen.length); return { figur: f, erraten: namen.map(() => 0), dran: 0, nr: 0, seit: Date.now(), fragen: namen.map(() => 0) }; },
   // Gesamtwertung: wer sich zuerst erraten hat, sobald alle durch sind (wie die Anzeige "Sieger")
   ergebnis: (s) => (s.erraten.every((x) => x) && s.erraten.includes(1) ? { nr: s.figur.join("-"), sieger: [s.erraten.indexOf(1)] } : null),
   aktion(s, i, a, namen) {
     if (a.typ === "erraten" && !s.erraten[i]) { s.nr++; s.erraten[i] = s.nr; }
-    if (a.typ === "naechster") s.dran = (s.dran + 1) % namen.length;
+    if (a.typ === "naechster") {
+      if (Array.isArray(s.fragen)) s.fragen[s.dran] = (s.fragen[s.dran] || 0) + 1;
+      s.dran = (s.dran + 1) % namen.length; s.seit = Date.now();
+    }
     if (a.typ === "neu") Object.assign(s, werbinich.start(namen));
   },
   render(s, ich, namen) {

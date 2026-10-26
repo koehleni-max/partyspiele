@@ -248,3 +248,8 @@ export function umschalten() {
   return TEXT[modus];
 }
 export function tonModus() { return modus; }
+
+// Handy still (Schritt D, 26.10.2026): zeigt der Beamer gerade das Spiel dieses Handys, kommen Musik, Spielgeraeusche und
+// der Werwolf-Erzaehler von der Wand - das Handy bleibt leise (app.js setzt es, werwolf.js fragt es ab).
+let handyStill = false;
+export function still(an) { if (an !== undefined) handyStill = !!an; return handyStill; }

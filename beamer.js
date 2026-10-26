@@ -10,14 +10,22 @@
 //   diashow  an/aus             seite + seit   von Hand gewaehlte Seite (bleibt PAUSE lang stehen, dann wieder Diashow)
 //   dauer    Sekunden je Seite  weg            Zaehler "Ereignis ausblenden"      schreck   Zaehler Schreckmoment
 // Ereignisse unterbrechen die Diashow kurz (ereignisse()): neues Spiel (raum.meldung), Pokal-Uebergabe und Abendwertung
-// (tafel.wertung.uebergabe/abend), Begruessung neuer Gaeste (raum.gruesse, nur "Gast Nummer X"), Schreckmoment.
-import { Verbindung, zufallsText, standLesen } from "./net.js";
+// (tafel.wertung.uebergabe/abend), Begruessung neuer Gaeste (raum.gruesse, nur "Gast Nummer X"), Schreckmoment,
+// Gluecksrad (raum.glueck: grosses Rad mit Ticken und Tusch, drängelt vor) und Weiterschieben per Joker (Schritt C).
+// Spielansicht (Schritt D, beamer_spiele.js): laeuft Werwolf, Wer bin ich?, Malen & Raten, Blitzreaktion, Pferderennen
+// oder Schaetzmeister, zeigt die Wand das Spiel statt der Diashow (Steuerseite: "ausblenden", raum.beamer.aus) und danach
+// kurz das Ergebnis. Der Beamer liest dafuer nur stand/lobby, stand/tafel und stand/beamer - nie stand/partien, also nie
+// Werwolf-Rollen. Effekte (Konfetti, Fledermaeuse) fliegen hinter dem Text (.bm-effekte bzw. hinter der Ereignis-Box).
+import { Verbindung, zufallsText, beamerLesen } from "./net.js";
+import * as BS from "./beamer_spiele.js";
+import * as WW from "./werwolf.js";
 import { SPIELE } from "./spiele.js";
 import * as TON from "./ton.js";
 import * as TAFEL from "./tafel.js";
 import * as W from "./wertung.js";
 import * as P from "./partien.js";
 import * as A from "./anlass.js";
+import * as G from "./gluecksrad.js";
 import { esc } from "./hilfe.js";
 
 export const PAUSE = 30 * 60000;          // von Hand gewaehlte Seite bleibt so lange stehen
@@ -34,7 +42,8 @@ export const SEITEN = [
 ];
 export const seiteGueltig = (id) => SEITEN.some((s) => s.id === id);
 export const seiteName = (id) => { const s = SEITEN.find((x) => x.id === id); return s ? `${s.emo} ${s.name}` : ""; };
-export const DAUER_EREIGNIS = { gruss: 7000, spiel: 10000, pokal: 16000, abend: 20000, schreck: 2600 };
+// rad: Drehung + Ergebnis; laeuft noch eine Joker-Entscheidung, bleibt das Rad stehen, bis sie gefallen ist
+export const DAUER_EREIGNIS = { gruss: 7000, spiel: 10000, pokal: 16000, abend: 20000, schreck: 2600, rad: G.DREH + 9000, schub: 10000 };
 const MED = { 1: "🥇", 2: "🥈", 3: "🥉" };
 const spiel = (id) => SPIELE.find((x) => x.id === id);
 
@@ -45,6 +54,7 @@ export function steuer(raum) {
     diashow: b.diashow !== false, dauer: DAUERN.includes(b.dauer) ? b.dauer : DAUER,
     seite: seiteGueltig(b.seite) ? b.seite : null, seit: Number(b.seit) || 0,
     weg: Number(b.weg) || 0, schreck: Number(b.schreck) || 0,
+    aus: Array.isArray(b.aus) ? b.aus.filter((x) => typeof x === "string").slice(-12) : [],
   };
 }
 
@@ -59,6 +69,13 @@ export function steuerAktion(raum, a, jetzt) {
     else return false;
   } else if (a.was === "weg") b.weg += 1;
   else if (a.was === "schreck") { if (raum.look !== "halloween") return false; b.schreck += 1; }
+  else if (a.was === "spielaus" || a.was === "spielan") {
+    // Spielansicht eines Spiels am Beamer aus- bzw. wieder einblenden (zurueck zur Diashow)
+    const pid = String(a.pid || "");
+    if (!/^p\d{1,6}$/.test(pid)) return false;
+    b.aus = b.aus.filter((x) => x !== pid);
+    if (a.was === "spielaus") b.aus = [...b.aus, pid].slice(-12);
+  }
   else return false;
   raum.beamer = b;
   return true;
@@ -126,6 +143,7 @@ export function marken(raum) {
     uebergabe: (w && w.uebergabe) || 0, abend: (w && w.abend) || 0,
     gast: Math.max(0, ...(raum.gruesse || []).map((g) => Number(g.nr) || 0)),
     schreck: st.schreck, weg: st.weg,
+    rad: Number(raum.glueck && raum.glueck.nr) || 0, schub: Number(raum.glueck && raum.glueck.schub) || 0,
   };
 }
 // alt = Marken beim letzten Stand (null = erster Stand: nichts Altes nachholen)
@@ -137,6 +155,10 @@ export function ereignisse(alt, raum) {
   if (neu.uebergabe > alt.uebergabe) liste.push({ art: "pokal" });
   if (neu.abend > alt.abend) liste.push({ art: "abend" });
   if (neu.schreck > alt.schreck && raum.look === "halloween") liste.push({ art: "schreck" });
+  const l = raum.glueck && raum.glueck.lauf;
+  // Gluecksrad: neue Drehung (nur die aktuelle, alte nicht nachholen) und Weiterschieben per Joker
+  if (neu.rad > (alt.rad || 0) && l && l.nr === neu.rad) liste.push({ art: "rad", nr: l.nr });
+  if (neu.schub > (alt.schub || 0) && l && l.schub) liste.push({ art: "schub", nr: l.nr });
   return { liste, marken: neu, weg: neu.weg > alt.weg };
 }
 
@@ -222,9 +244,14 @@ function seiteSpiele(raum, liste) {
     ${liste.length > zeig.length ? `<p class="bm-leise mitte">+ ${liste.length - zeig.length} weitere Spiele</p>` : ""}`;
 }
 
-function seiteGlueck(g) {
-  return `<div class="bm-pokal"><div class="bm-pokalbild">🎡</div><p class="bm-leise">Letzter Glücksrad-Gewinner</p>
-    <p class="bm-gross"><b>${esc(g.name)}</b></p>${g.preis ? `<p class="bm-zeile">bekommt: <b>${esc(g.preis)}</b></p>` : ""}</div>`;
+// Letzter Dreh gross, darunter die Drehs davor (raum.glueck.verlauf, neueste zuerst)
+function seiteGlueck(g, raum) {
+  const davor = ((raum.glueck && raum.glueck.verlauf) || []).filter((x) => x.nr == null || x.nr !== g.nr).slice(0, 4);
+  return `<div class="bm-pokal bm-glueck"><div class="bm-pokalbild">🎡</div><p class="bm-leise">Zuletzt vom Glücksrad</p>
+    <p class="bm-gross"><b>${esc(g.name)}</b></p>${g.preis ? `<p class="bm-zeile">bekommt: <b>${esc(g.preis)}</b></p>` : ""}
+    ${g.aufgabe ? `<p class="bm-leise">${esc(g.aufgabe)}</p>` : ""}
+    ${g.schub ? `<p class="bm-leise">🃏 per Joker weitergeschoben von ${esc(g.schub)}</p>` : ""}
+    ${davor.length ? `<ol class="bm-gl-liste">${davor.map((x) => `<li><b>${esc(x.name)}</b><span>${esc(x.preis)}${x.schub ? ` · 🃏 von ${esc(x.schub)}` : ""}</span></li>`).join("")}</ol>` : ""}</div>`;
 }
 
 function seiteMitmachen(raum) {
@@ -249,7 +276,7 @@ export function seiteHTML(raum, id, jetzt) {
   if (id === "pong") return seitePong(d, oa);
   if (id === "rennen") return seiteRennen(d, oa);
   if (id === "spiele") return seiteSpiele(raum, d);
-  if (id === "glueck") return seiteGlueck(d);
+  if (id === "glueck") return seiteGlueck(d, raum);
   return seiteMitmachen(raum);
 }
 
@@ -269,6 +296,17 @@ export function ereignisHTML(raum, e, jetzt) {
   }
   if (e.art === "pokal") {
     return `<div class="bm-e-box bm-e-pokal">${W.renderPokal(raum.tafel, { ohneAlkohol: !!raum.ohneAlkohol })}</div>`;
+  }
+  if (e.art === "rad" || e.art === "schub") {
+    const l = raum.glueck && raum.glueck.lauf;
+    if (!l || l.nr !== e.nr) return "";
+    if (e.art === "schub") {
+      if (!l.schub) return "";
+      return `<div class="bm-e-box bm-e-schub"><div class="bm-e-emo">🃏</div><p class="bm-e-gross">${esc(G.schubText(l))}</p>
+        <p class="bm-e-klein">${l.feld === "wop" ? esc(l.zusatz) : `${esc(l.schub.anName)}: ${l.emo} ${esc(l.kurz)}`}</p></div>`;
+    }
+    return `<div class="bm-e-box bm-e-rad"><div class="bm-rad-bild">${G.radLaufSVG(l, raum.look, jetzt, true)}</div>
+      <div class="bm-rad-text"><p class="bm-e-klein">🎡 Glücksrad</p><div data-rad-erg>${G.ergebnisHTML(l, jetzt, true)}</div></div></div>`;
   }
   if (e.art === "abend") {
     const w = wertungVon(raum);
@@ -298,9 +336,13 @@ export const FRATZE = `<svg class="bm-fratze" viewBox="0 0 400 500" aria-hidden=
 </svg>`;
 
 // ---------------------------------------------------------------- Anzeige am Geraet (DOM)
-let netz = null, raum = null, merker = {}, mk = null, app = null;
+let netz = null, raum = null, mk = null, app = null;
 let zustand = { seite: null, ab: 0 }, schlange = [], laufend = null, laufTimer = null, schreckTimer = null, gezeigt = "";
 let zuletztFledermaus = 0;
+// Spielansicht: je Partie der letzte Auszug (Klaenge bei Aenderung, Pferde-Animation), beendetes Spiel, lokale Reaktionsuhr
+const bsMerk = {}, bsLokal = { gruen: {}, timer: null };
+let spielZuletzt = null, spielKey = "";
+const teile = {}, gelesen = new Set();   // stand/lobby, stand/tafel, stand/beamer (nie stand/partien)
 const verlauf = [];
 const jetztG = () => (netz && raum ? Date.now() + netz.versatz - (raum.uhr || 0) : Date.now());
 const merke = (x) => { verlauf.push(x); if (verlauf.length > 200) verlauf.shift(); };
@@ -309,8 +351,9 @@ export async function start(code, wurzel) {
   app = wurzel;
   document.body.classList.add("beamer");
   document.title = "📽️ Beamer – Partyspiele";
-  window.__beamer = { raum: () => raum, seite: () => zustand.seite, ereignis: () => (laufend ? laufend.art : null), verlauf: () => verlauf.slice() };
-  app.innerHTML = `<div class="bm">
+  window.__beamer = { raum: () => raum, seite: () => zustand.seite, ereignis: () => (laufend ? laufend.art : null), verlauf: () => verlauf.slice(),
+    spiel: () => (spielKey ? spielKey.split(":")[0] : null), pfade: () => [...gelesen], roh: () => ({ ...teile }) };
+  app.innerHTML = `<div class="bm-effekte" aria-hidden="true"></div><div class="bm">
       <div class="bm-kopf"><span class="bm-titel">📽️ Beamer</span><span class="bm-zeit"></span></div>
       <div class="bm-buehne"><div class="bm-inhalt"><div class="bm-leer"><div class="bm-pokalbild">⏳</div><p class="bm-leise">Raum wird geladen …</p></div></div><i class="bm-fortschritt"></i></div>
       <div class="bm-fuss"><div class="bm-punkte"></div><div class="bm-modus"></div><div class="bm-qrklein" data-bqr title="Mitmachen"></div></div>
@@ -330,7 +373,11 @@ export async function start(code, wurzel) {
     netz = await new Verbindung(code).start();
   } catch (e) { return fehler("Keine Verbindung zum Raum. Ist das Internet an? Dann die Seite neu laden."); }
   netz.anwesend(`beamer-${zufallsText(10)}`, "📽️ Beamer");   // nur fuer die Anzeige "Beamer verbunden" - kein Spieler
-  netz.beobachten("stand", empfangen);
+  // drei Teile getrennt lesen; erst wenn alle einmal da sind, gilt der Stand (sonst kaemen alte Ereignisse als neue)
+  ["lobby", "tafel", "beamer"].forEach((k) => {
+    gelesen.add(`stand/${k}`);
+    netz.beobachten(`stand/${k}`, (v) => { teile[k] = v; teile.da = { ...(teile.da || {}), [k]: true }; if (teile.da.lobby && teile.da.tafel && teile.da.beamer) empfangen(); });
+  });
   setInterval(takt, 500);
 }
 
@@ -361,25 +408,79 @@ function hinweis(text) {
   setTimeout(() => d.remove(), 4000);
 }
 
-function empfangen(stand) {
-  if (!stand) {
-    raum = null; schlange = []; ereignisEnde();
+function empfangen() {
+  if (!teile.lobby) {
+    raum = null; schlange = []; ereignisEnde(); spielZuletzt = null; spielKey = "";
+    TON.musik(null);
     const i = app.querySelector(".bm-inhalt");
     if (i) i.innerHTML = `<div class="bm-leer"><div class="bm-pokalbild">👋</div><p class="bm-gross">Der Raum ist beendet.</p></div>`;
     gezeigt = "";
     return;
   }
-  const l = standLesen(stand, merker);
-  if (!l) return;
-  merker = l.merker; raum = l.raum;
+  const r = beamerLesen(teile);
+  if (!r) return;
+  raum = r;
   A.lookAnwenden(raum.look);
   document.title = `📽️ ${A.titel(raum.anlass)} – Beamer`;
   const e = ereignisse(mk, raum);
   mk = e.marken;
   if (e.weg) { schlange = []; ereignisEnde(); merke({ ereignis: "weg" }); }
-  e.liste.forEach((x) => (x.art === "schreck" ? schreck() : schlange.push(x)));
+  e.liste.forEach((x) => {
+    if (x.art === "schreck") schreck();
+    // Gluecksrad drängelt vor: es erscheint sofort (auch mitten in einer Begruessung), Weiterschieben loest das Rad ab
+    else if (x.art === "rad" || x.art === "schub") { schlange = [x, ...schlange.filter((y) => y.art !== "rad" && y.art !== "schub")]; if (laufend) ereignisEnde(); }
+    else schlange.push(x);
+  });
   if (!laufend) naechstesEreignis();
+  spielStand();
+  radErgebnis();
   takt(true);
+}
+
+// Neuer Stand der Spiele: merken, und fuer das Spiel an der Wand Klaenge, Effekte und Erzaehler abspielen
+function spielStand() {
+  const g = BS.gezeigt(raum, jetztG());
+  Object.values(raum.partien).forEach((p) => {
+    if (!p.bm) return;
+    const m = bsMerk[p.pid] || (bsMerk[p.pid] = { d: null, pos: null });
+    const alt = m.d;
+    // Pferderennen: von wo nach wo das Pferd laeuft (die Ansicht animiert von pos nach bm.pos)
+    if (p.spiel === "pferde" && alt && alt.pos && JSON.stringify(alt.pos) !== JSON.stringify(p.bm.pos)) {
+      m.pos = alt.pos; clearTimeout(m.timer); m.timer = setTimeout(() => { m.pos = null; }, 1500);
+    }
+    m.d = p.bm;
+    if (!g || g.p.pid !== p.pid || laufend) return;
+    const v = BS.vergleichen(p.spiel, alt, p.bm);
+    v.toene.forEach((x, i) => setTimeout(() => TON.spiele(x), i * 180));
+    if (v.effekt) effekt(raum.look, v.effekt);
+    if (p.spiel === "werwolf") { const f = BS.erzaehlerFolge(p.bm); if (f && f.length) { merke({ erzaehlt: f.join(",") }); WW.erzaehlen(f); } }
+  });
+  Object.keys(bsMerk).forEach((pid) => { if (!raum.partien[pid]) delete bsMerk[pid]; });
+}
+
+// Welches Spiel steht an der Wand? Auch ein gerade beendetes (Partie weg) bleibt noch kurz mit seinem Ergebnis stehen.
+function spielJetzt(jetzt) {
+  const g = BS.gezeigt(raum, jetzt);
+  if (g) { spielZuletzt = { p: g.p, d: g.d, bis: 0 }; return g; }
+  if (spielZuletzt && !raum.partien[spielZuletzt.p.pid] && !BS.ausgeblendet(raum).includes(spielZuletzt.p.pid)) {
+    if (!spielZuletzt.bis) spielZuletzt.bis = Date.now() + BS.NACHLAUF;
+    if (Date.now() < spielZuletzt.bis) return { p: spielZuletzt.p, d: spielZuletzt.d, vorbei: true };
+  }
+  spielZuletzt = null;
+  return null;
+}
+
+// Waehrend das Rad am Beamer steht: Ergebnis, Joker-Frage und Restsekunden nachziehen (ohne die Drehung neu zu starten)
+function radErgebnis() {
+  if (!laufend || laufend.art !== "rad" || !raum) return;
+  const l = raum.glueck && raum.glueck.lauf;
+  const el = document.querySelector(".bm-ereignis [data-rad-erg]");
+  if (!el || !l || l.nr !== laufend.nr) return;
+  const html = G.ergebnisHTML(l, jetztG(), true);
+  if (el.dataset.html !== html) {
+    el.dataset.html = html; el.innerHTML = html;
+    einpassen(document.querySelector(".bm-ereignis .bm-e-box"), document.querySelector(".bm-ereignis"), 1);
+  }
 }
 
 function takt(stand) {
@@ -391,37 +492,52 @@ function takt(stand) {
   const w = waehlen(raum, zustand, jetzt, Date.now(), !!laufend);
   if (w.neu || w.frisch) zustand = { seite: w.seite, ab: Date.now() };
   if (w.neu) merke({ seite: w.seite });
-  if (w.neu || stand === true) zeichnen(w.neu);
+  // Spielansicht hat Vorrang vor der Diashow (die laeuft darunter weiter und ist nach dem Spiel wieder da)
+  const g = spielJetzt(jetzt);
+  const key = g ? `${g.p.pid}:${g.vorbei ? 1 : 0}` : "";
+  const spielNeu = key !== spielKey;
+  if (spielNeu) {
+    spielKey = key; merke({ spiel: g ? g.p.spiel : null, vorbei: !!(g && g.vorbei) });
+    if (g && !g.vorbei) TON.spiele(A.klang(raum.look, "meldung"));
+    // "X laeuft - mitmachen!" ist ueberholt, sobald genau dieses Spiel gross an der Wand steht
+    if (g && laufend && laufend.art === "spiel" && laufend.pid === g.p.pid) { ereignisEnde(); naechstesEreignis(); }
+  }
+  if (w.neu || stand === true || spielNeu) zeichnen(spielNeu || (!g && w.neu), g);
+  TON.musik(g && !g.vorbei ? BS.musik(g.p.spiel, g.d) : null);
   app.querySelectorAll("[data-bcd]").forEach((el) => {
     const rest = Number(el.dataset.bcd) - jetzt, t = W.uhrText(rest);
     if (el.textContent !== t) { el.textContent = t; el.classList.toggle("knapp", rest <= 60000); }
   });
+  if (g && !laufend) BS.uhren(app, jetzt).forEach((x) => TON.spiele(x));
+  radErgebnis();
   umgebung();
 }
 
-function zeichnen(neueSeite) {
+function zeichnen(neueSeite, g = null) {
   const jetzt = jetztG(), st = steuer(raum), m = modus(st, jetzt), da = verfuegbar(raum);
   const kopf = app.querySelector(".bm-titel");
   if (kopf) kopf.textContent = A.titel(raum.anlass);
+  const sp = g && SPIELE.find((x) => x.id === g.p.spiel);
   const punkte = app.querySelector(".bm-punkte");
-  if (punkte) punkte.innerHTML = SEITEN.filter((s) => da.includes(s.id) || s.id === zustand.seite).map((s) => `<span class="${s.id === zustand.seite ? "an" : ""}">${s.emo} ${esc(s.name.replace(/ \(.*\)/, ""))}</span>`).join("");
+  if (punkte) punkte.innerHTML = (sp ? `<span class="an">${sp.emoji} ${esc(sp.name)}</span>` : "") + SEITEN.filter((s) => da.includes(s.id) || s.id === zustand.seite).map((s) => `<span class="${s.id === zustand.seite && !sp ? "an" : ""}">${s.emo} ${esc(s.name.replace(/ \(.*\)/, ""))}</span>`).join("");
   const mod = app.querySelector(".bm-modus");
-  if (mod) mod.textContent = m.art === "fest" ? `📌 von Hand gewählt · Diashow ab ${new Date(m.bis - jetzt + Date.now()).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}` : m.art === "aus" ? "⏸️ Diashow aus" : "";
+  if (mod) mod.textContent = sp ? (g.vorbei ? "⏹️ Spiel beendet" : "🎮 Spielansicht") : m.art === "fest" ? `📌 von Hand gewählt · Diashow ab ${new Date(m.bis - jetzt + Date.now()).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}` : m.art === "aus" ? "⏸️ Diashow aus" : "";
   const balken = app.querySelector(".bm-fortschritt");
-  if (balken && neueSeite) {
+  if (balken && (neueSeite || sp)) {
     balken.style.animation = "none"; void balken.offsetWidth;
-    balken.style.animation = m.art === "diashow" && da.length > 1 ? `bm-balken ${st.dauer}s linear forwards` : "none";
+    balken.style.animation = !sp && m.art === "diashow" && da.length > 1 ? `bm-balken ${st.dauer}s linear forwards` : "none";
   }
   const klein = app.querySelector(".bm-qrklein");
-  if (klein) klein.hidden = zustand.seite === "mitmachen";
+  if (klein) klein.hidden = !sp && zustand.seite === "mitmachen";
   // Inhalt erst nach Kopf und Fuss: erst dann steht fest, wie viel Platz die Buehne hat
-  const html = zustand.seite ? seiteHTML(raum, zustand.seite, jetzt) : "";
+  const html = sp ? BS.html(raum, g.p, g.d, bsMerk[g.p.pid], !!g.vorbei) : zustand.seite ? seiteHTML(raum, zustand.seite, jetzt) : "";
   const inhalt = app.querySelector(".bm-inhalt");
   if (inhalt && (html !== gezeigt || neueSeite)) {
     inhalt.innerHTML = html;
-    inhalt.dataset.seite = zustand.seite || "";
-    inhalt.classList.remove("bm-rein"); void inhalt.offsetWidth; inhalt.classList.add("bm-rein");
+    inhalt.dataset.seite = sp ? `spiel-${g.p.spiel}` : zustand.seite || "";
+    if (neueSeite) { inhalt.classList.remove("bm-rein"); void inhalt.offsetWidth; inhalt.classList.add("bm-rein"); }
     gezeigt = html;
+    if (sp) BS.nach(inhalt, g.p, g.d, bsLokal, () => merke({ reaktion: "gruen" }));
     einpassen(inhalt, app.querySelector(".bm-buehne"), 1);
     qrFuellen();
   }
@@ -460,9 +576,39 @@ function naechstesEreignis() {
   einpassen(el.querySelector(".bm-e-box"), el, e.art === "pokal" || e.art === "abend" ? 2.4 : 1);
   if (e.art === "gruss") { TON.spiele(TON.GRUSS_KLAENGE[Math.floor(Math.random() * TON.GRUSS_KLAENGE.length)]); effekt(raum.look, 60); }
   else if (e.art === "spiel") TON.spiele(A.klang(raum.look, "meldung"));
+  else if (e.art === "rad") radAbspielen(e.nr);
+  else if (e.art === "schub") { TON.spiele("troete"); effekt(raum.look, 90); }
   else { TON.spiele("fanfare"); effekt(raum.look, 180); }
   clearTimeout(laufTimer);
-  laufTimer = setTimeout(() => { ereignisEnde(); naechstesEreignis(); }, DAUER_EREIGNIS[e.art] || 8000);
+  laufTimer = setTimeout(ereignisAblauf, e.art === "rad" ? radRest(e.nr) : DAUER_EREIGNIS[e.art] || 8000);
+}
+function ereignisAblauf() {
+  // Das Rad bleibt stehen, solange der Getroffene noch ueber seinen Joker entscheidet
+  if (laufend && laufend.art === "rad" && raum) {
+    const l = raum.glueck && raum.glueck.lauf;
+    if (l && l.nr === laufend.nr && !l.fertig && jetztG() < Math.max(l.ende, l.frist || 0) + 3000) { laufTimer = setTimeout(ereignisAblauf, 1000); return; }
+  }
+  ereignisEnde(); naechstesEreignis();
+}
+// Restzeit des Rad-Ereignisses: bis zum Stopp plus Zeit zum Lesen (kommt der Stand spaet an, entsprechend kuerzer)
+function radRest(nr) {
+  const l = raum && raum.glueck && raum.glueck.lauf;
+  if (!l || l.nr !== nr) return 4000;
+  return Math.max(4000, l.ende - jetztG() + DAUER_EREIGNIS.rad - G.DREH);
+}
+// Drehung am Beamer: Ticken an jeder Feldgrenze (wird von selbst langsamer), Tusch und Konfetti beim Stopp
+function radAbspielen(nr) {
+  G.abspielen(jetztG, {
+    beiTick: () => TON.spiele("tack"),
+    beiStopp: (n) => {
+      if (n !== nr || !laufend || laufend.art !== "rad") return;
+      merke({ ereignis: "radstopp", nr: n });
+      const l = raum && raum.glueck && raum.glueck.lauf;
+      TON.spiele(l && l.trifft ? "tada" : "stern");
+      effekt(raum.look, 140);
+      radErgebnis();
+    },
+  });
 }
 function ereignisEnde() {
   clearTimeout(laufTimer);
@@ -484,7 +630,9 @@ function schreck() {
   schreckTimer = setTimeout(() => { el.hidden = true; el.innerHTML = ""; el.classList.remove("los"); }, DAUER_EREIGNIS.schreck);
 }
 
-// Grosse Effekte (nur am Beamer): Konfetti je Aussehen, im Halloween-Aussehen dazu Fledermaeuse
+// Grosse Effekte (nur am Beamer): Konfetti je Aussehen, im Halloween-Aussehen dazu Fledermaeuse. Sie fliegen nie ueber Text:
+// laeuft ein Ereignis, hinter dessen Box (im Ereignis-Fenster), sonst in der Ebene hinter der ganzen Seite.
+const effektZiel = () => document.querySelector(".bm-ereignis:not([hidden])") || document.querySelector(".bm-effekte") || document.body;
 function effekt(look, n) {
   if (look === "halloween") fledermaeuse(6);
   const farben = look === "halloween" ? ["#ff7518", "#9b4dff", "#ffd23f", "#3a3a3a", "#ff9a3c"] : look === "edel" ? ["#d8b56a", "#f3e3bd", "#8a8f9e", "#fff"] : ["#ff5fae", "#3fd0ff", "#ffd23f", "#5ef08a", "#6d5dfc", "#ff9600"];
@@ -498,7 +646,7 @@ function effekt(look, n) {
     d.style.setProperty("--dreh", (Math.random() * 1440 - 720) + "deg");
     d.style.animationDuration = 2.2 + Math.random() * 2 + "s";
     d.style.animationDelay = Math.random() * 0.5 + "s";
-    document.body.appendChild(d);
+    effektZiel().appendChild(d);
     setTimeout(() => d.remove(), 5200);
   }
 }
@@ -510,7 +658,7 @@ function fledermaeuse(n) {
     f.style.top = 6 + Math.random() * 60 + "vh";
     f.style.fontSize = 5 + Math.random() * 5 + "vmin";
     f.style.animationDelay = i * 0.3 + "s";
-    document.body.appendChild(f);
+    effektZiel().appendChild(f);
     setTimeout(() => f.remove(), 4000 + i * 300);
   }
 }

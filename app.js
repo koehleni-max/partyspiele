@@ -11,8 +11,10 @@ import * as P from "./partien.js";
 import * as K from "./konten.js";
 import * as A from "./anlass.js";
 import * as B from "./beamer.js";
+import * as G from "./gluecksrad.js";
 import { browserAblage, schluesselFuer, abgleich } from "./tafel_ablage.js";
-import { knopf } from "./hilfe.js";
+import { knopf, ohneAlkohol } from "./hilfe.js";
+import * as BS from "./beamer_spiele.js";
 
 const app = document.getElementById("app");
 const BASIS = location.href.split("#")[0];
@@ -50,6 +52,7 @@ let phasen = {};           // pid -> zuletzt gesehene Phase
 let eigeneMeldung = 0, ansageNr = 0, ansageTimer = null, ersterStand = true;
 let partieSig = "";
 let warVerbunden = false;
+let radGesehen = -1, radGemeldet = -1, jokerGesehen = -1, meineJoker = -1;   // Gluecksrad: was dieses Handy schon gemeldet hat
 
 // Fuer die automatischen Tests (liest nur)
 window.__partyspiele = { code: () => code, id: () => meineId, raum: () => raum, rolle: () => rolle, ansicht: () => ansicht };
@@ -90,12 +93,6 @@ function konfetti(n = 90) {
   }
   vibriere(200);
   TON.spiele("sieg");
-}
-function ohneAlkohol(h) {
-  return h.replace(/trinkt das Klatschglas aus/g, "bekommt 5 Strafpunkte")
-    .replace(/(\d+)\s*Schlucke/g, "$1 Strafpunkte").replace(/(\d+)\s*Schluck\b/g, "$1 Strafpunkt")
-    .replace(/einen Schluck/g, "einen Strafpunkt").replace(/\btrinkt\b/g, "bekommt").replace(/\btrinken\b/g, "bekommen")
-    .replace(/klatscht/g, "bekommt einen Strafpunkt").replace(/🍺|🍻|🥃/g, "⚡").replace(/Schlucke/g, "Strafpunkte").replace(/Schluck\b/g, "Strafpunkt");
 }
 
 // ---------------------------------------------------------------- Merken im Browser
@@ -279,7 +276,8 @@ async function raumOeffnen(anlass) {
   } catch (e) { console.warn(e); return fehlerBild("Der Raum ließ sich nicht anlegen. Ist das Internet an?"); }
   raum = { v: 1, anlass, look: A.lookZu(anlass), testkonten: true, ab18: false, ohneAlkohol: false, uhr: 0, pNr: 1, meldung: null,
     admins: [], gastgeber: meineId, spieler: [{ id: meineId, name: meinName, platz: 0, online: true, gast: 1 }], partien: {}, tafel: TAFEL.neu(),
-    gastNr: 1, gruesse: [], beamer: B.steuer(null) };
+    gastNr: 1, gruesse: [], beamer: B.steuer(null), glueck: null };
+  G.sicher(raum);
   geschrieben = null;
   gastgeberStart();
 }
@@ -304,10 +302,11 @@ async function gastgeberFortsetzen() {
   } catch (e) { rolle = null; return fehlerBild("Dieses Gerät darf den Raum nicht übernehmen."); }
   raum = l.raum;
   const alt = (gg && gg.uid) || raum.gastgeber || (raum.spieler[0] && raum.spieler[0].id);
-  if (alt && alt !== neu) P.idErsetzen(raum, alt, neu);
+  if (alt && alt !== neu) { P.idErsetzen(raum, alt, neu); G.idErsetzen(raum, alt, neu); }
   meineId = neu;
   raum.gastgeber = neu;
   if (!Array.isArray(raum.admins)) raum.admins = [];
+  G.sicher(raum);
   const ich = raum.spieler.find((x) => x.id === meineId);
   meinName = ich ? ich.name : meinName;
   geschrieben = l.merker;
@@ -364,7 +363,7 @@ function anwesenheitUebernehmen() {
   if (neu) { const aend = neueAenderung(); aend.lobby = true; verteilen(aend); }
 }
 
-const RAUM_TYPEN = new Set(["_hallo", "_spielwahl", "_ab18", "_trink", "_look", "_testkonten", "_tafel", "_admin", "_adminweg", "_raumende", "_beamer", "_alle"]);
+const RAUM_TYPEN = new Set(["_hallo", "_spielwahl", "_ab18", "_trink", "_look", "_testkonten", "_tafel", "_admin", "_adminweg", "_raumende", "_beamer", "_alle", "_glueck"]);
 
 function ausfuehren(von, a) {
   if (!raum || !a || typeof a !== "object" || typeof a.typ !== "string") return;
@@ -386,6 +385,8 @@ function ausfuehren(von, a) {
     else if (a.typ === "_look" && admin && A.lookGueltig(a.look)) { raum.look = a.look; aend.lobby = true; }
     else if (a.typ === "_testkonten" && admin) { raum.testkonten = !K.testkontenAn(raum); aend.lobby = true; }
     else if (a.typ === "_beamer" && admin) { if (!B.steuerAktion(raum, a, Date.now())) return; aend.lobby = true; }
+    // Gluecksrad: das Ergebnis entscheidet nur der Gastgeber (Rechte fuer Steuer-Aktionen prueft gluecksrad.js)
+    else if (a.typ === "_glueck") { if (!G.aktion(raum, von, a, Date.now(), admin)) return; aend.lobby = true; }
     else if (a.typ === "_alle" && admin) {
       // Spiel fuer alle: jeder, der gerade verbunden ist, ist gleich dabei; die Spielleitung startet mit "Los"
       const sp = spiel(a.wert || a.id);
@@ -427,6 +428,7 @@ function ausfuehren(von, a) {
     if (idx < 0) return;
     if (spielAktion(p, sp, idx, a)) aend.tafel = true;
   }
+  if (raum.partien[p.pid]) p.t = Date.now();   // zuletzt geaendert (Beamer: Ergebnis steht eine Weile, dann Diashow)
   verteilen(aend);
 }
 
@@ -453,8 +455,15 @@ function spielWerten(p, sp, nm) {
   const key = `${p.runde}:${e.nr}`;
   if (key === p.zuletzt) return false;
   p.zuletzt = key;
-  const namen = e.sieger.map((j) => p.mit[j]).filter((id) => id && !P.istBot(id)).map((id) => P.nameVon(raum, p, id));
+  const ids = e.sieger.map((j) => p.mit[j]).filter((id) => id && !P.istBot(id));
+  const namen = ids.map((id) => P.nameVon(raum, p, id));
   if (!namen.length) return false;
+  // Sieger bestimmter Spiele (Blitzreaktion) bekommen einen Joker fuers Gluecksrad
+  // (am Beamer steht unter der Rangliste, wer ihn bekommen hat - p.joker gehoert zu genau diesem Ergebnis)
+  if (G.JOKER_SPIELE.includes(sp.id)) {
+    const neu = G.jokerFuerSieger(raum, ids, sp.name);
+    p.joker = { key, neu: neu.map((id) => P.nameVon(raum, p, id)), alle: namen };
+  }
   tafelAusfuehren({ was: "w_app", spiel: sp.id, titel: sp.name, emo: sp.emoji, namen }, { gastgeber: true, intern: true });
   return true;
 }
@@ -481,7 +490,7 @@ function hallo(von, name) {
   let sp = raum.spieler.find((x) => x.id === von);
   if (!sp) {
     const zurueck = raum.spieler.find((x) => x.id !== raum.gastgeber && !anwesend[x.id] && x.name.toLocaleLowerCase("de") === name.toLocaleLowerCase("de"));
-    if (zurueck) { P.idErsetzen(raum, zurueck.id, von); sp = zurueck; }
+    if (zurueck) { G.idErsetzen(raum, zurueck.id, von); P.idErsetzen(raum, zurueck.id, von); sp = zurueck; }
   }
   if (sp) { sp.name = einzigartig(name, sp); sp.online = true; return true; }
   if (raum.spieler.length >= MAX_SPIELER) return false;
@@ -549,7 +558,7 @@ function schreiben() {
   schreibPlan = setTimeout(() => {
     schreibPlan = null;
     if (rolle !== "gastgeber" || !raum || !netz) return;
-    const teile = standTeile(raum);
+    const teile = standTeile(raum, BS.auszug(raum));   // dazu stand/beamer: was die Wand zeigen darf (ohne Rollen)
     const upd = standAenderung(geschrieben, teile);
     if (!Object.keys(upd).length) return;
     geschrieben = teile;
@@ -575,6 +584,20 @@ setInterval(() => {
   if (rolle === "gastgeber" && raum && raum.tafel && W.faellig(raum.tafel.wertung, Date.now())) {
     tafelAusfuehren({ was: "w_ablauf" }, { gastgeber: true, wer: meinName });
     const aend = neueAenderung(); aend.tafel = true; verteilen(aend);
+  }
+  // Gluecksrad: Joker-Zeit abgelaufen -> Ergebnis gilt (nur der Gastgeber schliesst ab)
+  if (rolle === "gastgeber" && raum && G.pruefen(raum, Date.now())) { const aend = neueAenderung(); aend.lobby = true; verteilen(aend); }
+  if (raum && !status) {
+    ansageZeigen();   // Gluecksrad-Meldung folgt der Uhr (Stopp, Joker-Zeit, Ausblenden)
+    // Sperrzeit und Joker-Sekunden zaehlen ohne Neuzeichnen (kein Ticken wie beim Runden-Countdown)
+    let frei = false;
+    document.querySelectorAll("[data-gcd]").forEach((el) => {
+      const rest = Number(el.dataset.gcd) - jetzt;
+      const t = el.dataset.sek !== undefined ? String(Math.max(0, Math.ceil(rest / 1000))) : W.uhrText(rest);
+      if (el.textContent !== t) el.textContent = t;
+      if (rest <= 0 && el.closest("#app")) frei = true;
+    });
+    if (frei && !ansicht && !tafelAuf && !steuerAuf) zeichnen();
   }
 }, 1000);
 
@@ -603,6 +626,7 @@ function botZug(pid) {
     if (a) {
       const aend = neueAenderung(); aend.partien.add(pid);
       if (spielAktion(p, sp, i, a)) aend.tafel = true;
+      p.t = Date.now();
       return verteilen(aend);
     }
   }
@@ -704,13 +728,82 @@ function ansageWeg() { const el = document.getElementById("ansage"); if (el) el.
 function ansagePlatz() { const el = document.getElementById("ansage"); if (el) app.style.paddingTop = `${el.offsetHeight + 22}px`; }
 window.addEventListener("resize", ansagePlatz);
 
+// ---- Gluecksrad am Handy: kurze Meldung oben bei allen, beim Getroffenen mit Joker die Wahl zum Weiterschieben
+function radStand() {
+  const g = raum && raum.glueck, l = g && g.lauf;
+  // beim ersten Stand nichts Altes melden (eine gerade laufende Drehung schon)
+  if (radGesehen < 0) radGesehen = radGemeldet = l ? (l.fertig && jetztGastgeber() > Math.max(l.ende, l.zu || 0) + 10000 ? l.nr : l.nr - 1) : 0;
+  if (jokerGesehen < 0) { jokerGesehen = g ? Number(g.jokerNr) || 0 : 0; meineJoker = G.jokerVon(raum, meineId); }
+  return l;
+}
+function jokerPruefen() {
+  const g = raum && raum.glueck;
+  if (!g) return;
+  const n = G.jokerVon(raum, meineId);
+  const neu = g.jokerNeu && g.jokerNeu.nr > jokerGesehen && (g.jokerNeu.ids || []).includes(meineId);
+  if (n > meineJoker && meineJoker >= 0) {
+    const grund = neu && g.jokerNeu.grund ? ` (${g.jokerNeu.grund})` : "";
+    setTimeout(() => hinweis(`🃏 Du hast einen Joker bekommen${grund} – jetzt ${n} von ${G.JOKER_MAX}`), 60);
+    vibriere([60, 40, 60]);
+  }
+  meineJoker = n;
+  if (g.jokerNeu) jokerGesehen = Math.max(jokerGesehen, g.jokerNeu.nr);
+}
+// nachrang = ein neues Spiel will gemeldet werden: ein fertiges Ergebnis macht ihm Platz
+function radAnsage(nachrang = false) {
+  if (!raum || status) return false;
+  const l = radStand();
+  const el = document.getElementById("ansage");
+  const istRad = el && el.dataset.art === "rad";
+  if (!l || l.nr <= radGesehen) { if (istRad) ansageWeg(); return false; }
+  const jetzt = jetztGastgeber(), ph = G.phase(l, jetzt);
+  if (ph === "fertig" && jetzt > Math.max(l.ende, l.zu || 0) + 12000) { radGesehen = l.nr; if (istRad) ansageWeg(); return false; }
+  if (l.nr > radGemeldet) {
+    radGemeldet = l.nr;
+    TON.spiele(A.klang(raum.look, "meldung"));
+    vibriere([60, 40, 60]);
+  }
+  const wahl = ph === "joker" && l.getroffen === meineId && !l.schub && G.jokerVon(raum, meineId) > 0;
+  if (nachrang && (ph === "fertig" || ph === "warten")) { radGesehen = l.nr; return false; }
+  const sig = `${l.nr}|${ph === "warten" ? "fertig" : ph}|${l.schub ? 1 : 0}|${wahl ? 1 : 0}|${beamerZahl() ? 1 : 0}`;
+  if (istRad && el.dataset.sig === sig) return true;
+  const a = ansageEl();
+  a.dataset.art = "rad"; a.dataset.nr = String(l.nr); a.dataset.sig = sig;
+  const hin = `<button class="gruen" data-rad-hin>🎡 Rad</button>`;
+  const weg = `<button class="klein2" data-ansage-weg aria-label="Schließen">✕</button>`;
+  let text;
+  if (ph === "drehen") text = `<b>🎡 ${esc(l.name)} dreht das Glücksrad …</b><small>${beamerZahl() ? "Schaut zum Beamer!" : "Gleich steht es fest"}</small>`;
+  else if (l.schub) text = `<b>🃏 ${esc(G.schubText(l))}</b><small>${esc(l.schub.anName)}: ${l.emo} ${esc(l.feld === "wop" ? l.zusatz : l.kurz)}</small>`;
+  else {
+    const name = l.trifft ? l.getroffenName : l.name;
+    const unter = l.feld === "wop" ? l.zusatz : l.zusatz || (l.text ? `${name} ${l.text}` : "");
+    text = `<b>🎡 ${esc(G.ergebnisText(l))}</b><small>${esc(unter)}</small>`;
+    if (ph === "joker" && !wahl) text += `<small>🃏 ${esc(l.getroffenName)} hat einen Joker – weiterschieben? <b data-gcd="${l.frist}" data-sek>${Math.ceil((l.frist - jetzt) / 1000)}</b> s</small>`;
+  }
+  if (wahl) {
+    const andere = raum.spieler.filter((x) => x.id !== meineId);
+    a.innerHTML = `<span class="ansage-text">${text}<small>🃏 Du hast ${G.jokerVon(raum, meineId)} Joker – an wen schiebst du es weiter? Noch <b data-gcd="${l.frist}" data-sek>${Math.ceil((l.frist - jetzt) / 1000)}</b> s</small>
+        <select id="rf-schub" class="rad-schubwahl">${andere.map((x) => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("")}</select></span>
+      <span class="ansage-knoepfe rad-wahl">${knopf("🃏 Weiterschieben", { typ: "_glueck", was: "schieben" }, "gelb", `data-feld="rf-schub" data-klang="tada"`)}${knopf("Nehm ich", { typ: "_glueck", was: "behalten" }, "klein2")}</span>`;
+    TON.spiele("dran");
+    vibriere([120, 60, 120]);
+  } else a.innerHTML = `<span class="ansage-text">${text}</span><span class="ansage-knoepfe">${hin}${weg}</span>`;
+  ansagePlatz();
+  return true;
+}
+
 // "Neues Spiel: Quiz-Duell - mitmachen?" oben bei allen, die noch nicht dabei sind
 function ansageZeigen() {
+  jokerPruefen();
   const m = raum && raum.meldung;
   const p = m && raum.partien[m.pid];
-  const el = document.getElementById("ansage");
   // "Spiel fuer alle" (Spielleitung): wer verbunden war, ist schon dabei - nur Bescheid geben
   const alle = m && p && m.alle && m.nr > ansageNr && m.von !== meineId && p.mit.includes(meineId) && p.phase === "sammeln";
+  const zeigen = m && p && m.nr > ansageNr && m.von !== meineId && !p.mit.includes(meineId) && !p.wartend.includes(meineId)
+    && (p.phase === "sammeln" || P.mittendrin(p.spiel));
+  // Gluecksrad zuerst, solange es dreht oder jemand ueber seinen Joker entscheidet; danach hat ein neues Spiel Vorrang
+  if (radAnsage(!!(alle || zeigen))) return;
+  const el = document.getElementById("ansage");
   if (alle) {
     if (el && el.dataset.art === "alle" && el.dataset.nr === String(m.nr)) return;
     const sp = spiel(p.spiel);
@@ -725,8 +818,6 @@ function ansageZeigen() {
     ansageTimer = setTimeout(() => { ansageNr = Math.max(ansageNr, m.nr); ansageWeg(); }, 30000);
     return;
   }
-  const zeigen = m && p && m.nr > ansageNr && m.von !== meineId && !p.mit.includes(meineId) && !p.wartend.includes(meineId)
-    && (p.phase === "sammeln" || P.mittendrin(p.spiel));
   if (!zeigen) { if (el && (el.dataset.art === "neu" || el.dataset.art === "alle")) ansageWeg(); return; }
   if (el && el.dataset.art === "neu" && el.dataset.nr === String(m.nr)) return;
   const sp = spiel(p.spiel);
@@ -815,7 +906,7 @@ function sigFuer(p) {
 // Ansicht etwas geaendert hat - nicht, weil nebenan ein anderes Spiel weiterlaeuft oder jemand die Tafel fuettert.
 function stillHalten(aend) {
   if (!aend || !raum || status || aend.alles) return false;
-  if (steuerAuf && zeigeSteuer()) return !aend.lobby;
+  if (steuerAuf && zeigeSteuer()) return !aend.lobby && beamerSpielSig() === steuerSpiel;
   if (tafelAuf) return !aend.lobby && !aend.tafel;
   if (!ansicht || !raum.partien[ansicht]) return false;
   if (aend.partien.has(ansicht)) return false;
@@ -830,6 +921,9 @@ function stillHalten(aend) {
 
 // ---------------------------------------------------------------- Zeichnen
 const gesehen = new Set();
+// Steuerseite: neu zeichnen, sobald der Beamer ein anderes Spiel zeigt (auch wenn sich nur ein Spiel geaendert hat)
+let steuerSpiel = "";
+function beamerSpielSig() { const g = raum && BS.gezeigt(raum, jetztGastgeber()); return g ? g.p.pid : ""; }
 function zeichnen() {
   document.body.classList.remove("nachtmodus");
   A.lookAnwenden(raum ? raum.look : null);
@@ -838,9 +932,13 @@ function zeichnen() {
   const felder = {};
   document.querySelectorAll("input[id^='tt-'],select[id^='tt-'],input[id^='rf-'],select[id^='rf-']").forEach((f) => { felder[f.id] = f.value; });
   if (raum && !status) tafelPruefen();
+  // Zeigt der Beamer gerade genau dieses Spiel, kommen Musik, Spielgeraeusche und Erzaehler von der Wand: Handy still
+  const anDerWand = !!(raum && !status && ansicht && raum.partien[ansicht] && beamerZahl() > 0 && !tafelAuf && !(steuerAuf && zeigeSteuer())
+    && (BS.gezeigt(raum, jetztGastgeber()) || {}).p === raum.partien[ansicht]);
+  TON.still(anDerWand);
   let musik = null;
   if (status || !raum) app.innerHTML = statusBild();
-  else if (steuerAuf && zeigeSteuer()) app.innerHTML = steuerBild();
+  else if (steuerAuf && zeigeSteuer()) { app.innerHTML = steuerBild(); steuerSpiel = beamerSpielSig(); }
   else if (tafelAuf) app.innerHTML = tafelBild();
   else if (ansicht && raum.partien[ansicht]) {
     const p = raum.partien[ansicht];
@@ -854,7 +952,7 @@ function zeichnen() {
       if (sp.nach) try { sp.nach(p.s, ich, sendenFuer(p.pid), nm, raum); } catch (e) { console.error(e); }
     }
   } else { ansicht = null; app.innerHTML = raumBild(); }
-  TON.musik(musik);
+  TON.musik(anDerWand ? null : musik);
   Object.entries(felder).forEach(([id, wert]) => { const f = document.getElementById(id); if (f) f.value = wert; });
   if (einladenOffen) qrZeigen(document.querySelector("[data-qr]"));
   if (steuerAuf && !zeigeSteuer()) steuerAuf = false;
@@ -872,15 +970,31 @@ function zeichnen() {
   document.querySelectorAll("[data-key]").forEach((el) => {
     const k = el.dataset.key;
     if (gesehen.has(k)) el.classList.add("still");
-    else { gesehen.add(k); if (el.dataset.ton) { const n = el.dataset.ton, v = Number(el.dataset.tonNach || 0); v ? setTimeout(() => TON.spiele(n), v) : TON.spiele(n); } }
+    else { gesehen.add(k); if (el.dataset.ton && !anDerWand) { const n = el.dataset.ton, v = Number(el.dataset.tonNach || 0); v ? setTimeout(() => TON.spiele(n), v) : TON.spiele(n); } }
   });
   document.querySelectorAll(".urteil").forEach((el) => {
     const k = "k:" + el.textContent.slice(0, 80);
-    if (!gesehen.has(k)) { gesehen.add(k); if (/🏆|gewinnt/.test(el.textContent)) konfetti(); }
+    if (!gesehen.has(k)) { gesehen.add(k); if (/🏆|gewinnt/.test(el.textContent) && !anDerWand) konfetti(); }
     else el.classList.add("still");
   });
   if (gesehen.size > 3000) gesehen.clear();
   if (fokus && document.getElementById(fokus) && document.getElementById(fokus).tagName === "INPUT") document.getElementById(fokus).focus();
+  radDrehen();
+}
+
+// Drehung am Handy abspielen (nur solange sie laeuft). Klang nur ohne Beamer - sonst kommt er von der Wand.
+function radDrehen() {
+  if (!document.querySelector("#app svg.rad[data-rad-t]")) return;
+  G.abspielen(jetztGastgeber, {
+    beiTick: () => { if (!beamerZahl()) TON.spiele("tack"); },
+    beiStopp: () => {
+      const l = raum && raum.glueck && raum.glueck.lauf;
+      if (!beamerZahl()) TON.spiele(l && l.trifft ? "tada" : "stern");
+      if (l && l.getroffen === meineId) vibriere(200);
+      radAnsage();
+      if (raum && !status && !ansicht && !tafelAuf && !steuerAuf) zeichnen();
+    },
+  });
 }
 
 function statusBild() {
@@ -933,6 +1047,7 @@ function raumBild() {
       <h2>🎮 Laufende Spiele</h2>
       ${partien.length ? `<div class="partien">${partien.map(partieKarte).join("")}</div>` : `<p class="leise">Noch läuft nichts. Such dir unten ein Spiel aus – alle anderen bekommen eine Meldung und können mitmachen.</p>`}
     </div>
+    ${glueckKarte()}
     <button class="gross gelb tt-einstieg" data-tt-auf><span>🏆 Turniertafel</span><small>${esc(TAFEL.kurz(raum.tafel, raum.ohneAlkohol))}</small>${tafelKnopfZusatz()}</button>
     <div class="karte">
       <h2>Spiel starten</h2>
@@ -945,6 +1060,30 @@ function raumBild() {
     </div>
     ${zeigeSteuer() ? steuerKarte() : binAdmin() ? "" : codeKarte()}
     <p class="leise klein mitte">Trinkt verantwortungsvoll – Wasser zählt auch als Schluck. 💧</p>`;
+}
+
+// Gluecksrad am Handy (Schritt C): schlicht und stromsparend - das Rad dreht sich hier nur waehrend eines Drehs; mit
+// Beamer im Raum klein und nur mit Zeichen (das grosse Rad laeuft an der Wand), ohne Beamer gross und beschriftet.
+// Kein eigenes alkoholfreies Rad (Nico): die Karte bleibt auch mit "Ohne Alkohol" sichtbar und unveraendert.
+function glueckKarte() {
+  const g = raum.glueck || {}, l = g.lauf, jetzt = jetztGastgeber();
+  const beamer = beamerZahl() > 0;
+  const d = G.darfDrehen(raum, meineId, jetzt);
+  const joker = G.jokerVon(raum, meineId);
+  const zeigRad = l && (!l.fertig || jetzt < Math.max(l.ende, l.zu || 0) + 15000);
+  let knopfHTML;
+  if (d.ok) knopfHTML = knopf(d.nochmal ? "🔁 Nochmal drehen!" : "🎡 Drehen", { typ: "_glueck", was: "drehen" }, "gross rad-dreh", `data-klang="wuerfel"`);
+  else knopfHTML = `<button class="gross rad-dreh" disabled>${d.bis ? `⏳ Wieder drehen in <span data-gcd="${d.bis}">${W.uhrText(d.bis - jetzt)}</span>` : g.frei === false ? "🔒 Rad gesperrt" : `🎡 ${esc(d.grund || "Gerade nicht")}`}</button>`;
+  const rad = zeigRad ? `<div class="rad-handy ${beamer ? "klein" : "gross"}">${G.radLaufSVG(l, raum.look, jetzt, !beamer)}</div>${G.ergebnisHTML(l, jetzt)}` : "";
+  const zuletzt = !zeigRad && g.letzter ? `<p class="leise klein">Zuletzt: <b>${esc(g.letzter.name)}</b> – ${esc(g.letzter.preis)}</p>` : "";
+  return `<div class="karte glueckkarte" id="glueck">
+      <h2>🎡 Glücksrad</h2>
+      ${rad || `<p class="leise klein">${beamer ? "Tipp auf Drehen – das große Rad erscheint am Beamer." : "Tipp auf Drehen – Shot, Exen, Wahrheit oder Pflicht … oder Glück gehabt."}</p>`}
+      ${zuletzt}
+      ${g.frei === false ? `<p class="hinweisbox warten">🔒 Die Spielleitung hat das Rad gerade gesperrt.</p>` : ""}
+      ${knopfHTML}
+      <p class="rad-jokerzeile">🃏 Deine Joker: <b>${joker} von ${G.JOKER_MAX}</b><small>${joker ? "Trifft dich das Rad, kannst du es an jemand anderen weiterschieben." : "Joker gibt es auf dem Rad und für Siege bei der Blitzreaktion."}</small></p>
+    </div>`;
 }
 
 function partieKarte(p) {
@@ -1020,7 +1159,7 @@ function steuerKarte() {
       <h2>🛠️ Steuerung</h2>
       <p class="leise klein">Nur für die Spielleitung sichtbar. ${beamerZahl() ? `📽️ Beamer verbunden · ${m.art === "fest" ? "steht auf " + esc(B.seiteName(m.seite)) : m.art === "aus" ? "Diashow aus" : "Diashow läuft"}` : "Kein Beamer verbunden."}</p>
       <button class="gross" data-steuer-auf>📽️ Steuerseite öffnen</button>
-      <p class="leise klein">Beamer, Diashow, Spiel für alle, Aussehen, Testkonten${raum.look === "halloween" ? ", Schreckmoment" : ""}</p>
+      <p class="leise klein">Beamer, Diashow, Glücksrad und Joker, Spiel für alle, Aussehen, Testkonten${raum.look === "halloween" ? ", Schreckmoment" : ""}</p>
     </div>`;
 }
 const beamerZahl = () => Object.keys(anwesend || {}).filter((k) => k.startsWith("beamer-")).length;
@@ -1046,6 +1185,7 @@ function steuerBild() {
       <div class="linkzeile" data-beamer-link="${esc(link)}">${esc(link)}</div>
       <div class="raster2"><button data-teilen="${esc(link)}">🔗 Link teilen</button><a class="knopf-link" href="${esc(link)}" target="_blank" rel="noopener">📽️ Hier öffnen</a></div>
     </div>
+    ${steuerSpielansicht(bm)}
     <div class="karte steuerseite">
       <h2>🖼️ Diashow</h2>
       ${schalter("_beamer", st.diashow, "Diashow an", "wechselt von selbst durch alle Seiten mit Inhalt", { was: "diashow" })}
@@ -1059,6 +1199,7 @@ function steuerBild() {
       ${raum.look === "halloween" ? `${knopf("😱 Schreckmoment!", bm("schreck"), "gross rot schreckknopf", `data-klang="kichern"`)}
         <p class="leise klein">Am Beamer erscheint 2–3 Sekunden ein Gruselgesicht mit Schrei. Nur im Halloween-Aussehen.</p>` : ""}
     </div>
+    ${steuerGlueck(schalter)}
     <div class="karte steuerseite">
       <h2>🎮 Spiel für alle starten</h2>
       <p class="leise klein">Alle, die gerade verbunden sind, sind sofort dabei. Du startest dann mit „Los“.</p>
@@ -1076,6 +1217,54 @@ function steuerBild() {
       ${endeKnopf()}
     </div>`;
 }
+// Spielansicht am Beamer (Schritt D): welches Spiel die Wand gerade zeigt, ausblenden (zurueck zur Diashow), wieder zeigen
+function steuerSpielansicht(bm) {
+  const g = BS.gezeigt(raum, jetztGastgeber());
+  const aus = BS.ausgeblendet(raum);
+  const weg = P.liste(raum).filter((p) => aus.includes(p.pid) && p.phase === "laeuft" && BS.BEAMER_SPIELE.includes(p.spiel));
+  const name = (p) => { const sp = spiel(p.spiel); return sp ? `${sp.emoji} ${esc(sp.name)}` : ""; };
+  const welche = BS.BEAMER_SPIELE.map(spiel).filter(Boolean).map((sp) => esc(sp.name)).join(", ");
+  return `<div class="karte steuerseite steuer-spiel">
+      <h2>🎮 Spiele am Beamer</h2>
+      ${g ? `<p class="steuerzustand">📽️ Der Beamer zeigt gerade: <b>${name(g.p)}</b></p>
+        ${knopf("🙈 Spielansicht ausblenden – zurück zur Diashow", bm("spielaus", { pid: g.p.pid }), "zweit")}`
+      : `<p class="leise klein">Läuft ${welche}, zeigt der Beamer das Spiel groß und danach kurz das Ergebnis.</p>`}
+      ${weg.map((p) => knopf(`👁️ ${name(p)} wieder am Beamer zeigen`, bm("spielan", { pid: p.pid }), "zweit gruen")).join("")}
+    </div>`;
+}
+
+// Gluecksrad auf der Steuerseite: sperren/freigeben, fuer jemanden drehen, Joker geben, Felder an/aus, eigene Felder
+function steuerGlueck(schalter) {
+  const g = G.sicher(JSON.parse(JSON.stringify({ glueck: raum.glueck || null }))), jetzt = jetztGastgeber();
+  const gl = (was, mehr = {}) => ({ typ: "_glueck", was, ...mehr });
+  const leute = raum.spieler.map((x) => `<option value="${esc(x.id)}">${esc(x.name)}${x.online ? "" : " (weg)"}</option>`).join("");
+  const nameVon = (id) => { const s = raum.spieler.find((x) => x.id === id); return s ? s.name : null; };
+  const joker = Object.entries(g.joker).filter(([id, n]) => n > 0 && nameVon(id)).map(([id, n]) => `${esc(nameVon(id))} ${"🃏".repeat(Math.min(n, G.JOKER_MAX))}`);
+  const erwischt = Object.entries(g.erwischt).filter(([, n]) => n > 0).sort((x, y) => y[1] - x[1]).map(([n, z]) => `${esc(n)} ${z}×`);
+  const aufRad = G.felder(g).length;
+  const l = g.lauf, laeuft = l && !l.fertig;
+  return `<div class="karte steuerseite steuer-glueck">
+      <h2>🎡 Glücksrad</h2>
+      ${schalter("_glueck", g.frei, "Glücksrad freigegeben", "aus = Gäste können nicht drehen; du kannst unten trotzdem für jemanden drehen", { was: "frei" })}
+      ${laeuft ? `<p class="steuerzustand">🎡 Dreht gerade für <b>${esc(l.name)}</b>${G.phase(l, jetzt) === "joker" ? " – Joker-Entscheidung läuft" : ""}</p>` : ""}
+      <h3 class="tt-unter">Rad drehen für …</h3>
+      <label>Gast<select id="rf-gfuer">${leute}</select></label>
+      ${knopf("🎡 Rad drehen", gl("fuer"), "gross", `data-feld="rf-gfuer" data-klang="wuerfel"`)}
+      <h3 class="tt-unter">Joker geben (höchstens ${G.JOKER_MAX} je Gast)</h3>
+      <label>Gast<select id="rf-gjoker">${leute}</select></label>
+      ${knopf("🃏 Joker geben", gl("joker"), "zweit", `data-feld="rf-gjoker"`)}
+      <p class="leise klein">${joker.length ? `Joker: ${joker.join(" · ")}` : "Noch hat niemand einen Joker."}${erwischt.length ? `<br>Vom Rad erwischt: ${erwischt.slice(0, 8).join(" · ")}` : ""}</p>
+      <h3 class="tt-unter">Felder auf dem Rad (${aufRad})</h3>
+      ${G.FELDER.map((f) => schalter("_glueck", !g.aus.includes(f.id), `${f.emo} ${esc(f.name)}`, f.trifft ? "trifft den Drehenden – Joker möglich" : "harmlos", { was: "feld", id: f.id })).join("")}
+      ${g.eigene.map((e) => `<div class="schalter rad-eigen"><span>✏️ ${esc(e.name)}<br><small class="leise">${esc(e.text || "eigenes Feld")}</small></span>${knopf("✕", gl("eigenweg", { id: e.id }), "klein2", `aria-label="Feld entfernen"`)}</div>`).join("")}
+      ${g.eigene.length < G.EIGENE_MAX ? `<h3 class="tt-unter">Eigenes Feld dazu</h3>
+      <label>Name (steht auf dem Rad)<input id="rf-gname" maxlength="${G.NAME_MAX}" placeholder="z. B. Lied singen" autocomplete="off"></label>
+      <label>Kurzer Text (optional)<input id="rf-gtext" maxlength="${G.TEXT_MAX}" placeholder="z. B. singt eine Strophe vor" autocomplete="off"></label>
+      ${knopf("➕ Feld aufs Rad", gl("eigen"), "zweit", `data-felder="rf-gname,rf-gtext" data-leeren`)}` : `<p class="leise klein">Mehr als ${G.EIGENE_MAX} eigene Felder gehen nicht.</p>`}
+      <p class="leise klein">Gäste dürfen alle ${G.SPERRE / 60000} Minuten drehen. Das Rad bringt keine Punkte – es zählt nur, wer wie oft erwischt wurde.</p>
+    </div>`;
+}
+
 function endeKnopf() {
   return endeFrage
     ? `<div class="raster2">${knopf("Ja, Raum beenden", { typ: "_raumende" }, "rot")}<button data-ende-frage>Doch nicht</button></div>`
@@ -1179,7 +1368,7 @@ document.addEventListener("click", async (ev) => {
     zeichnen(); window.scrollTo(0, 0);
     return;
   }
-  const el = ev.target.closest("[data-anlass],[data-zurueck],#beitreten,#weitermachen,[data-ansicht],[data-a],[data-teilen],[data-ansage-mit],[data-ansage-weg],[data-steuern],[data-code],[data-raum-neu],[data-uebernehmen],[data-ende-frage],[data-neu-laden],[data-steuer-auf],[data-steuer-zu],[data-ohne-code]");
+  const el = ev.target.closest("[data-anlass],[data-zurueck],#beitreten,#weitermachen,[data-ansicht],[data-a],[data-teilen],[data-ansage-mit],[data-ansage-weg],[data-steuern],[data-code],[data-raum-neu],[data-uebernehmen],[data-ende-frage],[data-neu-laden],[data-steuer-auf],[data-steuer-zu],[data-ohne-code],[data-rad-hin]");
   if (!el) return;
   if (el.dataset.steuerAuf !== undefined || el.dataset.steuerZu !== undefined) {
     steuerAuf = el.dataset.steuerAuf !== undefined; tafelAuf = false;
@@ -1221,7 +1410,16 @@ document.addEventListener("click", async (ev) => {
   if (el.dataset.ansageWeg !== undefined) {
     const a = document.getElementById("ansage");
     if (a && (a.dataset.art === "neu" || a.dataset.art === "alle")) ansageNr = Math.max(ansageNr, Number(a.dataset.nr));
+    if (a && a.dataset.art === "rad") radGesehen = Math.max(radGesehen, Number(a.dataset.nr));
     return ansageWeg();
+  }
+  if (el.dataset.radHin !== undefined) {
+    // zum Gluecksrad in der Uebersicht (laufendes Spiel laeuft weiter)
+    ansicht = null; tafelAuf = false; steuerAuf = false; ansichtMerken();
+    vibriere(20); TON.spiele("klick"); zeichnen();
+    const k = document.getElementById("glueck");
+    if (k) k.scrollIntoView({ block: "center" });
+    return;
   }
   if (el.dataset.ansageMit) {
     const a = document.getElementById("ansage");
@@ -1271,6 +1469,8 @@ document.addEventListener("click", async (ev) => {
     return tafelAbgleich.aendern(a);
   }
   if (a.typ === "_raumende") endeFrage = false;
+  if (a.typ === "_glueck" && a.was === "eigen" && !String((a.werte || [])[0] || "").trim()) { hinweis("Bitte einen Namen für das Feld eintippen"); return; }
+  if (a.typ === "_glueck" && el.dataset.felder && el.dataset.leeren !== undefined) el.dataset.felder.split(",").forEach((id) => { const f = document.getElementById(id); if (f) f.value = ""; });
   vibriere(25);
   TON.spiele(el.dataset.klang || "klick");
   senden(a);

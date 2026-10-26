@@ -101,12 +101,20 @@ const malen = {
   // Gesamtwertung: wer es erraten hat und wer es gemalt hat
   ergebnis: (s) => (s.geloest !== null && s.geloest >= 0 ? { nr: `m${s.runde}`, sieger: [s.geloest, s.maler] } : null),
   aktion(s, i, a, namen) {
-    if (a.typ === "strich" && i === s.maler && !s.geloest && Array.isArray(a.p) && a.p.length < 400) s.striche.push(a.p);
+    // Punkte heissen "pfad": "p" ist seit den gleichzeitigen Spielen die Partie-Nummer (app.js setzt sie) und hat die
+    // Striche ueberschrieben - so kam kein Strich mehr an (gefunden 26.10.2026 beim Beamer-Durchklick)
+    const pfad = Array.isArray(a.pfad) ? a.pfad : a.p;
+    if (a.typ === "strich" && i === s.maler && !s.geloest && Array.isArray(pfad) && pfad.length < 400) s.striche.push(pfad);
     if (a.typ === "loeschen" && i === s.maler) s.striche = [];
     if (a.typ === "rate" && i !== s.maler && !s.geloest && a.wert && a.wert.trim()) {
       const t = a.wert.trim().slice(0, 40);
       s.tipps.push({ von: i, t });
-      if (t.toLowerCase().replace(/[^a-zäöüß]/g, "") === s.wort.toLowerCase().replace(/[^a-zäöüß]/g, "")) s.geloest = i;
+      if (t.toLowerCase().replace(/[^a-zäöüß]/g, "") === s.wort.toLowerCase().replace(/[^a-zäöüß]/g, "")) {
+        s.geloest = i;
+        // Punkte dieser Partie fuer den Beamer (gleiche Regel wie die Gesamtwertung: Rater und Maler je einer)
+        s.wertung = s.wertung || {};
+        [i, s.maler].forEach((j) => { s.wertung[j] = (s.wertung[j] || 0) + 1; });
+      }
     }
     if (a.typ === "aufgeben" && i === s.maler) s.geloest = -1;
     if (a.typ === "weiter") { s.maler = (s.maler + 1) % s.anzahl; s.wort = ziehe(T.MALEN); s.striche = []; s.tipps = []; s.geloest = null; s.runde++; }
@@ -139,7 +147,7 @@ const malen = {
       malLokal.pfad.push(p);
       g.beginPath(); g.moveTo(l[0] * 6, l[1] * 6); g.lineTo(p[0] * 6, p[1] * 6); g.stroke();
     };
-    c.onpointerup = c.onpointercancel = () => { if (malLokal.pfad && malLokal.pfad.length > 1) senden({ typ: "strich", p: malLokal.pfad }); malLokal.pfad = null; };
+    c.onpointerup = c.onpointercancel = () => { if (malLokal.pfad && malLokal.pfad.length > 1) senden({ typ: "strich", pfad: malLokal.pfad }); malLokal.pfad = null; };
   },
 };
 
