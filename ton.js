@@ -103,7 +103,63 @@ const EFFEKTE = {
   herz: () => { ton(70, 0.12, { laut: 0.5, hallAnteil: 0 }); ton(65, 0.14, { laut: 0.4, start: 0.18, hallAnteil: 0 }); },
   schuss: () => { rauschen(0.5, { laut: 0.7, f: 2500, ab: 150, typ: "lowpass" }); ton(120, 0.4, { typ: "sine", laut: 0.5, ab: 40, hallAnteil: 0.6 }); },
   fanfare: () => EFFEKTE.sieg(),
+  // Gruselklaenge fuer das Halloween-Aussehen (26.10.2026): Geist, knarzende Tuer, Hexenkichern, schiefer Akkord
+  geist: () => {
+    const t = ctx.currentTime, o = ctx.createOscillator(), g = ctx.createGain(), vib = ctx.createOscillator(), vg = ctx.createGain();
+    o.type = "sine"; o.frequency.setValueAtTime(420, t); o.frequency.linearRampToValueAtTime(760, t + 0.7); o.frequency.linearRampToValueAtTime(380, t + 1.8);
+    vib.frequency.value = 6.5; vg.gain.value = 14; vib.connect(vg); vg.connect(o.frequency);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.22, t + 0.35); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.9);
+    o.connect(g); g.connect(haupt); const h = ctx.createGain(); h.gain.value = 1; g.connect(h).connect(hall);
+    [o, vib].forEach((x) => { x.start(t); x.stop(t + 2); });
+  },
+  knarzen: () => {
+    for (let i = 0; i < 9; i++) ton(70 + Math.random() * 40, 0.09, { typ: "sawtooth", laut: 0.14, ab: 55 + Math.random() * 30, start: i * 0.075, filter: { f: 900, q: 6, typ: "bandpass" }, hallAnteil: 0.2 });
+    rauschen(0.7, { laut: 0.05, f: 700, q: 4 });
+  },
+  kichern: () => [0, 1, 2, 3, 4, 5].forEach((i) => { ton(N(84 - i * 2), 0.11, { typ: "square", laut: 0.06, start: i * 0.12, filter: { f: 2600 } }); ton(N(91 - i * 2), 0.08, { typ: "triangle", laut: 0.05, start: i * 0.12 + 0.04 }); }),
+  grusel: () => { [45, 46, 51, 52].forEach((n, i) => ton(N(n), 2.4, { typ: "sawtooth", laut: 0.05, angriff: 0.5 + i * 0.1, filter: { f: 600 }, hallAnteil: 0.9 })); ton(55, 2.2, { typ: "sine", laut: 0.22, angriff: 0.3 }); },
+  // Begruessung am Beamer (Schritt B, 26.10.2026): kurze, lustige Klaenge - einer davon zufaellig je neuem Gast
+  techno: () => {
+    const d = 60 / 140 / 2;
+    for (let i = 0; i < 8; i++) {
+      if (i % 2 === 0) ton(150, 0.2, { typ: "sine", laut: 0.6, ab: 42, start: i * d, hallAnteil: 0 });
+      else rauschen(0.05, { laut: 0.12, f: 9000, typ: "highpass", start: i * d });
+      ton(N([45, 45, 57, 45, 48, 45, 60, 52][i]), d * 0.8, { typ: "sawtooth", laut: 0.09, start: i * d, filter: { f: 700 + i * 260, q: 6 }, hallAnteil: 0.1 });
+    }
+    rauschen(0.9, { laut: 0.18, f: 800, ab: 9000, typ: "bandpass", q: 2, start: 8 * d - 0.45 });
+    ton(N(57), 0.6, { typ: "square", laut: 0.12, start: 8 * d, filter: { f: 2200 } });
+  },
+  troete: () => [0, 0.2, 0.4].forEach((s, k) => [1, 1.007, 0.993].forEach((v) => ton(N(k === 2 ? 70 : 69) * v, k === 2 ? 0.6 : 0.15, { typ: "sawtooth", laut: 0.09, start: s, angriff: 0.01, filter: { f: 2800 } }))),
+  boing: () => {
+    const t = ctx.currentTime, o = ctx.createOscillator(), g = ctx.createGain(), vib = ctx.createOscillator(), vg = ctx.createGain();
+    o.type = "triangle"; o.frequency.setValueAtTime(180, t); o.frequency.exponentialRampToValueAtTime(520, t + 0.08); o.frequency.exponentialRampToValueAtTime(140, t + 0.7);
+    vib.frequency.setValueAtTime(18, t); vib.frequency.linearRampToValueAtTime(5, t + 0.7); vg.gain.value = 40; vib.connect(vg); vg.connect(o.frequency);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.4, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+    o.connect(g); g.connect(haupt);
+    [o, vib].forEach((x) => { x.start(t); x.stop(t + 0.85); });
+  },
+  wirbel: () => { for (let i = 0; i < 22; i++) rauschen(0.05, { laut: 0.1 + i * 0.012, f: 2400, q: 1.5, start: i * 0.045 }); rauschen(1.2, { laut: 0.3, f: 6000, typ: "highpass", start: 1.0 }); ton(110, 0.4, { laut: 0.5, ab: 50, start: 1.0 }); },
+  wobble: () => { for (let i = 0; i < 6; i++) ton(N(33), 0.16, { typ: "sawtooth", laut: 0.2, start: i * 0.16, filter: { f: i % 2 ? 1400 : 260, q: 8 }, hallAnteil: 0 }); ton(N(69), 0.4, { typ: "square", laut: 0.08, start: 0.96, filter: { f: 2500 } }); },
+  tada: () => { ton(N(67), 0.12, { typ: "square", laut: 0.1, filter: { f: 3000 } }); [67, 71, 74, 79].forEach((n) => ton(N(n), 0.9, { typ: "triangle", laut: 0.12, start: 0.16 })); },
+  // Schreckmoment (nur im Halloween-Aussehen): greller Schrei, ca. 2 s - Stimme aus verstimmten Saegezaehnen + Rauschen
+  schrei: () => {
+    const t = ctx.currentTime, g = ctx.createGain(), f = ctx.createBiquadFilter(), vib = ctx.createOscillator(), vg = ctx.createGain();
+    f.type = "bandpass"; f.Q.value = 2.5; f.frequency.setValueAtTime(1400, t); f.frequency.linearRampToValueAtTime(2600, t + 0.4); f.frequency.linearRampToValueAtTime(900, t + 2);
+    vib.frequency.value = 11; vg.gain.value = 45; vib.connect(vg);
+    const stimmen = [1, 1.012, 0.987, 1.5].map((v) => {
+      const o = ctx.createOscillator(); o.type = "sawtooth";
+      o.frequency.setValueAtTime(520 * v, t); o.frequency.exponentialRampToValueAtTime(1250 * v, t + 0.25); o.frequency.linearRampToValueAtTime(1100 * v, t + 1.3); o.frequency.exponentialRampToValueAtTime(380 * v, t + 2);
+      vg.connect(o.frequency); o.connect(f); return o;
+    });
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + 0.04); g.gain.setValueAtTime(0.45, t + 1.4); g.gain.exponentialRampToValueAtTime(0.0001, t + 2.1);
+    f.connect(g); g.connect(haupt); const h = ctx.createGain(); h.gain.value = 0.7; g.connect(h).connect(hall);
+    [...stimmen, vib].forEach((x) => { x.start(t); x.stop(t + 2.2); });
+    rauschen(0.5, { laut: 0.5, f: 3000, ab: 800, q: 0.8 });
+    ton(70, 1.2, { typ: "sine", laut: 0.5, ab: 35 });
+  },
 };
+// Zufallsauswahl fuer die Begruessung am Beamer
+export const GRUSS_KLAENGE = ["techno", "troete", "boing", "wirbel", "wobble", "tada"];
 
 export function spiele(name) {
   if (modus === "aus" || !bereit() || !EFFEKTE[name]) return;

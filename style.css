@@ -321,3 +321,314 @@ body { padding-bottom: 72px; }
   background: linear-gradient(90deg, #fff, #c9c2ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .bereichstitel small { display: block; font-size: 13px; font-weight: 600; color: var(--leise, #9aa0c0); -webkit-text-fill-color: var(--leise, #9aa0c0); }
 .bereichstitel:first-child { margin-top: 2px; }
+
+/* Turniertafel (26.10.2026): eigener Stand neben den Spielen, alles darf umbrechen statt abgeschnitten zu werden */
+.kopfknoepfe { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.kopfknoepfe .klein2 { margin-left: 0; }
+.kopf > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+button.tt-einstieg { display: flex; flex-direction: column; align-items: center; gap: 2px; margin: 0 0 14px; overflow-wrap: anywhere; }
+button.tt-einstieg small { font-size: 13px; font-weight: 700; opacity: .85; }
+.spielflaeche.tt { overflow-wrap: anywhere; }
+.tt-hinweis { margin-top: 0; font-size: 14px; }
+.tt-liste { display: grid; gap: 10px; margin-bottom: 12px; }
+button.tt-station { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 14px; background: #0f1022; border: 2px solid var(--rand); box-shadow: 0 4px 0 #0008; }
+.tt-station .tt-emo { font-size: 30px; flex: none; }
+.tt-station .tt-stext { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.tt-station b { font-size: 18px; } .tt-station small { color: var(--leise); font-weight: 700; font-size: 13px; }
+.tt-station .tt-pfeil { font-size: 28px; color: var(--leise); flex: none; }
+.tt-neu { margin: 14px 0; padding: 12px; border: 2px dashed var(--rand); border-radius: 16px; }
+.tt-neu .raster3 button { font-size: 14px; }
+.tt-kopf { display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.tt-kopf .klein2 { margin-left: 0; }
+.tt-titel { margin: 6px 0 10px; font-size: 23px; }
+.tt-form { background: #0f1022; border: 2px solid var(--rand); border-radius: 16px; padding: 4px 12px 2px; margin: 8px 0 12px; }
+.tt-form label { margin: 10px 0; }
+.tt-form .raster2 { margin: 10px 0; } .tt-form .raster2 button { padding: 14px 6px; }
+.tt-unter { margin: 14px 0 8px; font-size: 15px; font-weight: 900; color: var(--leise); letter-spacing: 1px; text-transform: uppercase; }
+.tt-unterzeile { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tt-unterzeile .klein2 { margin-left: 0; }
+.tt-tabelle { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.tt-zeile { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #0f1022; border: 2px solid var(--rand); border-radius: 14px; font-weight: 700; }
+.tt-zeile.klein { padding: 6px 10px; font-size: 14px; }
+.tt-zeile .tt-name { flex: 1; min-width: 0; }
+.tt-zeile .tt-platz { flex: none; min-width: 28px; font-size: 20px; text-align: center; }
+.tt-zeile .tt-wert { flex: none; font-size: 18px; font-variant-numeric: tabular-nums; }
+.tt-zeile .klein2, .tt-rennkopf .klein2 { flex: none; margin-left: 0; }
+.tt-verlauf { margin-top: 12px; color: var(--leise); } .tt-verlauf summary { cursor: pointer; font-weight: 800; margin-bottom: 8px; }
+.tt-spiel { display: grid; gap: 6px; padding: 10px; margin-bottom: 10px; background: #0f1022; border: 2px solid var(--rand); border-radius: 16px; }
+.tt-spiel.frei { opacity: .8; }
+.tt-team { display: block; width: 100%; margin: 0; padding: 13px 10px; text-align: center; font-size: 16px; overflow-wrap: anywhere; }
+div.tt-team { border-radius: 14px; background: var(--flaeche3); font-weight: 800; }
+.tt-team.offen { color: var(--leise); background: transparent; border: 2px dashed var(--rand); }
+.tt-team.sieger { background: var(--gruen); box-shadow: 0 4px 0 var(--gruen-lippe); }
+.tt-team.raus { opacity: .45; text-decoration: line-through; }
+.tt-gegen { text-align: center; font-size: 12px; font-weight: 900; color: var(--leise); text-transform: uppercase; letter-spacing: 1px; }
+.tt-fuehrung { display: grid; gap: 8px; margin: 4px 0 6px; }
+.tt-fuehrung > div { background: linear-gradient(135deg, #3a1236, #241142); border: 2px solid var(--pink); border-radius: 14px; padding: 10px 12px; font-weight: 700; }
+.tt-fuehrung small { display: block; color: #ffd0ec; font-weight: 800; font-size: 12px; margin-bottom: 2px; } .tt-fuehrung b { font-size: 18px; }
+.tt-renn { background: #0f1022; border: 2px solid var(--rand); border-radius: 14px; padding: 10px 12px; }
+.tt-rennkopf { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 17px; } .tt-rennkopf .tt-name { flex: 1; min-width: 0; }
+.tt-drei { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 6px; font-weight: 800; font-variant-numeric: tabular-nums; font-size: 15px; }
+.tt-drei small { display: block; color: var(--leise); font-size: 11px; font-weight: 800; }
+.tt-schlechter { color: #ff8f8f; } .tt-besser { color: #7ee787; }
+.tt-ehrungtitel { text-align: center; font-size: 34px; font-weight: 900; margin: 6px 0 14px; animation: aufploppen .6s cubic-bezier(.2, 1.6, .4, 1);
+  background: linear-gradient(90deg, #ffe27a, #fff, #ffc800); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.tt-podest { background: linear-gradient(160deg, #2e2a10, #1b1c2e); border: 2px solid var(--gelb); border-radius: 20px; padding: 12px 14px; margin-bottom: 12px;
+  box-shadow: 0 0 26px #ffc80033; animation: aufploppen .6s cubic-bezier(.2, 1.6, .4, 1) both; }
+.tt-podest h3 { margin: 0 0 8px; font-size: 16px; color: #ffe9a8; }
+.tt-rang { display: flex; align-items: center; gap: 10px; padding: 6px 0; } .tt-rang > span:first-child { font-size: 30px; flex: none; }
+.tt-rang .tt-rangnamen { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: inherit; }
+.tt-rang b { min-width: 0; } .tt-rang.r1 b { font-size: 24px; } .tt-rang.r2 b { font-size: 19px; } .tt-rang.r3 b { font-size: 17px; }
+
+/* Gesamtwertung mit Runden und Wanderpokal (26.10.2026) */
+button.tw-karte { display: flex; flex-direction: column; align-items: stretch; gap: 4px; width: 100%; margin: 0 0 12px; padding: 14px; text-align: left;
+  background: linear-gradient(135deg, #2e2a10, #1b1c2e); border: 2px solid var(--gelb); box-shadow: 0 4px 0 #0008, 0 0 22px #ffc80022; overflow-wrap: anywhere; }
+.tw-karte .tw-kopf { display: flex; justify-content: space-between; align-items: baseline; gap: 4px 10px; flex-wrap: wrap; }
+.tw-karte .tw-kopf b { font-size: 19px; } .tw-karte small { color: #ffe9a8; font-weight: 700; font-size: 13px; }
+.tw-karte .tw-top { font-size: 15px; font-weight: 800; }
+.tw-uhr { font-variant-numeric: tabular-nums; } .tw-uhr.knapp, [data-countdown].knapp { color: #ff8f8f; }
+.tw-runde { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; background: #0f1022; border: 2px solid var(--gelb); border-radius: 14px;
+  padding: 10px 12px; margin-bottom: 10px; font-weight: 700; overflow-wrap: anywhere; }
+.tw-runde b { font-size: 18px; } .tw-runde span { color: #ffe9a8; font-size: 14px; }
+.tw-frage { background: linear-gradient(135deg, #ffc80022, #ff960022); border: 2px solid var(--gelb); border-radius: 16px; padding: 10px 12px; margin: 0 0 12px;
+  animation: pulsieren 1.6s ease-in-out infinite; overflow-wrap: anywhere; }
+.tw-frage p { margin: 0 0 10px; font-weight: 700; } .tw-frage .raster2 button { padding: 12px 6px; }
+.tw-zeile .tt-name { display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.tw-kats { color: var(--leise); font-size: 12px; font-weight: 700; }
+.tw-eintrag .tt-name { display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; } .tw-eintrag small { color: var(--leise); font-size: 12px; }
+.tw-eintrag.abgelehnt { opacity: .55; } .tw-eintrag.abgelehnt .tt-name > b { text-decoration: line-through; }
+.tw-eintrag .klein2.gruen { box-shadow: 0 3px 0 var(--gruen-lippe); }
+.tw-steuer .raster2 label { margin: 10px 0 0; } .tw-steuer > button { margin: 10px 0; }
+.tw-steuer .schalter { margin: 10px 0; }
+.tw-werte { display: grid; gap: 4px; } .tw-werte label { display: grid; grid-template-columns: minmax(0, 1fr) 64px; align-items: center; gap: 2px 8px; margin: 4px 0; }
+.tw-werte label small { grid-column: 1; grid-row: 2; color: var(--leise); font-size: 12px; } .tw-werte input { grid-column: 2; grid-row: 1 / span 2; text-align: center; }
+.tw-pokal { text-align: center; overflow-wrap: anywhere; }
+.tw-pokalbild { font-size: 96px; line-height: 1.1; margin-top: 6px; animation: aufploppen .8s cubic-bezier(.2, 1.6, .4, 1); filter: drop-shadow(0 0 24px #ffc800aa); }
+.tw-uebergabe { font-size: 22px; font-weight: 800; line-height: 1.35; margin: 4px 0 8px; } .tw-uebergabe b { color: #ffe27a; }
+.tw-pokal .tt-podest { text-align: left; }
+select#tt-wo { width: 100%; font: inherit; font-size: 17px; color: var(--text); background: #0f1022; border: 2px solid var(--rand); border-radius: 14px; padding: 13px 10px; margin-top: 6px; }
+.tw-werte input { padding: 10px 4px; margin-top: 0; }
+.tt-einstieg .tw-offen, .tw-blinkt { animation: pulsieren 1.6s ease-in-out infinite; }
+.tt-einstieg .tw-offen { color: #4a0d0d; background: #fff3; border-radius: 8px; padding: 2px 8px; }
+
+/* ================================================================ Halloween-Fassung (26.10.2026): Raum, Uebersicht, Meldungen */
+.anlaesse { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 4px; }
+button.anlass { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 10px; min-height: 120px; font-size: 18px; overflow-wrap: anywhere; }
+button.anlass .emo { font-size: 46px; line-height: 1; }
+button.a-halloween { background: linear-gradient(150deg, #ff7518, #5a1f00); box-shadow: 0 6px 0 #3a1400; }
+button.a-geburtstag { background: linear-gradient(150deg, #eb459e, #4a3cd6); box-shadow: 0 6px 0 #2b2180; }
+.zurueckknopf { text-align: left; overflow-wrap: anywhere; }
+details.codefeld { text-align: left; margin-top: 4px; color: var(--leise); }
+details.codefeld summary, details.codekarte summary, details.einladen summary { cursor: pointer; font-weight: 800; }
+.raumkopf { text-align: center; overflow-wrap: anywhere; }
+.raumkopf .anlass-titel, .anlass-titel { font-size: 30px; margin: 4px 0; line-height: 1.15; overflow-wrap: anywhere; }
+.deko { font-size: 22px; letter-spacing: 6px; opacity: .9; }
+.deko.edel { color: #d8b56a; letter-spacing: 14px; font-size: 14px; }
+.raumzeile { margin: 4px 0 10px; }
+.kontozeile { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; margin: 6px 0 10px; font-weight: 700; }
+.kontozeile .klein2 { margin-left: 0; }
+details.einladen { text-align: left; background: #0f1022; border: 2px solid var(--rand); border-radius: 16px; padding: 12px; margin-top: 6px; }
+.linkzeile { font-family: ui-monospace, monospace; font-size: 13px; word-break: break-all; background: #0006; border-radius: 10px; padding: 8px 10px; margin: 8px 0; }
+.qr { display: flex; justify-content: center; margin-top: 8px; }
+.qr svg { width: min(100%, 260px); height: auto; background: #fff; border-radius: 12px; }
+.partien { display: grid; gap: 10px; }
+.partie { background: #0f1022; border: 2px solid var(--rand); border-radius: 16px; padding: 12px; display: grid; gap: 8px; overflow-wrap: anywhere; }
+.partie.dabei { border-color: var(--gruen); }
+.partie-kopf { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.partie-kopf .emo { font-size: 30px; flex: none; }
+.partie-text { display: flex; flex-direction: column; min-width: 0; } .partie-text b { font-size: 17px; } .partie-text small { color: var(--leise); font-weight: 700; }
+.partie-mit, .leute { display: flex; flex-wrap: wrap; gap: 6px; }
+.partie-mit .pille, .leute .pille, .fuss .pille { max-width: 100%; overflow-wrap: anywhere; }
+.partie-knoepfe { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.partie-knoepfe button { flex: 1 1 auto; }
+.partie-knoepfe .klein2 { flex: none; margin-left: 0; }
+.testschild { font-size: 10px; font-weight: 900; letter-spacing: .5px; background: var(--gelb); color: #3b2a00; border-radius: 6px; padding: 1px 5px; margin-left: 5px; vertical-align: middle; }
+.adminschild { margin-left: 4px; font-size: 13px; }
+/* lange Namen in Punktetafeln umbrechen statt mit "..." kuerzen (Regel: am Handy nichts abgeschnitten) */
+.tafel > div b, .gegner b { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; min-width: 0; }
+.spielkachel .einstiegmarke { position: absolute; bottom: 8px; right: 10px; font-size: 13px; opacity: .8; }
+.looks button { padding: 12px 4px; font-size: 13px; }
+.steuerkarte .schalter { margin-top: 8px; }
+details.codekarte { color: var(--leise); }
+.vorgemerkt { font-size: 15px; display: grid; gap: 8px; }
+/* Meldung oben: "Neues Spiel: ... - mitmachen?" */
+.ansage { position: fixed; top: calc(8px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: min(calc(100% - 16px), 540px); z-index: 60;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 12px; border-radius: 18px; background: #14152aee; border: 2px solid var(--blurple);
+  box-shadow: 0 12px 30px #000a; animation: herein .35s ease-out; overflow-wrap: anywhere; }
+@keyframes herein { from { transform: translate(-50%, -30px); opacity: 0; } }
+.ansage-text { flex: 1 1 200px; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 15px; }
+.ansage-text small { color: var(--leise); font-weight: 700; }
+.ansage-knoepfe { display: flex; gap: 6px; align-items: center; margin-left: auto; }
+.ansage-knoepfe .klein2 { margin-left: 0; }
+.netzweg { position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%); z-index: 55; background: #3a1010ee; border: 2px solid var(--rot); border-radius: 99px;
+  padding: 8px 14px; font-weight: 800; font-size: 14px; max-width: calc(100% - 24px); text-align: center; }
+.netzhinweis { font-size: 14px; }
+.fledermaus { position: fixed; left: -60px; z-index: 45; font-size: 34px; pointer-events: none; animation: flattern 3.4s ease-in forwards; }
+@keyframes flattern { 30% { transform: translate(35vw, -4vh) rotate(-8deg); } 60% { transform: translate(70vw, 3vh) rotate(6deg); } to { transform: translate(115vw, -6vh) rotate(-4deg); } }
+
+/* ---- Aussehen: Halloween (Kuerbisse, Nebel, Orange/Schwarz) */
+body[data-look="halloween"] { --bg: #0a0604; --flaeche: #1a110b; --flaeche2: #241710; --flaeche3: #3a2414; --rand: #4d2c12; --text: #fff3e6; --leise: #c8a07a;
+  --blurple: #ff7518; --blurple-lippe: #b4500a; --pink: #9b4dff; --pink-lippe: #6a2bc2; }
+body[data-look="halloween"]::before { background: radial-gradient(40% 30% at 12% 6%, #ff751844, transparent 70%), radial-gradient(35% 30% at 92% 20%, #9b4dff33, transparent 70%),
+  radial-gradient(60% 25% at 50% 104%, #b9b2c833, transparent 75%); }
+body[data-look="halloween"]::after { content: ""; position: fixed; left: 0; right: 0; bottom: 0; height: 38vh; z-index: -1; pointer-events: none;
+  background: linear-gradient(to top, #c9c2d633, #c9c2d612 45%, transparent); animation: nebelzug 6s ease-out 1; }
+@keyframes nebelzug { from { opacity: 0; transform: translateY(8vh); } }
+body[data-look="halloween"] .titelbild h1, body[data-look="halloween"] .bereichstitel { background: linear-gradient(90deg, #ffd9b0, #ff7518 60%, #ffb15c); -webkit-background-clip: text; background-clip: text; color: transparent; }
+body[data-look="halloween"] .anlass-titel { color: #ffb15c; text-shadow: 0 0 18px #ff751855; }
+body[data-look="halloween"] .logo { filter: drop-shadow(0 6px 18px #ff7518aa); }
+body[data-look="halloween"] :is(.sp, .schalter, input, textarea, .grundregeln, .tt-zeile, .tt-form, .tt-spiel, .tt-renn, .partie, details.einladen, .hinweisbox.warten, .gegner, .tafel > div, .tipps span, .rollenliste) { background-color: #140c07; }
+body[data-look="halloween"] .ansage { background: #1a0f08ee; border-color: #ff7518; }
+body[data-look="halloween"] .spielkachel { border-color: #ff751833; }
+
+/* ---- Aussehen: Geburtstag = die bunte Grundgestaltung oben (Party-Farben), dazu Konfetti bei Eingang und Spielstart */
+
+/* ---- Aussehen: schlicht und edel (frei gewaehlter Anlass) */
+body[data-look="edel"] { --bg: #08090d; --flaeche: #12141b; --flaeche2: #181b24; --flaeche3: #262a36; --rand: #2c303c; --text: #f3f1ea; --leise: #a7a59c;
+  --blurple: #b8954a; --blurple-lippe: #7d6328; --pink: #8a8f9e; --pink-lippe: #5c606c; }
+body[data-look="edel"]::before { background: radial-gradient(50% 35% at 50% 0%, #d8b56a1f, transparent 70%); }
+body[data-look="edel"] .titelbild h1, body[data-look="edel"] .bereichstitel { background: linear-gradient(90deg, #f3e3bd, #d8b56a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+body[data-look="edel"] .anlass-titel { color: #e9d6a6; letter-spacing: .5px; }
+body[data-look="edel"] .spielkachel { filter: saturate(.55); }
+body[data-look="edel"] :is(.sp, .schalter, input, textarea, .grundregeln, .tt-zeile, .tt-form, .tt-spiel, .tt-renn, .partie, details.einladen, .hinweisbox.warten, .gegner, .tafel > div, .tipps span, .rollenliste) { background-color: #0c0d12; }
+
+/* ---- Stromsparen (Abend von 15 bis 6 Uhr): keine Dauer-Animationen auf den Handys. Was Aufmerksamkeit braucht, wippt oder
+   pulsiert ein paar Mal und steht dann still. Grosse Effekte kommen spaeter nur am Beamer (body.beamer). */
+body:not(.beamer)::before { animation: none; }
+body:not(.beamer) .logo { animation-iteration-count: 2; }
+body:not(.beamer) .sterne { animation: none; }
+body:not(.beamer) :is(.fc-knopf.ok .fc, .stapel-knopf:not(:disabled)) { animation-iteration-count: 3; }
+body:not(.beamer) :is(.hinweisbox:not(.warten), .tw-frage, .tw-blinkt, .tt-einstieg .tw-offen) { animation-iteration-count: 4; }
+body:not(.beamer) .uhr.knapp { animation-iteration-count: 12; }
+@media (prefers-reduced-motion: reduce) { .fledermaus, .konfetti, .ansage, body::after { animation: none !important; } .fledermaus { display: none; } }
+
+/* ================================================================ Schritt B (26.10.2026): Steuerseite, Code-Hinweis */
+.raster4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.raster4 button { margin: 0; padding: 12px 2px; font-size: 14px; }
+.steuerseite h3.tt-unter { margin-top: 16px; }
+.steuerzustand { background: #0f1022; border: 2px solid var(--rand); border-radius: 14px; padding: 10px 12px; margin: 10px 0; font-weight: 700; overflow-wrap: anywhere; }
+.seitenwahl button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 6px; font-size: 14px; overflow-wrap: anywhere; min-width: 0; }
+.seitenwahl button small { font-size: 11px; font-weight: 700; opacity: .7; }
+.steuerseite .raster2 { margin: 10px 0; }
+a.knopf-link { display: flex; align-items: center; justify-content: center; text-align: center; font-weight: 800; color: #fff; text-decoration: none; background: var(--blurple);
+  border-radius: 14px; padding: 12px 10px; box-shadow: 0 4px 0 var(--blurple-lippe); overflow-wrap: anywhere; }
+select#rf-alle { width: 100%; font: inherit; font-size: 17px; color: var(--text); background: #0f1022; border: 2px solid var(--rand); border-radius: 14px; padding: 13px 10px; margin-top: 6px; }
+button.schreckknopf { font-size: 22px; letter-spacing: .5px; }
+.codefehler { background: #3a1010; border: 2px solid var(--rot); border-radius: 14px; padding: 12px; margin: 8px 0 12px; display: grid; gap: 8px;
+  color: #ffe1e1; font-size: 16px; overflow-wrap: anywhere; animation: aufploppen .3s; }
+.codefehler b { font-size: 17px; line-height: 1.3; }
+.codefehler .bremse { font-weight: 700; color: #ffc1c1; font-variant-numeric: tabular-nums; }
+.codefehler button { margin: 0; }
+
+/* ================================================================ Beamer-Ansicht (body.beamer): Vollbild, Schrift aus Metern lesbar */
+body.beamer { padding: 0; overflow: hidden; font-size: min(2.1vw, 3.75vh); }
+body.beamer #app { max-width: none; margin: 0; padding: 0; }
+body.beamer.maus-weg, body.beamer.maus-weg * { cursor: none !important; }
+body.beamer .ton-schalter { opacity: .3; } body.beamer .ton-schalter:hover { opacity: 1; }
+body.beamer::before { animation-duration: 12s; }
+body.beamer[data-look="halloween"]::after { height: 46vh; animation: nebelwogen 9s ease-in-out infinite alternate; }
+@keyframes nebelwogen { from { opacity: .55; transform: translateX(-3vw) scaleY(.9); } to { opacity: 1; transform: translateX(3vw) scaleY(1.1); } }
+.bm { position: fixed; inset: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 1.2vh; padding: 2vh 2.5vw 1.6vh; }
+.bm-kopf { display: flex; justify-content: space-between; align-items: center; gap: 1em; font-weight: 900; min-width: 0; }
+.bm-titel { font-size: 1.15em; min-width: 0; overflow-wrap: anywhere; }
+body.beamer[data-look="halloween"] .bm-titel { color: #ffb15c; text-shadow: 0 0 .6em #ff751888; }
+body.beamer[data-look="edel"] .bm-titel { color: #e9d6a6; }
+.bm-zeit { font-size: .9em; color: var(--leise); font-variant-numeric: tabular-nums; flex: none; }
+.bm-buehne { position: relative; overflow: hidden; min-height: 0; display: flex; justify-content: center; }
+.bm-inhalt { width: 100%; transform-origin: top center; }
+.bm-inhalt.bm-rein { animation: bm-rein .6s cubic-bezier(.2, .9, .3, 1.1); }
+@keyframes bm-rein { from { opacity: 0; transform: translateY(2vh); } }
+.bm-fortschritt { position: absolute; left: 0; bottom: 0; height: .5vh; width: 0; border-radius: 99px; background: var(--blurple); opacity: .8; }
+@keyframes bm-balken { to { width: 100%; } }
+.bm-fuss { display: flex; align-items: center; gap: 1.2em; font-size: .5em; color: var(--leise); min-height: 0; padding-left: 50px; }
+.bm-punkte { display: flex; flex-wrap: wrap; gap: .5em; flex: 1; min-width: 0; }
+.bm-punkte span { padding: .25em .8em; border-radius: 99px; background: #ffffff12; font-weight: 800; }
+.bm-punkte span.an { background: var(--blurple); color: #fff; }
+.bm-modus { font-weight: 800; color: var(--text); }
+.bm-qrklein { width: 11vh; height: 11vh; flex: none; }
+.bm-qrklein svg, .bm-qrgross svg { width: 100%; height: 100%; background: #fff; border-radius: .4em; display: block; }
+.bm-h { font-size: 1.55em; margin: 0 0 .5em; text-align: center; line-height: 1.15; overflow-wrap: anywhere; }
+body.beamer[data-look="halloween"] .bm-h { color: #ffd9b0; }
+.bm-leise { color: var(--leise); font-weight: 700; }
+.bm-gross { font-size: 1.6em; font-weight: 900; margin: .2em 0; line-height: 1.2; overflow-wrap: anywhere; }
+.bm-zeile { font-size: 1.15em; font-weight: 800; margin: .3em 0; }
+.bm-cd { font-variant-numeric: tabular-nums; color: #ffe27a; } .bm-cd.knapp { color: #ff8f8f; }
+.bm-leer, .bm-pokal { text-align: center; padding: 4vh 0 1vh; }
+.bm-pokalbild { display: inline-block; font-size: 4.5em; line-height: 1.2; filter: drop-shadow(0 0 .4em #ffc800aa); animation: bm-schweben 4s ease-in-out infinite; }
+@keyframes bm-schweben { 50% { transform: scale(1.05) rotate(-3deg); } }
+.bm-pokal .bm-gross b { color: #ffe27a; }
+/* Gesamtwertung */
+.bm-rang { list-style: none; margin: 0 auto; padding: 0; display: grid; gap: .3em; max-width: 32em; }
+.bm-rang.zwei { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-flow: column; grid-template-rows: repeat(var(--zeilen), auto); max-width: none; column-gap: 1.4em; }
+.bm-rang li { display: flex; align-items: center; gap: .6em; background: var(--flaeche2); border: .08em solid var(--rand); border-radius: .5em; padding: .25em .7em; font-weight: 800; min-width: 0; }
+.bm-rang li.p1 { border-color: var(--gelb); box-shadow: 0 0 .8em #ffc80055; }
+.bm-platz { flex: none; min-width: 1.6em; text-align: center; font-size: 1.1em; }
+.bm-name { flex: 1; min-width: 0; overflow-wrap: anywhere; display: flex; flex-direction: column; }
+.bm-name small { font-size: .55em; color: var(--leise); font-weight: 700; }
+.bm-wert { flex: none; font-size: 1.15em; font-variant-numeric: tabular-nums; color: #ffe27a; }
+/* Turnierbaum */
+.bm-sieger { text-align: center; font-size: 1.2em; font-weight: 900; color: #7ee787; margin: 0 0 .4em; }
+.bm-baum { display: grid; grid-template-columns: repeat(var(--runden), minmax(0, 1fr)); gap: 1.2em; align-items: stretch; }
+.bm-runde { display: flex; flex-direction: column; min-width: 0; }
+.bm-runde h3 { margin: .2em 0 .4em; font-size: .7em; text-transform: uppercase; letter-spacing: .1em; color: var(--leise); text-align: center; }
+.bm-spiele { display: flex; flex-direction: column; justify-content: space-around; gap: .5em; flex: 1; }
+.bm-sp { display: grid; gap: .15em; background: var(--flaeche2); border: .08em solid var(--rand); border-radius: .5em; padding: .3em .45em; font-size: .72em; min-width: 0; }
+.bm-sp.frei { opacity: .75; } .bm-sp small { color: var(--leise); font-weight: 700; font-size: .7em; }
+.bm-team { display: block; font-weight: 800; padding: .1em .3em; border-radius: .3em; overflow-wrap: anywhere; }
+.bm-team.sieger { background: var(--gruen); color: #fff; } .bm-team.raus { opacity: .45; text-decoration: line-through; } .bm-team.offen { color: var(--leise); font-style: italic; }
+.bm-teams { display: flex; flex-wrap: wrap; gap: .5em; justify-content: center; }
+.bm-teams span, .bm-pille { background: var(--flaeche3); border-radius: 99px; padding: .2em .7em; font-weight: 800; overflow-wrap: anywhere; max-width: 100%; }
+/* Rennen */
+.bm-renn-oben { display: flex; gap: 1em; justify-content: center; margin-bottom: .6em; flex-wrap: wrap; }
+.bm-kachel { border-radius: .6em; padding: .4em 1em; text-align: center; min-width: 0; display: flex; flex-direction: column; border: .08em solid; }
+.bm-kachel small { font-size: .6em; font-weight: 800; opacity: .9; } .bm-kachel b { font-size: 1.3em; overflow-wrap: anywhere; } .bm-kachel span { font-weight: 900; font-variant-numeric: tabular-nums; }
+.bm-kachel.rot { background: linear-gradient(135deg, #3a1236, #241142); border-color: var(--pink); }
+.bm-kachel.gruen { background: linear-gradient(135deg, #10361b, #0f2a2b); border-color: var(--gruen); }
+.bm-tab { margin: 0 auto; border-collapse: separate; border-spacing: 0 .2em; font-size: .85em; font-variant-numeric: tabular-nums; }
+.bm-tab th { font-size: .7em; color: var(--leise); text-transform: uppercase; letter-spacing: .08em; padding: 0 .8em; text-align: right; }
+.bm-tab th:first-child, .bm-tab td:first-child { text-align: left; }
+.bm-tab td { background: var(--flaeche2); padding: .2em .8em; text-align: right; font-weight: 800; overflow-wrap: anywhere; }
+.bm-tab td:first-child { border-radius: .4em 0 0 .4em; } .bm-tab td:last-child { border-radius: 0 .4em .4em 0; }
+.bm-tab .schlechter { color: #ff8f8f; } .bm-tab .besser { color: #7ee787; }
+/* Laufende Spiele */
+.bm-partien { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8em; }
+.bm-partien.drei { grid-template-columns: repeat(3, minmax(0, 1fr)); font-size: .95em; }
+.bm-partie { background: var(--flaeche2); border: .08em solid var(--rand); border-radius: .6em; padding: .5em .7em; display: grid; gap: .4em; align-content: start; min-width: 0; }
+.bm-partie.sammelt { border-color: var(--gruen); box-shadow: 0 0 .8em #58cc0244; }
+.bm-partie-kopf { display: flex; gap: .5em; align-items: center; min-width: 0; }
+.bm-partie-kopf > span:last-child { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.bm-partie-kopf small { font-size: .65em; color: var(--leise); font-weight: 800; }
+.bm-emo { font-size: 1.6em; flex: none; }
+.bm-pillen { display: flex; flex-wrap: wrap; gap: .3em; font-size: .7em; } .bm-pillen.mitte { justify-content: center; font-size: .75em; }
+.bm-pille.leise { color: var(--leise); }
+/* Mitmachen */
+.bm-mitmachen { display: flex; align-items: center; justify-content: center; gap: 2em; min-height: 66vh; }
+.bm-qrgross { width: min(56vh, 38vw); height: min(56vh, 38vw); flex: none; }
+.bm-mm-text { min-width: 0; } .bm-mm-text .bm-h { text-align: left; }
+/* Ereignisse (unterbrechen die Diashow kurz) */
+.bm-ereignis { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; padding: 5vh 5vw; overflow: hidden;
+  background: radial-gradient(circle at 50% 45%, #000a, #000e 75%); backdrop-filter: blur(6px); animation: bm-auf .5s ease-out; }
+.bm-ereignis[hidden], .bm-schreck[hidden] { display: none; }
+@keyframes bm-auf { from { opacity: 0; } }
+.bm-e-box { text-align: center; max-width: 90vw; transform-origin: center; overflow-wrap: anywhere; animation: aufploppen .6s cubic-bezier(.2, 1.6, .4, 1); }
+.bm-e-emo { font-size: 4em; line-height: 1.1; }
+.bm-e-gross { font-size: 2.6em; font-weight: 900; line-height: 1.1; margin: .1em 0 .2em; }
+.bm-e-klein { font-size: 1.1em; font-weight: 800; color: var(--leise); margin: .2em 0; }
+.bm-e-nr { display: inline-block; font-size: 1.4em; font-weight: 900; background: var(--blurple); color: #fff; border-radius: 99px; padding: .2em 1em; margin-top: .3em; }
+body.beamer[data-look="halloween"] .bm-e-gross { color: #ffb15c; text-shadow: 0 0 .5em #ff7518aa; }
+.bm-e-pokal, .bm-e-abend { width: 34em; font-size: 16px; }
+.bm-e-pokal button, .bm-e-abend button { display: none; }
+/* Schreckmoment: Fratze springt aus dem Dunkel, rote Blitze, Wackeln */
+.bm-schreck { position: fixed; inset: 0; z-index: 90; background: radial-gradient(circle, #3a0000 0%, #000 70%); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.bm-schreck.los { animation: bm-blitz .18s steps(2) 6; }
+.bm-schreck .bm-fratze { height: 96vh; width: auto; animation: bm-sprung .14s cubic-bezier(.2, 1.8, .4, 1) both, bm-wackeln .09s linear .14s 18; filter: drop-shadow(0 0 4vh #ff000088); }
+.bm-schreck .bm-glut { animation: bm-glut .25s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: center; }
+@keyframes bm-blitz { 50% { background: #b30000; } }
+@keyframes bm-sprung { from { transform: scale(.15); opacity: 0; } to { transform: scale(1.08); } }
+@keyframes bm-wackeln { 25% { transform: scale(1.08) translate(-1.2vh, .8vh) rotate(-1.5deg); } 75% { transform: scale(1.1) translate(1.2vh, -.8vh) rotate(1.5deg); } }
+@keyframes bm-glut { to { transform: scale(1.35); } }
+/* Start: ein Klick fuer Vollbild und Ton (Browser verlangen das) */
+.bm-start { position: fixed; right: 2vw; bottom: 16vh; z-index: 80; display: flex; flex-direction: column; gap: .2em; align-items: center; font-size: .8em; padding: .7em 1.2em;
+  background: var(--blurple); box-shadow: 0 .25em 0 var(--blurple-lippe), 0 0 2em #000a; border-radius: .7em; max-width: 40vw; }
+.bm-start small { font-size: .6em; font-weight: 700; opacity: .9; }
+body.beamer .fledermaus { z-index: 75; }

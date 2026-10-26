@@ -33,8 +33,15 @@ function erklaerSpiel(id, titel, emoji, kurz, farben, liste, mitVerboten, sekund
   const spiel = {
     id, name: titel, emoji, kurz, farben,
     start: (namen) => ({ dran: 0, phase: "bereit", punkte: namen.map(() => 0), runde: 0, wort: null, geschafft: 0 }),
+    // Gesamtwertung: nach jedem Durchgang (jeder war einmal dran) gewinnt, wer in diesem Durchgang die meisten Punkte holte
+    ergebnis(s) {
+      if (s.phase !== "pause" || !s.kreisStart || s.dran !== s.punkte.length - 1) return null;
+      const plus = s.punkte.map((p, j) => p - (s.kreisStart[j] || 0));
+      const max = Math.max(...plus);
+      return max > 0 ? { nr: `k${s.runde}`, sieger: plus.map((p, j) => (p === max ? j : -1)).filter((j) => j >= 0) } : null;
+    },
     aktion(s, i, a, namen) {
-      if (a.typ === "start" && i === s.dran && s.phase === "bereit") { s.phase = "laeuft"; s.runde++; s.geschafft = 0; s.wort = stapelZiehen(s, liste); }
+      if (a.typ === "start" && i === s.dran && s.phase === "bereit") { if (s.dran === 0) s.kreisStart = [...s.punkte]; s.phase = "laeuft"; s.runde++; s.geschafft = 0; s.wort = stapelZiehen(s, liste); }
       else if (s.phase === "laeuft" && i === s.dran) {
         if (a.typ === "richtig") { s.punkte[i]++; if (a.wer !== undefined && a.wer !== i) s.punkte[a.wer]++; s.geschafft++; s.wort = stapelZiehen(s, liste); }
         if (a.typ === "skip") s.wort = stapelZiehen(s, liste);
@@ -74,6 +81,8 @@ export const pantomime = erklaerSpiel("pantomime", "Pantomime", "🤹", "Vorspie
 export const werbinich = {
   id: "werbinich", name: "Wer bin ich?", emoji: "🎭", kurz: "Alle sehen deine Figur – nur du nicht. Ja/Nein-Fragen stellen!", farben: ["#a29bfe", "#4834d4"],
   start: (namen) => { const f = mischen(FIGUREN.map((_, i) => i)).slice(0, namen.length); return { figur: f, erraten: namen.map(() => 0), dran: 0, nr: 0 }; },
+  // Gesamtwertung: wer sich zuerst erraten hat, sobald alle durch sind (wie die Anzeige "Sieger")
+  ergebnis: (s) => (s.erraten.every((x) => x) && s.erraten.includes(1) ? { nr: s.figur.join("-"), sieger: [s.erraten.indexOf(1)] } : null),
   aktion(s, i, a, namen) {
     if (a.typ === "erraten" && !s.erraten[i]) { s.nr++; s.erraten[i] = s.nr; }
     if (a.typ === "naechster") s.dran = (s.dran + 1) % namen.length;
@@ -95,6 +104,19 @@ export const werbinich = {
 export const spion = {
   id: "spion", name: "Der Spion", emoji: "🕵️", kurz: "Alle kennen den Ort – bis auf einen. Findet den Spion!", farben: ["#2d3436", "#6c5ce7"],
   start: (namen) => ({ ort: zufall(ORTE.length), spion: zufall(namen.length), phase: "fragen", runde: Date.now() % 100000, stimmen: {}, tipp: null }),
+  // Gesamtwertung: gleiche Regel wie die Aufloesung unten - der Spion allein oder alle anderen
+  ergebnis(s, namen) {
+    if (s.phase !== "ende") return null;
+    const n = namen.length;
+    const andere = Array.from({ length: n }, (_, j) => j).filter((j) => j !== s.spion);
+    let spionGewinnt;
+    if (s.tipp !== null) spionGewinnt = s.tipp === s.ort;
+    else {
+      const zaehl = Array.from({ length: n }, (_, j) => Object.values(s.stimmen).filter((z) => z === j).length);
+      spionGewinnt = zaehl.indexOf(Math.max(...zaehl)) !== s.spion;
+    }
+    return { nr: String(s.runde), sieger: spionGewinnt ? [s.spion] : andere };
+  },
   aktion(s, i, a, namen) {
     if (a.typ === "abstimmen" && s.phase === "fragen") s.phase = "wahl";
     if (a.typ === "stimme" && s.phase === "wahl") { s.stimmen[i] = a.ziel; if (Object.keys(s.stimmen).length >= namen.length) s.phase = "aufloesung"; }
@@ -131,6 +153,13 @@ const norm = (t) => String(t || "").trim().toLowerCase().replace(/\s+/g, " ");
 export const slf = {
   id: "slf", name: "Stadt-Land-Fluss", emoji: "✏️", kurz: "Ein Buchstabe, sechs Kategorien – wer zuerst fertig ist, ruft Stopp", farben: ["#fdcb6e", "#e17055"],
   start: (namen) => ({ runde: 0, phase: "bereit", punkte: namen.map(() => 0) }),
+  // Gesamtwertung: je Runde, wer in dieser Runde die meisten Punkte holte
+  ergebnis(s) {
+    if (s.phase !== "wertung" || !s.wertung) return null;
+    const plus = s.punkte.map((_, j) => s.kats.reduce((sum, _k, k) => sum + (s.wertung[`${j}-${k}`] || 0), 0));
+    const max = Math.max(...plus);
+    return max > 0 ? { nr: `r${s.runde}`, sieger: plus.map((p, j) => (p === max ? j : -1)).filter((j) => j >= 0) } : null;
+  },
   aktion(s, i, a, namen) {
     if (a.typ === "start" && (s.phase === "bereit" || s.phase === "wertung")) {
       s.runde++; s.phase = "schreiben"; s.buchstabe = BUCHSTABEN[zufall(BUCHSTABEN.length)]; s.kats = mischen([...SLF_KAT]).slice(0, 6); s.antworten = {}; s.stopp = null;
@@ -181,6 +210,12 @@ export const quiz = {
   id: "quiz", name: "Quiz-Duell", emoji: "🧠", kurz: "Alle antworten gleichzeitig – schnell und richtig gibt Punkte", farben: ["#0984e3", "#2d1e8a"],
   start: (namen) => { const s = { nr: 0, punkte: namen.map(() => 0), antworten: {}, phase: "frage" }; s.frage = stapelZiehen(s, QUIZ); s.reihe = mischen([0, 1, 2, 3]); return s; },
   botPause: () => 4500,
+  // Gesamtwertung: je Frage, wer am schnellsten richtig lag
+  ergebnis(s) {
+    if (s.phase !== "aufloesung") return null;
+    const richtige = Object.entries(s.antworten).filter(([, x]) => x.w === 0).sort((x, y) => x[1].ms - y[1].ms);
+    return richtige.length ? { nr: `q${s.nr}`, sieger: [Number(richtige[0][0])] } : null;
+  },
   bot(s, i) {
     if (s.phase !== "frage" || s.antworten[i] !== undefined) return null;
     const w = Math.random() < 0.55 ? 0 : 1 + Math.floor(Math.random() * 3);

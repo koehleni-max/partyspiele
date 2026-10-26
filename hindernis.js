@@ -34,6 +34,11 @@ export const hindernis = {
   start: (namen) => ({ runde: 1, phase: "bauen", teile: [], angebote: namen.map(() => angebot()), wahl: {}, gebaut: {}, ergebnis: {}, punkte: namen.map(() => 0), meldung: "" }),
   // Computer-Mitspieler: baut etwas Fieses in die Laufbahn und "laeuft" mit einer Chance, die von der Strecke abhaengt
   botPause: (s) => (s.phase === "laufen" ? 7000 : 2200),
+  ergebnis(s) {
+    if (s.phase !== "ende") return null;
+    const max = Math.max(...s.punkte);
+    return { nr: "1", sieger: s.punkte.map((p, j) => (p === max ? j : -1)).filter((j) => j >= 0) };
+  },
   bot(s, i) {
     if (s.phase === "bauen" && !s.gebaut[i]) {
       if (!s.wahl[i]) {

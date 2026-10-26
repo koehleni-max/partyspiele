@@ -32,6 +32,7 @@ const DE = [
   [/Actions/g, "Aktionen"], [/Spectating/gi, "Zuschauen"], [/Player/g, "Spieler"], [/Drop/g, "Einwerfen"], [/Column/g, "Spalte"], [/Turn/g, "Zug"],
 ];
 function uebersetzen(knoten) {
+  if (!knoten || !knoten.nodeType) return; // Spiel schon geschlossen, bevor die Uebersetzung lief
   const walker = document.createTreeWalker(knoten, NodeFilter.SHOW_TEXT);
   let n;
   while ((n = walker.nextNode())) {
@@ -49,6 +50,14 @@ function fremdSpiel({ id, name, emoji, kurz, farben, M, regeln, gruppe, bot }) {
   const meta = M.LOGIK.getGameMetadata ? M.LOGIK.getGameMetadata() : { maxPlayers: 8 };
   return {
     id, name, emoji, kurz, farben, fremd: true,
+    // Gesamtwertung: das Regelwerk traegt den Sieger in state.winner ein (Spieler-Nr. als Text, bei Gleichstand eine
+    // Liste; Unentschieden = null)
+    ergebnis(s) {
+      const w = s.st && s.st.winner;
+      if (w === null || w === undefined) return null;
+      const sieger = [w].flat().map(Number).filter((j) => Number.isInteger(j));
+      return sieger.length ? { nr: String(s.partie), sieger } : null;
+    },
     ...(bot ? {
       botPause: () => 1300,
       bot(s, i) {

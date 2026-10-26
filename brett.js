@@ -35,6 +35,13 @@ export const brett = {
     s.stern = neuerStern(s);
     return s;
   },
+  // Gesamtwertung: wer am Ende vorne liegt (Sterne, dann Muenzen - wie die Rangliste)
+  ergebnis(s) {
+    if (!s.ende) return null;
+    const best = (j) => s.sterne[j] * 10000 + s.muenzen[j];
+    const max = Math.max(...s.pos.map((_, j) => best(j)));
+    return { nr: "1", sieger: s.pos.map((_, j) => j).filter((j) => best(j) === max) };
+  },
   aktion(s, i, a, namen) {
     const n = s.pos.length;
     if (a.typ === "neustart") return Object.assign(s, brett.start(namen));

@@ -9,6 +9,14 @@ let reaktionLokal = { runde: -1, gruen: 0, timer: null, gesendet: false };
 const reaktion = {
   id: "reaktion", name: "Blitzreaktion", emoji: "⚡", farben: ["#22d3ee","#1e3a8a"], kurz: "Tippen, sobald es grün wird – der Langsamste trinkt",
   start: () => ({ runde: 0, phase: "bereit", warte: 0, zeiten: {} }),
+  // Gesamtwertung: je Runde der Schnellste (zu frueh zaehlt nicht)
+  ergebnis(s) {
+    if (s.phase !== "ergebnis") return null;
+    const gut = Object.entries(s.zeiten).filter(([, ms]) => ms >= 0);
+    if (!gut.length) return null;
+    const min = Math.min(...gut.map(([, ms]) => ms));
+    return { nr: `r${s.runde}`, sieger: gut.filter(([, ms]) => ms === min).map(([j]) => Number(j)) };
+  },
   aktion(s, i, a, namen) {
     if (a.typ === "los" && s.phase !== "laeuft") { s.runde++; s.phase = "laeuft"; s.warte = 1500 + zufall(4000); s.zeiten = {}; }
     if (a.typ === "zeit" && s.phase === "laeuft" && s.zeiten[i] === undefined) {
@@ -23,7 +31,8 @@ const reaktion = {
       return `<div id="reaktionsflaeche" class="reaktion ${fertig ? "fertig" : "rot"}">${fertig ? (s.zeiten[ich] < 0 ? "Zu früh! 😬" : `${s.zeiten[ich]} ms`) : "Warte …"}</div>
         <p class="mitte leise">${Object.keys(s.zeiten).length}/${namen.length} fertig</p>`;
     }
-    const liste = namen.map((n, j) => [j, s.zeiten[j]]).sort((x, y) => (x[1] < 0 ? 1e9 : x[1]) - (y[1] < 0 ? 1e9 : y[1]));
+    // wer mittendrin dazukam, hat in dieser Runde noch keine Zeit
+    const liste = namen.map((n, j) => [j, s.zeiten[j]]).filter(([, ms]) => ms !== undefined).sort((x, y) => (x[1] < 0 ? 1e9 : x[1]) - (y[1] < 0 ? 1e9 : y[1]));
     const letzter = liste[liste.length - 1];
     return `<div class="frage">Ergebnis</div><ol class="rangliste">${liste.map(([j, ms]) => `<li>${name(namen, j)}: ${ms < 0 ? "zu früh" : ms + " ms"}</li>`).join("")}</ol>
       <div class="urteil">${name(namen, letzter[0])} trinkt ${schlucke(letzter[1] < 0 ? 2 : 1)} · ${name(namen, liste[0][0])} verteilt 1</div>
@@ -54,6 +63,15 @@ const reaktion = {
 const schaetzen = {
   id: "schaetzen", name: "Schätzmeister", emoji: "🎯", farben: ["#f97316","#7c2d12"], kurz: "Zahlen schätzen – wer am weitesten weg liegt, trinkt",
   start: () => { const s = { tipps: {}, phase: "tippen" }; s.rest = mischen(T.SCHAETZ.map((_, i) => i)); s.nr = s.rest.pop(); return s; },
+  // Gesamtwertung: je Frage, wer am naechsten dran war
+  ergebnis(s) {
+    if (s.phase !== "aufloesung") return null;
+    const loesung = T.SCHAETZ[s.nr][1];
+    const abst = Object.entries(s.tipps).map(([j, t]) => [Number(j), Math.abs(t - loesung)]);
+    if (!abst.length) return null;
+    const min = Math.min(...abst.map((x) => x[1]));
+    return { nr: `s${s.nr}-${s.rest.length}`, sieger: abst.filter((x) => x[1] === min).map((x) => x[0]) };
+  },
   aktion(s, i, a) {
     if (a.typ === "tipp" && s.phase === "tippen" && a.wert !== "" && !isNaN(Number(a.wert))) {
       s.tipps[i] = Number(a.wert);
@@ -67,7 +85,7 @@ const schaetzen = {
       ${s.tipps[ich] === undefined ? `<input id="tipp" type="number" inputmode="decimal" placeholder="Deine Schätzung">${knopf("Abgeben", { typ: "tipp" }, "gross", `data-feld="tipp"`)}`
                                    : `<p class="mitte">Abgegeben: <b>${s.tipps[ich]}</b></p>`}
       <p class="mitte leise">${Object.keys(s.tipps).length}/${namen.length} abgegeben</p>`;
-    const abst = namen.map((_, j) => [j, Math.abs(s.tipps[j] - loesung)]).sort((x, y) => x[1] - y[1]);
+    const abst = namen.map((_, j) => [j, Math.abs(s.tipps[j] - loesung)]).filter(([j]) => s.tipps[j] !== undefined).sort((x, y) => x[1] - y[1]);
     return `<div class="frage">${esc(frage)}<br><span class="gross2">${loesung}</span></div>
       <ol class="rangliste">${abst.map(([j]) => `<li>${name(namen, j)}: ${s.tipps[j]}</li>`).join("")}</ol>
       <div class="urteil">${name(namen, abst[abst.length - 1][0])} trinkt 2 · ${name(namen, abst[0][0])} verteilt 2</div>
@@ -80,6 +98,8 @@ let malLokal = { pfad: null };
 const malen = {
   id: "malen", name: "Malen & Raten", emoji: "🎨", farben: ["#ec4899","#6d28d9"], kurz: "Einer malt, die anderen raten – reihum",
   start: () => ({ maler: 0, wort: ziehe(T.MALEN), striche: [], tipps: [], geloest: null, runde: 1 }),
+  // Gesamtwertung: wer es erraten hat und wer es gemalt hat
+  ergebnis: (s) => (s.geloest !== null && s.geloest >= 0 ? { nr: `m${s.runde}`, sieger: [s.geloest, s.maler] } : null),
   aktion(s, i, a, namen) {
     if (a.typ === "strich" && i === s.maler && !s.geloest && Array.isArray(a.p) && a.p.length < 400) s.striche.push(a.p);
     if (a.typ === "loeschen" && i === s.maler) s.striche = [];

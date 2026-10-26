@@ -182,6 +182,12 @@ const ZIEL = 7;
 const pferderennen = {
   id: "pferde", name: "Pferderennen", emoji: "🏇", farben: ["#16a34a","#14532d"], kurz: "Wetten auf die Asse – Sieger verteilen",
   start: (namen) => ({ phase: "wetten", wetten: {}, pos: { "♠": 0, "♥": 0, "♦": 0, "♣": 0 }, stapel: null, seite: [], aufgedeckt: 0, letzte: null, sieger: null }),
+  // Gesamtwertung: wer auf das richtige Ass gesetzt hat
+  ergebnis(s) {
+    if (s.phase !== "ende") return null;
+    const sieger = Object.entries(s.wetten).filter(([, w]) => w.f === s.sieger).map(([j]) => Number(j));
+    return sieger.length ? { nr: "1", sieger } : null;
+  },
   aktion(s, i, a) {
     if (a.typ === "wette" && s.phase === "wetten") s.wetten[i] = { f: a.f, n: Math.max(1, Math.min(10, Number(a.wert) || 1)) };
     if (a.typ === "los" && s.phase === "wetten" && Object.keys(s.wetten).length) {
@@ -212,7 +218,7 @@ const pferderennen = {
         <label>Wie viele Schlucke setzt du?<input id="einsatz" type="number" min="1" max="10" value="${meine ? meine.n : 2}"></label>
         <div class="raster">${["♠", "♥", "♦", "♣"].map((f) => knopf(f, { typ: "wette", f }, `gross ${meine && meine.f === f ? "gewaehlt" : ""} ${f === "♥" || f === "♦" ? "rotk" : ""}`, `data-feld="einsatz"`)).join("")}</div>
         <div class="punkte">${wetten}</div>
-        ${ich === 0 ? knopf("Rennen starten", { typ: "los" }, "gross") : "<p class='leise mitte'>Der Gastgeber startet das Rennen.</p>"}`;
+        ${ich === 0 ? knopf("Rennen starten", { typ: "los" }, "gross") : `<p class='leise mitte'>${esc(namen[0])} startet das Rennen.</p>`}`;
     }
     const letzte = s.letzte ? `<p class="mitte">Gezogen: <b class="${K.rot(s.letzte) ? "rotk" : ""}">${K.zeige(s.letzte)}</b>${s.letzte.rueck ? ` – Seitenkarte: ${s.letzte.rueck} muss einen Schritt zurück!` : ""}</p>` : "";
     if (s.phase === "ende") {

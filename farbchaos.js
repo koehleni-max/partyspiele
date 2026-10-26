@@ -58,6 +58,7 @@ export const farbchaos = {
     s.ablage.push(erste); s.farbe = erste.f;
     return s;
   },
+  ergebnis: (s) => (s.sieger !== null && s.sieger !== undefined ? { nr: "1", sieger: [s.sieger] } : null),
 
   // Computer-Mitspieler: spielt nach einfachen, menschlichen Faustregeln
   botPause: () => 1500,

@@ -97,6 +97,12 @@ function morgen(s) {
 export const werwolf = {
   id: "werwolf", name: "Werwolf", emoji: "🐺", kurz: "Das Dorf gegen die Wölfe – automatischer Spielleiter, 5 bis 20 Spieler", farben: ["#2c3e50", "#8e44ad"],
   start: (namen) => ({ phase: "einstellen", rollenZahl: vorschlag(namen.length), stimme: true }),
+  // Gesamtwertung: die ganze Siegerseite bekommt Punkte, auch wer unterwegs gestorben ist
+  ergebnis(s) {
+    if (!s.gewinner || !s.rolle) return null;
+    if (s.gewinner === "liebe") return { nr: "1", sieger: [...(s.liebe || [])] };
+    return { nr: "1", sieger: s.rolle.map((r, j) => (ROLLEN[r].team === s.gewinner ? j : -1)).filter((j) => j >= 0) };
+  },
   aktion(s, i, a, namen) {
     const n = namen.length;
     if (a.typ === "neu") return Object.assign(s, werwolf.start(namen));
