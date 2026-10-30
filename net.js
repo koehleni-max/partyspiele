@@ -100,11 +100,26 @@ export class Verbindung {
     if (this.verbunden) this.anwesenheitSetzen();
   }
   anwesenheitSetzen() {
-    const { id, name } = this.anwesenheit;
-    const mein = this.r(`da/${id}`);
-    this.d.onDisconnect(mein).remove()
-      .then(() => this.d.set(mein, { name, t: this.d.serverTimestamp() }))
-      .catch((e) => console.warn("Anwesenheit:", e && e.code));
+    const eintragen = (id, name) => {
+      const mein = this.r(`da/${id}`);
+      this.d.onDisconnect(mein).remove()
+        .then(() => this.d.set(mein, { name, t: this.d.serverTimestamp() }))
+        .catch((e) => console.warn("Anwesenheit:", e && e.code));
+    };
+    if (this.anwesenheit) eintragen(this.anwesenheit.id, this.anwesenheit.name);
+    Object.entries(this.weitere || {}).forEach(([id, name]) => eintragen(id, name));
+  }
+  // Controller am selben Geraet (controller.js): eigene Spieler, gleiche Anwesenheit wie das Geraet selbst
+  anwesendDazu(id, name) {
+    this.weitere = { ...(this.weitere || {}), [id]: name };
+    if (this.verbunden && this.d) {
+      const r = this.r(`da/${id}`);
+      this.d.onDisconnect(r).remove().then(() => this.d.set(r, { name, t: this.d.serverTimestamp() })).catch((e) => console.warn("Anwesenheit:", e && e.code));
+    }
+  }
+  anwesendWeg(id) {
+    if (this.weitere) delete this.weitere[id];
+    if (this.d) this.d.remove(this.r(`da/${id}`)).catch(() => {});
   }
 
   aktionSenden(von, a) {
@@ -127,6 +142,8 @@ export class Verbindung {
     this.abmelden.forEach((f) => { try { f(); } catch (e) { /* schon weg */ } });
     this.abmelden = [];
     if (this.anwesenheit) { const mein = this.r(`da/${this.anwesenheit.id}`); this.d.remove(mein).catch(() => {}); this.anwesenheit = null; }
+    Object.keys(this.weitere || {}).forEach((id) => this.d.remove(this.r(`da/${id}`)).catch(() => {}));
+    this.weitere = {};
   }
 }
 

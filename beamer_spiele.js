@@ -12,13 +12,13 @@ import { SPIELE, pferdeAbrechnung, ZIEL } from "./spiele.js";
 import * as P from "./partien.js";
 import * as T from "./texte.js";
 import { FIGUREN } from "./inhalte2.js";
-import { werbinich } from "./elternspiele.js";
+import { werbinich, QUIZ_ALLE, QUIZ_ZEIT } from "./elternspiele.js";
 import * as WW from "./werwolf.js";
 import { esc, schlucke, ohneAlkohol } from "./hilfe.js";
 
-export const BEAMER_SPIELE = ["werwolf", "werbinich", "malen", "reaktion", "pferde", "schaetzen"];
+export const BEAMER_SPIELE = ["werwolf", "werbinich", "malen", "reaktion", "pferde", "schaetzen", "quiz"];
 // so lange bleibt ein fertiges Ergebnis (Spielende bzw. Rundenergebnis ohne neue Runde) an der Wand
-export const ENDE_ZEIT = { werwolf: 30000, werbinich: 30000, pferde: 30000, reaktion: 120000, schaetzen: 120000, malen: 120000 };
+export const ENDE_ZEIT = { werwolf: 30000, werbinich: 30000, pferde: 30000, reaktion: 120000, schaetzen: 120000, malen: 120000, quiz: 120000 };
 export const NACHLAUF = 10000;   // beendetes Spiel (Beenden-Knopf): Ergebnis noch so lange, dann Diashow
 export const REAKTION_PUFFER = 600;   // Beamer wird etwas NACH den Handys gruen - wer auf die Wand schaut, ist nie "zu frueh"
 const MED = { 1: "🥇", 2: "🥈", 3: "🥉" };
@@ -41,8 +41,8 @@ const AUSZUG = {
     return d;
   },
   werbinich(s) {
-    const alle = s.erraten.every((x) => x);
-    return { dran: s.dran, figur: FIGUREN[s.figur[s.dran]] || "", erraten: s.erraten.slice(), fragen: (s.fragen || []).slice(), seit: s.seit || 0,
+    const alle = s.erraten.every((x) => x) || !!s.beendet;
+    return { dran: s.dran, beendet: !!s.beendet && !s.erraten.every((x) => x), figur: FIGUREN[s.figur[s.dran]] || "", erraten: s.erraten.slice(), fragen: (s.fragen || []).slice(), seit: s.seit || 0,
       zeit: werbinich.zeit, alle, figuren: alle ? s.figur.map((f) => FIGUREN[f]) : null };
   },
   malen(s) {
@@ -65,6 +65,15 @@ const AUSZUG = {
     return { nr: s.nr, rest: (s.rest || []).length, frage, phase: s.phase, abgegeben: Object.keys(s.tipps).map(Number),
       tipps: auf ? s.tipps : null, loesung: auf ? loesung : null };
   },
+};
+
+AUSZUG.quiz = (s) => {
+  const q = QUIZ_ALLE[s.frage] || ["", "", "", "", ""];
+  const auf = s.phase === "aufloesung";
+  return { nr: s.nr, phase: s.phase, frage: q[0], antworten: s.reihe.map((k) => q[1 + k]), richtig: auf ? s.reihe.indexOf(0) : null,
+    seit: s.seit || 0, zeit: QUIZ_ZEIT, abgegeben: Object.keys(s.antworten || {}).map(Number), punkte: (s.punkte || []).slice(),
+    wahl: auf ? Object.fromEntries(Object.entries(s.antworten).map(([j, x]) => [j, s.reihe.indexOf(x.w)])) : null,
+    schnellste: auf ? (Object.entries(s.antworten).filter(([, x]) => x.w === 0).sort((x, y) => x[1].ms - y[1].ms)[0] || [null])[0] : null };
 };
 
 export function auszug(raum) {
@@ -94,6 +103,7 @@ export function fertig(id, d) {
   if (id === "reaktion") return d.phase !== "laeuft";
   if (id === "schaetzen") return d.phase === "aufloesung";
   if (id === "malen") return d.geloest !== null;
+  if (id === "quiz") return d.phase === "aufloesung";
   return true;
 }
 
@@ -145,6 +155,10 @@ export function vergleichen(id, alt, neu) {
     if (neu.rest !== null && alt.rest !== null && neu.rest < alt.rest) { t("karte"); t(neu.letzte && neu.letzte.rueck ? "aua" : "schritt"); }
     if (Object.keys(neu.wetten).length > Object.keys(alt.wetten).length) t("klick");
     if (neu.phase === "ende" && alt.phase !== "ende") { t("ziel"); t("sieg"); r.effekt = 180; }
+  } else if (id === "quiz") {
+    if (neu.nr !== alt.nr) t("dran");
+    else if (neu.abgegeben.length > alt.abgegeben.length) t("klick");
+    if (neu.phase === "aufloesung" && alt.phase !== "aufloesung") { t("tada"); r.effekt = 90; }
   } else if (id === "schaetzen") {
     if (neu.nr !== alt.nr || neu.rest !== alt.rest) t("dran");
     else if (neu.abgegeben.length > alt.abgegeben.length) t("klick");
@@ -156,6 +170,7 @@ export function musik(id, d) {
   if (!d) return null;
   if (id === "werwolf") return d.phase === "nacht" ? "nacht" : ["morgen", "tag", "hinrichtung"].includes(d.phase) && !d.gewinner ? "dorf" : null;
   if (id === "pferde") return d.phase === "rennen" ? "spannung" : null;
+  if (id === "quiz") return d.phase === "frage" ? "spannung" : null;
   return null;
 }
 
@@ -210,14 +225,16 @@ function htmlWerbinich(d, nm, sp) {
       <b>${esc(n)}</b><span>${d.erraten[j] ? `✅ ${platz(j)}` : "❓"}</span><small>${d.fragen[j] || 0} ${(d.fragen[j] || 0) === 1 ? "Zug" : "Züge"}</small></div>`).join("")}</div>`;
   if (d.alle) {
     const sieger = d.erraten.indexOf(1);
-    return `<div class="bsb">${kopf(sp, "alle haben sich erraten")}<div class="bs-sieg">🏆 ${esc(nm[sieger] || "")} war am schnellsten!</div>
+    const punkt = nm.filter((_, j) => d.erraten[j]).map(esc).join(", ");
+    return `<div class="bsb">${kopf(sp, d.beendet ? "Spiel beendet" : "alle haben sich erraten")}<div class="bs-sieg">🏆 ${esc(nm[sieger] || "")} war am schnellsten!</div>
+      <p class="bm-leise">Je einen Punkt: ${punkt}</p>
       <div class="bsb-alle">${nm.map((n, j) => `<div><b>${esc(n)}</b><span>${esc((d.figuren || [])[j] || "")}</span><em>${platz(j)}</em></div>`).join("")}</div></div>`;
   }
   const ende = d.seit + d.zeit * 1000;
   return `<div class="bsb">${kopf(sp, "Spieler mit dem Rücken zur Wand – die anderen sehen hin")}
       <p class="bm-zeile mitte"><b>${esc(nm[d.dran] || "")}</b> fragt: „Bin ich …?“ – nur Ja oder Nein</p>
       <div class="bsb-figur">${esc(d.figur)}</div>
-      <div class="bsb-uhr"><b data-bsek="${ende}">⏱️ ${d.zeit}</b></div>
+      <div class="bsb-uhr"><b data-bsek="${ende}">⏱️ ${mmss(d.zeit)}</b></div>
       ${d.erraten[d.dran] ? `<p class="bm-leise mitte">✅ ${esc(nm[d.dran])} hat sich schon erraten</p>` : ""}
       ${stand}</div>`;
 }
@@ -303,7 +320,25 @@ function htmlSchaetzen(d, nm, sp) {
       ${abst.length ? `<p class="bm-zeile mitte">${esc(nm[abst[abst.length - 1][0]])} trinkt 2 · ${esc(nm[abst[0][0]])} verteilt 2</p>` : ""}</div>`;
 }
 
-const HTML = { werwolf: htmlWerwolf, werbinich: htmlWerbinich, malen: htmlMalen, reaktion: htmlReaktion, pferde: htmlPferde, schaetzen: htmlSchaetzen };
+const BUCHST = ["A", "B", "C", "D"];
+function htmlQuiz(d, nm, sp) {
+  const auf = d.phase === "aufloesung";
+  const ende = d.seit + d.zeit * 1000;
+  const antw = d.antworten.map((a, k) => {
+    const wer = auf ? nm.filter((_, j) => d.wahl && d.wahl[j] === k).map(esc).join(", ") : "";
+    return `<div class="bsq-antwort ${auf ? (k === d.richtig ? "richtig" : "falsch") : ""}"><b>${BUCHST[k]}</b><span>${esc(a)}</span>${wer ? `<small>${wer}</small>` : ""}</div>`;
+  }).join("");
+  const stand = nm.map((n, j) => [n, d.punkte[j] || 0]).sort((x, y) => y[1] - x[1]);
+  return `<div class="bsq">${kopf(sp, auf ? "Auflösung" : "Antwort am Handy tippen")}
+    <div class="bsq-kopf"><span class="bm-leise">Frage ${d.nr + 1}</span>${auf ? "" : `<b class="bsq-uhr" data-bsek="${ende}" data-bende="⏰ Zeit um!">⏱️ ${d.zeit}</b>`}</div>
+    <div class="bsq-frage">${esc(d.frage)}</div>
+    <div class="bsq-raster">${antw}</div>
+    ${auf ? `<p class="bm-zeile mitte">${d.schnellste !== null && nm[d.schnellste] !== undefined ? `⚡ Am schnellsten richtig: ${esc(nm[d.schnellste])}` : "Diesmal hatte niemand recht."}</p>`
+      : `<div class="bm-pillen mitte">${nm.map((n, j) => `<span class="bm-pille ${d.abgegeben.includes(j) ? "da" : "leise"}">${d.abgegeben.includes(j) ? "✅" : "⏳"} ${esc(n)}</span>`).join("")}</div>`}
+    <p class="bm-leise mitte">🏅 ${stand.map(([n, x]) => `${esc(n)} ${x}`).join(" · ")}</p></div>`;
+}
+
+const HTML = { quiz: htmlQuiz, werwolf: htmlWerwolf, werbinich: htmlWerbinich, malen: htmlMalen, reaktion: htmlReaktion, pferde: htmlPferde, schaetzen: htmlSchaetzen };
 
 // raum (Beamer-Stand), p (Kurzfassung der Partie), d (Auszug), merk (was der Beamer sich je Partie merkt), vorbei = beendet
 export function html(raum, p, d, merk, vorbei = false) {
@@ -336,13 +371,16 @@ export function nach(el, p, d, lokal, beiGruen) {
   }
 }
 
+// Restzeit als m:ss (Wer bin ich laeuft seit 27.10. drei Minuten)
+const mmss = (sek) => `${Math.floor(sek / 60)}:${String(sek % 60).padStart(2, "0")}`;
+
 // Sekunden-Uhren (Wer bin ich): -> Klaenge (tick in den letzten 5 s, Gong bei 0)
 const gegongt = new Set();
 export function uhren(root, jetzt) {
   const toene = [];
   (root || document).querySelectorAll("[data-bsek]").forEach((el) => {
     const ende = Number(el.dataset.bsek), rest = Math.ceil((ende - jetzt) / 1000);
-    const t = rest > 0 ? `⏱️ ${rest}` : "⏰ Zeit um – der Nächste fragt!";
+    const t = rest > 0 ? `⏱️ ${mmss(rest)}` : (el.dataset.bende || "⏰ Zeit um – der Nächste fragt!");
     if (el.textContent === t) return;
     el.textContent = t;
     el.classList.toggle("knapp", rest <= 10);

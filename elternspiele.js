@@ -1,7 +1,7 @@
 // Gemeinschaftsspiele ohne Trinkzwang: Begriffe erklaeren, Pantomime, Wer bin ich, Spion, Stadt-Land-Fluss, Quiz-Duell.
 import { spiele as klang } from "./ton.js";
 import { esc, knopf, zufall, mischen, name } from "./hilfe.js";
-import { BEGRIFFE, PANTOMIME, FIGUREN, ORTE, SLF_KAT, QUIZ } from "./inhalte2.js";
+import { BEGRIFFE, PANTOMIME, FIGUREN, ORTE, SLF_KAT, QUIZ, QUIZ_HALLOWEEN } from "./inhalte2.js";
 
 const punkteTafel = (namen, punkte) => `<div class="tafel">${namen.map((nm, j) => `<div><span class="farbe f${j}"></span><b>${esc(nm)}</b><span>🏅 ${punkte[j] || 0}</span></div>`).join("")}</div>`;
 function stapelZiehen(s, liste) {
@@ -82,26 +82,30 @@ export const pantomime = erklaerSpiel("pantomime", "Pantomime", "🤹", "Vorspie
 // Zeit je Zug (zeit Sekunden ab seit, Uhr des Gastgebers) und wie viele Zuege jeder schon gebraucht hat (fragen).
 export const werbinich = {
   id: "werbinich", name: "Wer bin ich?", emoji: "🎭", kurz: "Alle sehen deine Figur – nur du nicht. Ja/Nein-Fragen stellen!", farben: ["#a29bfe", "#4834d4"],
-  zeit: 60,
+  zeit: 180, // Nico 27.10.2026: 3 Minuten je Zug
   start: (namen) => { const f = mischen(FIGUREN.map((_, i) => i)).slice(0, namen.length); return { figur: f, erraten: namen.map(() => 0), dran: 0, nr: 0, seit: Date.now(), fragen: namen.map(() => 0) }; },
-  // Gesamtwertung: wer sich zuerst erraten hat, sobald alle durch sind (wie die Anzeige "Sieger")
-  ergebnis: (s) => (s.erraten.every((x) => x) && s.erraten.includes(1) ? { nr: s.figur.join("-"), sieger: [s.erraten.indexOf(1)] } : null),
+  // Gesamtwertung (Nico 27.10.2026): JEDER, der seine Figur erraten hat, bekommt einen Punkt - gebucht, sobald alle
+  // durch sind oder jemand "Spiel beenden" drueckt (wer bis dahin nicht erraten hat, geht leer aus).
+  ergebnis: (s) => ((s.erraten.every((x) => x) || s.beendet) && s.erraten.some((x) => x)
+    ? { nr: s.figur.join("-"), sieger: s.erraten.map((x, j) => (x ? j : -1)).filter((j) => j >= 0) } : null),
   aktion(s, i, a, namen) {
     if (a.typ === "erraten" && !s.erraten[i]) { s.nr++; s.erraten[i] = s.nr; }
     if (a.typ === "naechster") {
       if (Array.isArray(s.fragen)) s.fragen[s.dran] = (s.fragen[s.dran] || 0) + 1;
       s.dran = (s.dran + 1) % namen.length; s.seit = Date.now();
     }
-    if (a.typ === "neu") Object.assign(s, werbinich.start(namen));
+    if (a.typ === "beenden" && s.erraten.some((x) => x)) s.beendet = true;
+    if (a.typ === "neu") { Object.assign(s, werbinich.start(namen)); s.beendet = false; }
   },
   render(s, ich, namen) {
-    const alle = s.erraten.every((x) => x);
+    const alle = s.erraten.every((x) => x) || s.beendet;
     return `<div class="frage">${name(namen, s.dran)} stellt eine Ja/Nein-Frage über sich</div>
       <div class="figurenliste">${namen.map((nm, j) => `<div class="figurkarte ${j === ich ? "ich" : ""} ${s.erraten[j] ? "geschafft" : ""}">
         <small>${esc(nm)}${j === ich ? " (du)" : ""}</small><b>${j === ich && !s.erraten[j] ? "❓ ??? ❓" : esc(FIGUREN[s.figur[j]])}</b>${s.erraten[j] ? `<em>#${s.erraten[j]} erraten</em>` : ""}</div>`).join("")}</div>
       ${!s.erraten[ich] ? knopf("🎉 Ich weiß, wer ich bin!", { typ: "erraten" }, "gross gruen") : ""}
       ${knopf("➜ Nächster fragt", { typ: "naechster" }, "zweit")}
-      ${alle ? `<div class="urteil">🏆 Alle erraten! Sieger: ${name(namen, s.erraten.indexOf(1))}</div>${knopf("Neue Figuren", { typ: "neu" }, "gross")}` : ""}
+      ${!alle && s.erraten.some((x) => x) ? knopf("🏁 Spiel beenden", { typ: "beenden" }, "zweit") : ""}
+      ${alle ? `<div class="urteil">🏆 ${s.erraten.every((x) => x) ? "Alle erraten!" : "Spiel beendet!"} Je einen Punkt: ${s.erraten.map((x, j) => (x ? name(namen, j) : "")).filter(Boolean).join(", ")}</div>${knopf("Neue Figuren", { typ: "neu" }, "gross")}` : ""}
       <p class="mitte leise klein">Tipp: Wer mit „Nein“ antwortet bekommt, ist der Nächste dran.</p>`;
   },
 };
@@ -212,9 +216,31 @@ export const slf = {
 };
 
 // ================================================================ Quiz-Duell
+// ================================================================ Quizshow (Huettenplan 17.3, ausgebaut 27.10.2026)
+// Alle antworten gleichzeitig am Handy, Frage + Countdown + Aufloesung gross am Beamer (beamer_spiele.js).
+// Fragen-Pakete: Allgemein, Halloween, Gemischt (Knopfreihe, gilt ab der naechsten Frage). Laeuft die Zeit ab,
+// meldet das jedes Handy ("zeit"); der Gastgeber loest dann auf (doppelte Meldungen werden ignoriert).
+export const QUIZ_ALLE = QUIZ.concat(QUIZ_HALLOWEEN);
+const PAKETE = {
+  allgemein: ["🧠 Allgemein", QUIZ.map((_, i) => i)],
+  halloween: ["🎃 Halloween", QUIZ_HALLOWEEN.map((_, i) => QUIZ.length + i)],
+  gemischt: ["🔀 Gemischt", QUIZ_ALLE.map((_, i) => i)],
+};
+export const QUIZ_ZEIT = 20;
+function quizZiehen(s) {
+  const pool = (PAKETE[s.paket] || PAKETE.allgemein)[1];
+  if (!s.rest || !s.rest.length || s.restPaket !== s.paket) { s.rest = mischen(pool.slice()); s.restPaket = s.paket; }
+  s.frage = s.rest.pop(); s.reihe = mischen([0, 1, 2, 3]); s.seit = Date.now(); s.antworten = {}; s.phase = "frage";
+}
+function quizAufloesen(s) {
+  s.phase = "aufloesung";
+  const richtige = Object.entries(s.antworten).filter(([, x]) => x.w === 0).sort((x, y) => x[1].ms - y[1].ms);
+  richtige.forEach(([j], p) => (s.punkte[j] += p === 0 ? 3 : 2));
+}
 export const quiz = {
-  id: "quiz", name: "Quiz-Duell", emoji: "🧠", kurz: "Alle antworten gleichzeitig – schnell und richtig gibt Punkte", farben: ["#0984e3", "#2d1e8a"],
-  start: (namen) => { const s = { nr: 0, punkte: namen.map(() => 0), antworten: {}, phase: "frage" }; s.frage = stapelZiehen(s, QUIZ); s.reihe = mischen([0, 1, 2, 3]); return s; },
+  id: "quiz", name: "Quizshow", emoji: "🧠", kurz: "Frage am Beamer, Antwort am Handy – schnell und richtig gibt Punkte", farben: ["#0984e3", "#2d1e8a"],
+  zeit: QUIZ_ZEIT,
+  start: (namen) => { const s = { nr: 0, punkte: namen.map(() => 0), paket: "allgemein" }; quizZiehen(s); return s; },
   botPause: () => 4500,
   // Gesamtwertung: je Frage, wer am schnellsten richtig lag
   ergebnis(s) {
@@ -230,17 +256,17 @@ export const quiz = {
   aktion(s, i, a, namen) {
     if (a.typ === "antwort" && s.phase === "frage" && s.antworten[i] === undefined) {
       s.antworten[i] = { w: a.w, ms: Number(a.ms) || 9999 };
-      if (Object.keys(s.antworten).length >= namen.length) {
-        s.phase = "aufloesung";
-        const richtige = Object.entries(s.antworten).filter(([, x]) => x.w === 0).sort((x, y) => x[1].ms - y[1].ms);
-        richtige.forEach(([j], p) => (s.punkte[j] += p === 0 ? 3 : 2));
-      }
+      if (Object.keys(s.antworten).length >= namen.length) quizAufloesen(s);
+    } else if (a.typ === "zeit" && s.phase === "frage" && a.nr === s.nr) {
+      quizAufloesen(s);
     } else if (a.typ === "weiter" && s.phase === "aufloesung") {
-      s.nr++; s.antworten = {}; s.phase = "frage"; s.frage = stapelZiehen(s, QUIZ); s.reihe = mischen([0, 1, 2, 3]);
+      s.nr++; quizZiehen(s);
+    } else if (a.typ === "paket" && PAKETE[a.paket]) {
+      s.paket = a.paket;
     }
   },
   render(s, ich, namen) {
-    const q = QUIZ[s.frage];
+    const q = QUIZ_ALLE[s.frage];
     const tafel = punkteTafel(namen, s.punkte);
     const knoepfe = s.reihe.map((k) => {
       let kl = "quizknopf";
@@ -249,15 +275,24 @@ export const quiz = {
       const wer = s.phase === "aufloesung" ? namen.map((n, j) => (s.antworten[j] && s.antworten[j].w === k ? `<i class="farbe f${j}"></i>` : "")).join("") : "";
       return `<button class="${kl}" ${s.phase === "frage" && s.antworten[ich] === undefined ? `data-quiz="${k}"` : ""}>${esc(q[1 + k])}<span>${wer}</span></button>`;
     }).join("");
+    const pakete = `<div class="quizpakete mitte">${Object.entries(PAKETE).map(([id, [txt]]) => knopf(txt, { typ: "paket", paket: id }, `klein ${s.paket === id ? "" : "zweit"}`)).join(" ")}</div>
+      <p class="mitte leise klein">Fragen-Paket gilt ab der nächsten Frage</p>`;
     return `${tafel}<div class="fragekarte" data-key="q${s.nr}" style="--k1:#0984e3;--k2:#2d1e8a"><span class="kat">Frage ${s.nr + 1}</span><div class="text" style="font-size:21px">${esc(q[0])}</div></div>
+      ${s.phase === "frage" ? `<div class="uhr mitte" data-uhr="quiz-${s.nr}-${s.seit}">⏱️ ${QUIZ_ZEIT}</div>` : ""}
       <div class="quizraster">${knoepfe}</div>
       ${s.phase === "aufloesung" ? `<i hidden data-key="qa${s.nr}" data-ton="${s.antworten[ich] && s.antworten[ich].w === 0 ? "richtig" : "falsch"}"></i>` : ""}
-      ${s.phase === "aufloesung" ? knopf("Nächste Frage ➜", { typ: "weiter" }, "gross") : `<p class="mitte leise">${Object.keys(s.antworten).length}/${namen.length} haben geantwortet</p>`}`;
+      ${s.phase === "aufloesung" ? knopf("Nächste Frage ➜", { typ: "weiter" }, "gross") : `<p class="mitte leise">${Object.keys(s.antworten).length}/${namen.length} haben geantwortet</p>`}
+      ${pakete}`;
   },
   nach(s, ich, senden) {
     window.__quiz = window.__quiz || {};
-    if (!window.__quiz[s.nr]) window.__quiz[s.nr] = performance.now();
-    document.querySelectorAll("[data-quiz]").forEach((b) => (b.onclick = () => senden({ typ: "antwort", w: Number(b.dataset.quiz), ms: Math.round(performance.now() - window.__quiz[s.nr]) })));
+    if (!window.__quiz[`${s.nr}-${s.seit}`]) window.__quiz[`${s.nr}-${s.seit}`] = performance.now();
+    document.querySelectorAll("[data-quiz]").forEach((b) => (b.onclick = () => senden({ typ: "antwort", w: Number(b.dataset.quiz), ms: Math.round(performance.now() - window.__quiz[`${s.nr}-${s.seit}`]) })));
+    if (s.phase === "frage") {
+      const rest = Math.max(1, Math.ceil(QUIZ_ZEIT - (Date.now() - (s.seit || Date.now())) / 1000));
+      // nur melden, solange die Frage noch auf dem Schirm steht (Raum beendet / Spiel verlassen -> still)
+      countdown(`quiz-${s.nr}-${s.seit}`, rest, () => { if (document.querySelector(`[data-uhr="quiz-${s.nr}-${s.seit}"]`)) senden({ typ: "zeit", nr: s.nr }); });
+    }
   },
 };
 

@@ -201,7 +201,9 @@ function miniRender(s, ich, namen) {
   }
   const fertig = m.werte[ich] !== undefined;
   let inhalt = "";
-  if (fertig) inhalt = `<p class="mitte">Erledigt – warte auf die anderen (${Object.keys(m.werte).length}/${namen.length})</p>`;
+  // ich < 0: dieses Geraet spielt nur mit Controllern mit (app.js zeigt deren Felder darunter, controller.js)
+  if (ich < 0) inhalt = `${m.art === "schaetzen" ? `<div class="frage">${esc(T.SCHAETZ[m.frage][0])}</div>` : ""}<p class="mitte">${Object.keys(m.werte).length}/${namen.length} fertig</p>`;
+  else if (fertig) inhalt = `<p class="mitte">Erledigt – warte auf die anderen (${Object.keys(m.werte).length}/${namen.length})</p>`;
   else if (m.art === "schaetzen") inhalt = `<div class="frage">${esc(T.SCHAETZ[m.frage][0])}</div><input id="minitipp" type="number" inputmode="decimal" placeholder="Schätzung">${knopf("Abgeben", { typ: "mini" }, "gross", `data-feld="minitipp"`)}`;
   else if (m.art === "farbwort") inhalt = `<div id="farbwort" class="farbwort">Tippe zum Starten</div><div class="raster farbknoepfe">${FW.map(([n, c]) => `<button class="gross" style="background:${c};box-shadow:0 5px 0 #0008" data-fw="${n}">${n}</button>`).join("")}</div>`;
   else if (m.art === "gedaechtnis") inhalt = `<div id="gedzahl" class="reaktion fertig" style="font-size:44px;letter-spacing:6px">${m.zahl}</div><input id="gedtipp" inputmode="numeric" placeholder="Zahl eintippen" style="display:none"><button id="gedknopf" class="gross" style="display:none">Abgeben</button>`;

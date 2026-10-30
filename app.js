@@ -15,6 +15,8 @@ import * as G from "./gluecksrad.js";
 import { browserAblage, schluesselFuer, abgleich } from "./tafel_ablage.js";
 import { knopf, ohneAlkohol } from "./hilfe.js";
 import * as BS from "./beamer_spiele.js";
+import * as C from "./controller.js";
+import * as T from "./texte.js";
 
 const app = document.getElementById("app");
 const BASIS = location.href.split("#")[0];
@@ -53,9 +55,13 @@ let eigeneMeldung = 0, ansageNr = 0, ansageTimer = null, ersterStand = true;
 let partieSig = "";
 let warVerbunden = false;
 let radGesehen = -1, radGemeldet = -1, jokerGesehen = -1, meineJoker = -1;   // Gluecksrad: was dieses Handy schon gemeldet hat
+// Controller an diesem Geraet (Nico 30.10.2026, controller.js): jeder ist ein eigener Spieler im Raum
+let pads = {};             // gamepad.index -> {id, name, nr, art}
+let sendeAls = null;       // waehrend ein Controller etwas ausloest: in seinem Namen senden
+let anzeige = { pid: null, id: null };   // fuer wen das angezeigte Spiel gerade gezeichnet ist
 
 // Fuer die automatischen Tests (liest nur)
-window.__partyspiele = { code: () => code, id: () => meineId, raum: () => raum, rolle: () => rolle, ansicht: () => ansicht };
+window.__partyspiele = { code: () => code, id: () => meineId, raum: () => raum, rolle: () => rolle, ansicht: () => ansicht, pads: () => pads };
 
 // ---------------------------------------------------------------- Hilfen
 async function teilen(text, titel) {
@@ -336,6 +342,7 @@ function gastgeberStart() {
   if (k) adminSelbst();
   verteilen(ALLES());
   eingangEinmal();
+  padsLaden();
 }
 
 // Beamer kommt oder geht: nur die Steuerung neu zeigen (Steuerseite oder Uebersicht), kein laufendes Spiel stoeren
@@ -653,12 +660,118 @@ async function gastBeitreten() {
   });
   netz.beiVerbindung = (an) => { netzAnzeige(an); if (an) halloSenden(); };
   netz.anwesend(meineId, meinName);
+  padsLaden(false);
   if (netz.verbunden) halloSenden();
 }
 function halloSenden() {
   if (!netz || rolle !== "gast") return;
   netz.aktionSenden(meineId, { typ: "_hallo", name: meinName }).catch((e) => console.warn(e));
+  Object.values(pads).forEach((pad) => netz.aktionSenden(pad.id, { typ: "_hallo", name: pad.name }).catch((e) => console.warn(e)));
   adminBeweisSenden();
+}
+
+// ---------------------------------------------------------------- Controller (Nico 30.10.2026)
+// Ein Controller am Geraet meldet sich mit dem ersten Tastendruck als eigener Spieler (_hallo mit eigener Kennung) und
+// schickt alles ueber dieselbe Schiene wie ein Handy. Er gilt als "lokal": Spiele, in denen er mitmacht, zeigt dieses Geraet.
+const padsKey = () => `pa_pads_${code}`;
+const padIds = () => Object.values(pads).map((x) => x.id);
+const istLokal = (id) => id === meineId || padIds().includes(id);
+const istPadId = (id) => /-pad\d+$/.test(String(id || ""));
+const padMarke = (id) => (istPadId(id) ? ` <span class="padmarke" title="spielt mit Controller">🎮</span>` : "");
+function padsLaden(hallo = true) {
+  try { pads = JSON.parse(sessionStorage.getItem(padsKey())) || {}; } catch (e) { pads = {}; }
+  Object.values(pads).forEach((pad) => { if (netz) netz.anwesendDazu(pad.id, pad.name); if (hallo && rolle === "gastgeber") ausfuehren(pad.id, { typ: "_hallo", name: pad.name }); });
+}
+function padsMerken() { if (code) sessionStorage.setItem(padsKey(), JSON.stringify(pads)); }
+function sendenAls(id, a) { sendeAls = id; try { senden(a); } finally { sendeAls = null; } }
+function padHallo(pad) {
+  if (netz) netz.anwesendDazu(pad.id, pad.name);
+  sendenAls(pad.id, { typ: "_hallo", name: pad.name });
+}
+function padNeu(g) {
+  const belegt = new Set(Object.values(pads).map((x) => x.nr));
+  let nr = 1; while (belegt.has(nr)) nr++;
+  const pad = { id: `${meineId}-pad${nr}`, name: `Controller ${nr}`, nr, art: C.art(g.id) };
+  pads[g.index] = pad;
+  padsMerken();
+  padHallo(pad);   // der Gastgeber meldet "… ist dabei" selbst (hallo)
+  if (rolle !== "gastgeber") { hinweis(`🎮 ${pad.name} spielt mit`); TON.spiele(A.klang(raum.look, "beitritt")); }
+  zeichnen();
+}
+function padTaste(g, t) {
+  if (!raum || status || !rolle) return;
+  const pad = pads[g.index];
+  if (!pad) { if (["a", "b", "x", "y", "start"].includes(t)) padNeu(g); return; }
+  const a = C.art(g.id);
+  if (pad.art !== a) { pad.art = a; padsMerken(); }
+  const p = ansicht && raum.partien[ansicht];
+  if (p && !tafelAuf && !(steuerAuf && zeigeSteuer())) {
+    const j = p.mit.indexOf(pad.id);
+    if (p.phase === "sammeln") {
+      // Mitmachen und Abmelden direkt mit der Taste; Start = "Los geht's" (wer leiten darf, entscheidet absender)
+      if (t === "a" && j < 0) { vibriere(25); TON.spiele("klick"); return sendenAls(pad.id, { typ: "_mit", p: p.pid }); }
+      if (t === "b" && j > 0) return sendenAls(pad.id, { typ: "_raus", p: p.pid });
+      if (t === "start") return sendenAls(pad.id, { typ: "_los", p: p.pid });
+      if (t === "a" && !String((C.fokus() || {}).dataset?.a || "").includes('"_los"')) return;
+    } else if (p.phase === "laeuft" && j >= 0 && C.miniTaste(pad.id, t)) return;
+  }
+  if (["hoch", "runter", "links", "rechts"].includes(t)) return C.fokusBewegen(t);
+  if (t === "a") {
+    const el = C.fokus();
+    if (!el) return;
+    sendeAls = pad.id;
+    try { el.click(); } finally { sendeAls = null; }
+  }
+}
+C.starten(padTaste);
+
+// fuer wen ein laufendes Spiel auf diesem Geraet gezeichnet wird: eigener Spieler, beim Partybrett wer von hier dran
+// ist; im Minispiel nur der eigene (Controller spielen in eigenen Feldern) - -1 = Geraet spielt nur mit Controllern mit
+function anzeigeIch(p, sp) {
+  const eigen = p.mit.indexOf(meineId);
+  if (p.phase !== "laeuft" || !padIds().length) return eigen;
+  const lokal = p.mit.map((id, j) => (istLokal(id) ? j : -1)).filter((j) => j >= 0);
+  if (!lokal.length) return -1;
+  if (sp.id === "brett" && p.s) {
+    if (p.s.phase === "mini" && !p.s.ende) return eigen;
+    if (lokal.includes(p.s.dran)) return p.s.dran;
+  }
+  return eigen >= 0 ? eigen : lokal[0];
+}
+function padMinis(p, sp, nm) {
+  if (sp.id !== "brett" || p.phase !== "laeuft" || !p.s || p.s.phase !== "mini" || !p.s.mini || p.s.mini.fertig) { C.miniAus(); return ""; }
+  const hier = Object.values(pads).map((pad) => ({ pad, j: p.mit.indexOf(pad.id) })).filter((x) => x.j >= 0);
+  const m = p.s.mini;
+  return C.miniHTML(m, hier, m.art === "schaetzen" ? T.SCHAETZ[m.frage] : null, (id, wert) => sendenAls(id, { typ: "mini", wert, p: p.pid }));
+}
+// Leiste unter dem Spiel: welche Controller hier dabei sind und was ihre Tasten gerade tun
+function padLeiste(p, sp) {
+  const liste = Object.values(pads);
+  if (!liste.length) return "";
+  const arten = new Set(liste.map((x) => x.art));
+  const ar = arten.size === 1 ? [...arten][0] : "beide";
+  let text;
+  if (p.phase === "sammeln") text = `${C.taste(ar, "a")} mitmachen · ${C.taste(ar, "b")} doch nicht · ${C.taste(ar, "start")} los geht's`;
+  else if (sp.id === "brett" && p.s && p.s.phase === "mini" && p.s.mini && !p.s.mini.fertig) text = "Minispiel: jeder Controller spielt in seinem Feld";
+  else {
+    text = `${C.taste(ar, "kreuz")} Knopf wählen · ${C.taste(ar, "a")} drücken`;
+    // Partybrett: deutlich sagen, welcher Controller gerade dran ist
+    const dranPad = sp.id === "brett" && p.s && !p.s.ende && p.s.phase !== "mini" && liste.find((x) => x.id === p.mit[p.s.dran]);
+    if (dranPad) text = `<b class="paddran">🎮 ${esc(dranPad.name)} ist dran</b> · ${C.taste(dranPad.art, "a")} drücken · ${C.taste(dranPad.art, "kreuz")} wählen`;
+  }
+  const wer = liste.map((pad) => { const j = p.mit.indexOf(pad.id); return `<span class="pille ${j >= 0 ? "" : "aus"}">${j >= 0 ? `<span class="farbe f${j % 20}"></span>` : ""}🎮 ${esc(pad.name)}${j >= 0 ? "" : " · nicht dabei"}</span>`; }).join("");
+  return `<div class="padleiste"><div class="padleiste-wer">${wer}</div><small>${text}</small></div>`;
+}
+// Karte in der Uebersicht: Controller dieses Geraets, Namen aendern, entfernen
+function padKarte() {
+  const liste = Object.entries(pads);
+  if (!liste.length) return C.moeglich() && window.innerWidth >= 900 ? `<p class="leise klein mitte padhinweis">🎮 Controller am Gerät? Einfach eine Taste drücken – schon spielt er mit.</p>` : "";
+  return `<div class="karte padkarte"><h2>🎮 Controller an diesem Gerät</h2>
+      ${liste.map(([k, pad]) => `<div class="padzeile"><span class="padzeile-name">🎮 <b>${esc(pad.name)}</b></span>
+        <input id="rf-padname-${pad.nr}" maxlength="${NAME_MAX}" placeholder="Neuer Name" autocomplete="off">
+        <button class="klein2" data-padname="${esc(k)}">Name</button><button class="klein2" data-padweg="${esc(k)}" aria-label="Controller entfernen">✕</button></div>`).join("")}
+      <p class="leise klein">Neuer Controller: eine Taste drücken. ${C.taste("beide", "kreuz")} wählt einen Knopf, ${C.taste("beide", "a")} drückt ihn, ${C.taste("beide", "start")} startet ein Spiel.</p>
+    </div>`;
 }
 const gastgeberDa = () => !!(raum && (rolle === "gastgeber" || anwesend[raum.gastgeber]));
 
@@ -700,7 +813,7 @@ function ansichtPruefen() {
   if (ansicht && !raum.partien[ansicht]) { ansicht = null; hinweis("Das Spiel ist beendet"); }
   const m = raum.meldung;
   // wer ein Spiel startet, sieht es sofort
-  if (m && m.von === meineId && m.nr > eigeneMeldung) {
+  if (m && istLokal(m.von) && m.nr > eigeneMeldung) {
     eigeneMeldung = m.nr;
     if (raum.partien[m.pid]) { ansicht = m.pid; tafelAuf = false; steuerAuf = false; window.scrollTo(0, 0); }
   }
@@ -708,7 +821,7 @@ function ansichtPruefen() {
   Object.values(raum.partien).forEach((p) => {
     const alt = phasen[p.pid];
     phasen[p.pid] = p.phase;
-    if (alt !== "sammeln" || p.phase !== "laeuft" || !p.mit.includes(meineId)) return;
+    if (alt !== "sammeln" || p.phase !== "laeuft" || !p.mit.some(istLokal)) return;
     if (!ansicht && !tafelAuf && !steuerAuf) { ansicht = p.pid; window.scrollTo(0, 0); }
     else if (ansicht !== p.pid) losAnsage(p);
     TON.spiele(A.klang(raum.look, "los"));
@@ -798,8 +911,8 @@ function ansageZeigen() {
   const m = raum && raum.meldung;
   const p = m && raum.partien[m.pid];
   // "Spiel fuer alle" (Spielleitung): wer verbunden war, ist schon dabei - nur Bescheid geben
-  const alle = m && p && m.alle && m.nr > ansageNr && m.von !== meineId && p.mit.includes(meineId) && p.phase === "sammeln";
-  const zeigen = m && p && m.nr > ansageNr && m.von !== meineId && !p.mit.includes(meineId) && !p.wartend.includes(meineId)
+  const alle = m && p && m.alle && m.nr > ansageNr && !istLokal(m.von) && p.mit.includes(meineId) && p.phase === "sammeln";
+  const zeigen = m && p && m.nr > ansageNr && !istLokal(m.von) && !p.mit.includes(meineId) && !p.wartend.includes(meineId)
     && (p.phase === "sammeln" || P.mittendrin(p.spiel));
   // Gluecksrad zuerst, solange es dreht oder jemand ueber seinen Joker entscheidet; danach hat ein neues Spiel Vorrang
   if (radAnsage(!!(alle || zeigen))) return;
@@ -861,8 +974,25 @@ function eingangEinmal() {
 export function senden(a) {
   if (!raum || !a) return;
   if (!RAUM_TYPEN.has(a.typ) && a.p == null && ansicht) a = { ...a, p: ansicht };
-  if (rolle === "gastgeber") return ausfuehren(meineId, a);
-  if (netz) netz.aktionSenden(meineId, a).catch((e) => { console.warn(e); hinweis("Nicht gesendet – keine Verbindung?"); });
+  const von = absender(a);
+  if (rolle === "gastgeber") return ausfuehren(von, a);
+  if (netz) netz.aktionSenden(von, a).catch((e) => { console.warn(e); hinweis("Nicht gesendet – keine Verbindung?"); });
+}
+// In wessen Namen eine Aktion geht: der Controller, der sie ausloest; Spielzuege per Touch fuer den Spieler, fuer den
+// das Spiel gerade gezeichnet ist; Leiten (Los, Beenden ...) darf, wer von diesem Geraet aus leiten darf.
+const LEITER_TYPEN = new Set(["_los", "_zurueck", "_neuauf", "_botneu", "_botweg"]);
+function absender(a) {
+  const eigen = sendeAls || meineId;
+  if (RAUM_TYPEN.has(a.typ) || a.p == null || !padIds().length) return eigen;
+  const p = raum.partien[a.p];
+  if (!p) return eigen;
+  if (LEITER_TYPEN.has(a.typ)) {
+    const darf = (id) => P.darfLeiten(p, id, K.istAdmin(raum, id));
+    return darf(eigen) ? eigen : [meineId, ...padIds()].find(darf) || eigen;
+  }
+  if (a.typ.startsWith("_")) return eigen;
+  if (sendeAls && p.mit.includes(sendeAls)) return sendeAls;
+  return anzeige.pid === p.pid && anzeige.id && p.mit.includes(anzeige.id) ? anzeige.id : eigen;
 }
 const sendenFuer = (pid) => (a) => senden({ ...a, p: pid });
 
@@ -878,7 +1008,7 @@ function schilder(name, id) {
   return `${K.istTestkonto(raum, name) ? `<span class="testschild" title="Testkonto: zählt nicht in die Wertung">TEST</span>` : ""}${K.istAdmin(raum, id) ? `<span class="adminschild" title="Spielleitung">🛠️</span>` : ""}`;
 }
 function pille(sp) {
-  return `<span class="pille ${sp.online ? "" : "aus"}"><span class="farbe f${sp.platz % 20}"></span>${esc(sp.name)}${schilder(sp.name, sp.id)}${sp.id === meineId ? " (du)" : ""}</span>`;
+  return `<span class="pille ${sp.online ? "" : "aus"}"><span class="farbe f${sp.platz % 20}"></span>${esc(sp.name)}${schilder(sp.name, sp.id)}${padMarke(sp.id)}${sp.id === meineId ? " (du)" : ""}</span>`;
 }
 
 function tafelMomente() {
@@ -943,7 +1073,8 @@ function zeichnen() {
   else if (ansicht && raum.partien[ansicht]) {
     const p = raum.partien[ansicht];
     const sp = spiel(p.spiel);
-    const ich = p.mit.indexOf(meineId);
+    const ich = anzeigeIch(p, sp);
+    anzeige = { pid: p.pid, id: ich >= 0 ? p.mit[ich] : null };
     app.innerHTML = partieBild(p, sp, ich);
     partieSig = sigFuer(p);
     if (p.phase === "laeuft" && ich >= 0) {
@@ -979,6 +1110,7 @@ function zeichnen() {
   });
   if (gesehen.size > 3000) gesehen.clear();
   if (fokus && document.getElementById(fokus) && document.getElementById(fokus).tagName === "INPUT") document.getElementById(fokus).focus();
+  if (padIds().length) C.fokusWiederherstellen();
   radDrehen();
 }
 
@@ -1058,6 +1190,7 @@ function raumBild() {
       <h2>👥 Im Raum</h2>
       <div class="leute">${raum.spieler.map(pille).join("")}</div>
     </div>
+    ${padKarte()}
     ${zeigeSteuer() ? steuerKarte() : binAdmin() ? "" : codeKarte()}
     <p class="leise klein mitte">Trinkt verantwortungsvoll – Wasser zählt auch als Schluck. 💧</p>`;
 }
@@ -1089,7 +1222,7 @@ function glueckKarte() {
 function partieKarte(p) {
   const sp = spiel(p.spiel);
   if (!sp) return "";
-  const dabei = p.mit.includes(meineId), wartet = p.wartend.includes(meineId);
+  const dabei = p.mit.some(istLokal), wartet = p.wartend.includes(meineId);
   const nm = P.namen(raum, p);
   const mitten = P.mittendrin(p.spiel);
   const zustand = p.phase === "sammeln" ? "sammelt Mitspieler" : mitten ? "läuft · Einsteigen geht" : "läuft · Einstieg in der nächsten Runde";
@@ -1109,13 +1242,13 @@ function partieKarte(p) {
 
 function partieBild(p, sp, ich) {
   const nm = P.namen(raum, p);
-  const leitet = P.darfLeiten(p, meineId, zeigeSteuer());
+  const leitet = P.darfLeiten(p, meineId, zeigeSteuer()) || padIds().includes(P.leiter(p));
   const offen = offenFuerMich();
   let inhalt;
   if (p.phase === "sammeln") inhalt = sammelBild(p, sp, nm, ich, leitet);
-  else if (ich < 0) inhalt = zuschauBild(p, sp, nm);
+  else if (ich < 0 && !p.mit.some(istLokal)) inhalt = zuschauBild(p, sp, nm);
   else {
-    try { inhalt = sp.render(p.s, ich, nm, raum); if (raum.ohneAlkohol) inhalt = ohneAlkohol(inhalt); }
+    try { inhalt = sp.render(p.s, ich, nm, raum) + padMinis(p, sp, nm); if (raum.ohneAlkohol) inhalt = ohneAlkohol(inhalt); }
     catch (e) { console.error(e); inhalt = `<p class="fehler">Anzeigefehler: ${esc(e.message)}</p>`; }
     if (leitet && p.wartend.length) inhalt = `<div class="hinweisbox vorgemerkt">📌 ${p.wartend.length === 1 ? "1 wartet" : `${p.wartend.length} warten`} auf die nächste Runde: ${p.wartend.map((id) => esc(P.nameVon(raum, p, id))).join(", ")}
       ${knopf("🔄 Neue Runde mit allen", { typ: "_neuauf" }, "gelb")}</div>${inhalt}`;
@@ -1126,11 +1259,12 @@ function partieBild(p, sp, ich) {
       <button class="klein2" data-ansicht="">‹ Übersicht</button>
       ${leitet ? `<button class="klein2" data-a='{"typ":"_zurueck"}'>⏹️ Beenden</button>` : ""}</span></div>
     <div class="spielflaeche">${inhalt}</div>
-    <div class="fuss">${p.mit.map((id, i) => { const s = raum.spieler.find((x) => x.id === id); return `<span class="pille ${!s || s.online ? "" : "aus"}"><span class="farbe f${farbeVon(p, id)}"></span>${esc(nm[i])}${P.istBot(id) ? "" : schilder(nm[i], id)}${i === ich ? " (du)" : ""}</span>`; }).join("")}</div>`;
+    ${padLeiste(p, sp)}
+    <div class="fuss">${p.mit.map((id, i) => { const s = raum.spieler.find((x) => x.id === id); return `<span class="pille ${!s || s.online ? "" : "aus"}"><span class="farbe f${farbeVon(p, id)}"></span>${esc(nm[i])}${P.istBot(id) ? "" : schilder(nm[i], id)}${padMarke(id)}${id === meineId ? " (du)" : ""}</span>`; }).join("")}</div>`;
 }
 
 function sammelBild(p, sp, nm, ich, leitet) {
-  const liste = p.mit.map((id, j) => `<li class="sp an ${P.istBot(id) ? "bot" : ""}"><span class="farbe f${farbeVon(p, id)}"></span>${esc(nm[j])}${P.istBot(id) ? "" : schilder(nm[j], id)}
+  const liste = p.mit.map((id, j) => `<li class="sp an ${P.istBot(id) ? "bot" : ""}"><span class="farbe f${farbeVon(p, id)}"></span>${esc(nm[j])}${P.istBot(id) ? "" : schilder(nm[j], id)}${padMarke(id)}
       ${j === 0 ? ` <span class="leise">(startet)</span>` : ""}${id === meineId ? ` <span class="leise">(du)</span>` : ""}
       ${P.istBot(id) && leitet ? `<span class="rechts">${knopf("✕", { typ: "_botweg", id }, "klein2")}</span>` : ""}</li>`).join("");
   return `<div class="frage">Wer macht mit?</div>
@@ -1368,8 +1502,26 @@ document.addEventListener("click", async (ev) => {
     zeichnen(); window.scrollTo(0, 0);
     return;
   }
-  const el = ev.target.closest("[data-anlass],[data-zurueck],#beitreten,#weitermachen,[data-ansicht],[data-a],[data-teilen],[data-ansage-mit],[data-ansage-weg],[data-steuern],[data-code],[data-raum-neu],[data-uebernehmen],[data-ende-frage],[data-neu-laden],[data-steuer-auf],[data-steuer-zu],[data-ohne-code],[data-rad-hin]");
+  const el = ev.target.closest("[data-anlass],[data-zurueck],#beitreten,#weitermachen,[data-ansicht],[data-a],[data-teilen],[data-ansage-mit],[data-ansage-weg],[data-steuern],[data-code],[data-raum-neu],[data-uebernehmen],[data-ende-frage],[data-neu-laden],[data-steuer-auf],[data-steuer-zu],[data-ohne-code],[data-rad-hin],[data-padname],[data-padweg]");
   if (!el) return;
+  // Controller umbenennen oder entfernen (nur dieses Geraet; der Spieler bleibt im Raum, wie ein Handy, das geht)
+  if (el.dataset.padname !== undefined || el.dataset.padweg !== undefined) {
+    const k = el.dataset.padname ?? el.dataset.padweg, pad = pads[k];
+    if (!pad) return;
+    if (el.dataset.padweg !== undefined) {
+      delete pads[k]; padsMerken();
+      if (netz) netz.anwesendWeg(pad.id);
+      hinweis(`🎮 ${pad.name} entfernt`);
+      return zeichnen();
+    }
+    const f = document.getElementById(`rf-padname-${pad.nr}`);
+    const n = f ? f.value.replace(/\s+/g, " ").trim().slice(0, NAME_MAX) : "";
+    if (!n) { hinweis("Bitte einen Namen eintippen"); return; }
+    if (f) f.value = "";
+    pad.name = n; padsMerken();
+    padHallo(pad);
+    return;
+  }
   if (el.dataset.steuerAuf !== undefined || el.dataset.steuerZu !== undefined) {
     steuerAuf = el.dataset.steuerAuf !== undefined; tafelAuf = false;
     if (steuerAuf) { ansicht = null; ansichtMerken(); }

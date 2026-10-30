@@ -776,3 +776,52 @@ body.beamer[data-look="halloween"] .bsp-spur { background: linear-gradient(180de
 .bss-wer .bm-pille.da { background: var(--gruen); color: #fff; }
 .bss-rang { max-width: 30em; }
 .bss-ab { flex: none; min-width: 3.6em; text-align: right; font-size: .7em; font-weight: 800; color: var(--leise); }
+
+/* Quizshow am Beamer (27.10.2026) */
+.bsq-kopf { display: flex; justify-content: space-between; align-items: center; margin: .2em 0 .4em; }
+.bsq-uhr { font-size: 2.2em; }
+.bsq-uhr.knapp { color: #ff6b6b; }
+.bsq-frage { font-size: 2.6em; font-weight: 800; line-height: 1.2; text-align: center; margin: .3em 0 .8em; }
+.bsq-raster { display: grid; grid-template-columns: 1fr 1fr; gap: .6em; }
+.bsq-antwort { display: flex; flex-wrap: wrap; align-items: center; gap: .5em; padding: .6em .8em; border-radius: 14px; background: rgba(255,255,255,.08); font-size: 1.6em; }
+.bsq-antwort b { display: inline-grid; place-items: center; width: 1.6em; height: 1.6em; border-radius: 50%; background: rgba(255,255,255,.18); }
+.bsq-antwort small { flex-basis: 100%; font-size: .55em; opacity: .85; }
+.bsq-antwort.richtig { background: #1e8e5a; }
+.bsq-antwort.falsch { opacity: .45; }
+.bsq .bm-pillen { margin-top: .9em; }
+.quizpakete { display: flex; gap: 8px; justify-content: center; margin-top: 14px; }
+.quizpakete button { flex: 1 1 0; min-width: 0; width: auto; margin: 0; padding: 10px 6px; font-size: 14px; }
+
+/* ---- Controller (controller.js, Nico 30.10.2026) */
+.pad-fokus { outline: 4px solid var(--gelb) !important; outline-offset: 3px; box-shadow: 0 0 0 7px #ffc80055 !important; }
+kbd.taste { display: inline-flex; align-items: center; justify-content: center; min-width: 1.7em; height: 1.7em; padding: 0 .35em; border-radius: 99px;
+  font: 800 .85em/1 system-ui, "Segoe UI Symbol", sans-serif; background: #2e3150; color: #fff; border: 2px solid #ffffff55; vertical-align: middle; white-space: nowrap; }
+kbd.taste-a { background: #16a34a; } kbd.taste-b { background: #e11d48; } kbd.taste-x { background: #2563eb; } kbd.taste-y { background: #ca8a04; }
+kbd.taste.ps { background: #2e3150; }
+kbd.taste-start, kbd.taste-select, kbd.taste-kreuz { background: #3b3f63; border-radius: 8px; }
+.padmarke { font-size: .9em; }
+.padleiste { margin-top: 12px; padding: 10px 12px; border: 2px dashed var(--rand); border-radius: 16px; text-align: center; }
+.padleiste-wer { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 6px; }
+.padleiste small { display: block; line-height: 1.9; overflow-wrap: anywhere; }
+.padminis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px; margin: 12px 0; }
+.padbox { background: var(--flaeche2); border: 2px solid var(--rand); border-radius: 18px; padding: 10px; text-align: center; min-width: 0; }
+.padbox small { display: block; margin-top: 6px; line-height: 1.8; overflow-wrap: anywhere; }
+.padkopf { display: flex; align-items: center; gap: 6px; justify-content: center; margin-bottom: 8px; min-width: 0; }
+.padkopf b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.padflaeche { height: 120px; border-radius: 16px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 26px; font-weight: 900; }
+.padflaeche.rot { background: radial-gradient(circle, #b91c1c, #7f1d1d); } .padflaeche.gruen { background: radial-gradient(circle, #4ade80, #15803d); }
+.padwort { font-size: 34px; font-weight: 900; padding: 18px 6px; background: #f5f3ff; color: #222; border-radius: 14px; overflow-wrap: anywhere; }
+.padwort.padzahl { letter-spacing: 4px; font-size: 30px; }
+.padfarben { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+.padfarbe { border-radius: 10px; padding: 6px 4px; font-weight: 800; font-size: 14px; color: #fff; display: flex; gap: 6px; align-items: center; justify-content: center; }
+.padfarbe kbd.taste { background: #0006; }
+.padziffern { display: flex; justify-content: center; gap: 4px; flex-wrap: wrap; margin: 6px 0; }
+.padziffern span { min-width: 1.5em; padding: 6px 4px; border-radius: 10px; background: #0f1022; border: 2px solid var(--rand); font-size: 26px; font-weight: 900; }
+.padziffern span.an { border-color: var(--gelb); color: var(--gelb); }
+.padfrage { font-weight: 800; margin-bottom: 6px; overflow-wrap: anywhere; }
+.padfertig { padding: 30px 6px; font-size: 22px; font-weight: 900; color: var(--gruen); }
+.padkarte .padzeile { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0; }
+.padzeile-name { flex: 1 1 140px; min-width: 0; overflow-wrap: anywhere; }
+.padkarte .padzeile input { flex: 1 1 120px; min-width: 0; width: auto; margin: 0; }
+.padkarte .padzeile button.klein2 { margin-left: 0; }
+.padkarte p { line-height: 1.9; }

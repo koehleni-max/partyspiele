@@ -32,7 +32,7 @@ const EMOJI_ST = { pong: "🏓", punkte: "🎯", rennen: "🏁" };
 export const APP_WERTE = [
   ["werwolf", "Werwolf", "🐺", 5, "Siegerseite"], ["brett", "Partybrett", "🎲", 5, "je Sieg"], ["fiesbau", "Fiesbau", "🏗️", 4, "je Sieg"],
   ["farbchaos", "Farbchaos Extrem", "🌈", 3, "je Sieg"], ["f-wuerfel", "Würfelpoker", "🎲", 3, "je Sieg"], ["f-schiffe", "Schiffe versenken", "🚢", 3, "je Sieg"],
-  ["f-dame", "Dame", "⚫", 3, "je Sieg"], ["spion", "Der Spion", "🕵️", 3, "Siegerseite"], ["werbinich", "Wer bin ich?", "🎭", 2, "wer zuerst errät"],
+  ["f-dame", "Dame", "⚫", 3, "je Sieg"], ["spion", "Der Spion", "🕵️", 3, "Siegerseite"], ["werbinich", "Wer bin ich?", "🎭", 1, "jeder, der errät"],
   ["f-vier", "Vier in einer Reihe", "🔴", 2, "je Sieg"], ["slf", "Stadt-Land-Fluss", "✏️", 2, "je Runde"], ["begriffe", "Begriffe-Rallye", "🗣️", 2, "je Durchgang"],
   ["pantomime", "Pantomime", "🤹", 2, "je Durchgang"], ["f-ttt", "Tic-Tac-Toe", "❌", 1, "je Sieg"], ["quiz", "Quiz-Duell", "🧠", 1, "je Frage"],
   ["reaktion", "Blitzreaktion", "⚡", 1, "je Runde"], ["schaetzen", "Schätzmeister", "🎯", 1, "je Frage"], ["malen", "Malen & Raten", "🎨", 1, "Maler und Rater"],
