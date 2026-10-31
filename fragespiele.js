@@ -4,22 +4,36 @@ import { esc, knopf, zufall, mischen, name, schlucke } from "./hilfe.js";
 import { KATEGORIEN } from "./fragen.js";
 
 const katInfo = (id) => KATEGORIEN.find((k) => k.id === id);
+// vorgewaehlt: Klassiker und Party, im Halloween-Aussehen dazu die Halloween-Karten
+const startKats = (raum) => (raum && raum.look === "halloween" ? ["klassiker", "party", "halloween"] : ["klassiker", "party"]);
 
+// Pflicht-Karten, die ans Trinken gebunden sind (Exen, Schlucke, Shot ...): ohne Trinken (s.ohne) kommen sie nicht
+export const TRINKKARTE = /trink|getrunken|schluck|\bex(e|en)?\b|\bexe\b|shot/i;
+const trinkfrei = (s, feld, t) => !(s.ohne && feld === "pflicht" && TRINKKARTE.test(t));
 function pool(s, feld) {
   const liste = [];
-  for (const id of s.kats) for (const t of katInfo(id)[feld] || []) liste.push([id, t]);
+  for (const id of s.kats) (katInfo(id)[feld] || []).forEach((t, i) => { if (trinkfrei(s, feld, t)) liste.push([id, t, i]); });
   return liste;
 }
-function ziehen(s, feld) {
+// Ohne Wiederholung am ganzen Abend: der Raum merkt sich je Kategorie und Kartenart die gezogenen Nummern (stapel.js).
+// Ohne raum (alte Aufrufe, Tests): je Partie ueber s.gesehen.
+function ziehen(s, feld, raum) {
   s.gesehen = s.gesehen || {};
   const alle = pool(s, feld);
   if (!alle.length) return ["klassiker", "Keine Karten in diesen Kategorien – wählt weitere aus!"];
-  let frei = alle.filter(([k, t]) => !s.gesehen[t]);
-  if (!frei.length) { s.gesehen = {}; frei = alle; }
+  const schluessel = (k) => `${feld}.${k}`;
+  if (raum && (!raum.gezogen || typeof raum.gezogen !== "object")) raum.gezogen = {};
+  const schon = (k, i, t) => (raum ? (raum.gezogen[schluessel(k)] || []).includes(i) : !!s.gesehen[t]);
+  let frei = alle.filter(([k, t, i]) => !schon(k, i, t));
+  if (!frei.length) {
+    if (raum) s.kats.forEach((k) => { delete raum.gezogen[schluessel(k)]; }); else s.gesehen = {};
+    frei = alle;
+  }
   const w = frei[zufall(frei.length)];
-  s.gesehen[w[1]] = 1;
+  if (raum) raum.gezogen[schluessel(w[0])] = [...(raum.gezogen[schluessel(w[0])] || []), w[2]];
+  else s.gesehen[w[1]] = 1;
   s.zaehler = (s.zaehler || 0) + 1;
-  return w;
+  return [w[0], w[1]];
 }
 
 function katWahl(s, ich, namen, feld, ab18) {
@@ -60,13 +74,13 @@ const katKnopf = (ich) => (ich === 0 ? knopf("⚙️ Kategorien ändern", { typ:
 // ================================================================ Ich hab noch nie
 export const nochNie = {
   id: "nochnie", name: "Ich hab noch nie …", emoji: "🙈", kurz: "Wer es schon gemacht hat, trinkt", farben: ["#ff5fae", "#7b2ff7"],
-  start: () => ({ phase: "kats", kats: ["klassiker", "party"], hab: {} }),
+  start: (namen, raum) => ({ phase: "kats", kats: startKats(raum), hab: {} }),
   aktion(s, i, a, namen, raum) {
     const r = katAktion(s, i, a, raum.ab18);
-    if (r === "start") { s.karte = ziehen(s, "nochnie"); s.hab = {}; return; }
+    if (r === "start") { s.karte = ziehen(s, "nochnie", raum); s.hab = {}; return; }
     if (r) return;
     if (a.typ === "hab") s.hab[i] = !s.hab[i];
-    if (a.typ === "weiter") { s.hab = {}; s.karte = ziehen(s, "nochnie"); }
+    if (a.typ === "weiter") { s.hab = {}; s.karte = ziehen(s, "nochnie", raum); }
   },
   render(s, ich, namen, raum) {
     if (s.phase === "kats") return katWahl(s, ich, namen, "nochnie", raum.ab18);
@@ -81,13 +95,13 @@ export const nochNie = {
 // ================================================================ Wer wuerde eher
 export const werWuerde = {
   id: "werwuerde", name: "Wer würde eher …", emoji: "👉", kurz: "Alle zeigen auf jemanden – Mehrheit trinkt", farben: ["#1cb0f6", "#3b2fbf"],
-  start: () => ({ phase: "kats", kats: ["klassiker", "party"], stimmen: {} }),
+  start: (namen, raum) => ({ phase: "kats", kats: startKats(raum), stimmen: {} }),
   aktion(s, i, a, namen, raum) {
     const r = katAktion(s, i, a, raum.ab18);
-    if (r === "start") { s.karte = ziehen(s, "wer"); s.stimmen = {}; s.ergebnis = false; return; }
+    if (r === "start") { s.karte = ziehen(s, "wer", raum); s.stimmen = {}; s.ergebnis = false; return; }
     if (r) return;
     if (a.typ === "stimme" && !s.ergebnis) { s.stimmen[i] = a.ziel; if (Object.keys(s.stimmen).length >= namen.length) s.ergebnis = true; }
-    if (a.typ === "weiter") { s.stimmen = {}; s.ergebnis = false; s.karte = ziehen(s, "wer"); }
+    if (a.typ === "weiter") { s.stimmen = {}; s.ergebnis = false; s.karte = ziehen(s, "wer", raum); }
   },
   render(s, ich, namen, raum) {
     if (s.phase === "kats") return katWahl(s, ich, namen, "wer", raum.ab18);
@@ -107,12 +121,12 @@ export const werWuerde = {
 // ================================================================ Wahrheit oder Pflicht
 export const wop = {
   id: "wop", name: "Wahrheit oder Pflicht", emoji: "🎭", kurz: "Reihum – wer kneift, trinkt doppelt", farben: ["#ff4b4b", "#7a1fa2"],
-  start: () => ({ phase: "kats", kats: ["klassiker", "party"], dran: 0, karte: null, art: null }),
+  start: (namen, raum) => ({ phase: "kats", kats: startKats(raum), dran: 0, karte: null, art: null }),
   aktion(s, i, a, namen, raum) {
     const r = katAktion(s, i, a, raum.ab18);
     if (r === "start") { s.karte = null; return; }
     if (r) return;
-    if (a.typ === "wahl" && i === s.dran && !s.karte) { s.art = a.art; s.karte = ziehen(s, a.art === "w" ? "wahrheit" : "pflicht"); }
+    if (a.typ === "wahl" && i === s.dran && !s.karte) { s.art = a.art; s.karte = ziehen(s, a.art === "w" ? "wahrheit" : "pflicht", raum); }
     if (a.typ === "weiter") { s.dran = (s.dran + 1) % namen.length; s.karte = null; s.art = null; }
   },
   render(s, ich, namen, raum) {
@@ -129,13 +143,13 @@ export const wop = {
 // ================================================================ Lieber ... oder ...
 export const lieber = {
   id: "lieber", name: "Lieber … oder …?", emoji: "⚖️", kurz: "Alle wählen – die Minderheit trinkt", farben: ["#ff9600", "#c2185b"],
-  start: () => ({ phase: "kats", kats: ["klassiker", "party"], stimmen: {} }),
+  start: (namen, raum) => ({ phase: "kats", kats: startKats(raum), stimmen: {} }),
   aktion(s, i, a, namen, raum) {
     const r = katAktion(s, i, a, raum.ab18);
-    if (r === "start") { s.karte = ziehen(s, "lieber"); s.stimmen = {}; return; }
+    if (r === "start") { s.karte = ziehen(s, "lieber", raum); s.stimmen = {}; return; }
     if (r) return;
     if (a.typ === "seite" && s.stimmen[i] === undefined) s.stimmen[i] = a.s;
-    if (a.typ === "weiter") { s.karte = ziehen(s, "lieber"); s.stimmen = {}; }
+    if (a.typ === "weiter") { s.karte = ziehen(s, "lieber", raum); s.stimmen = {}; }
   },
   render(s, ich, namen, raum) {
     if (s.phase === "kats") return katWahl(s, ich, namen, "lieber", raum.ab18);
@@ -162,14 +176,14 @@ export const lieber = {
 // ================================================================ Paranoia
 export const paranoia = {
   id: "paranoia", name: "Paranoia", emoji: "🤫", kurz: "Nur einer sieht die Frage – und nennt laut einen Namen", farben: ["#2b2d42", "#6d5dfc"],
-  start: () => ({ phase: "kats", kats: ["klassiker", "party"], leser: 0, antwort: null, aufgedeckt: null }),
+  start: (namen, raum) => ({ phase: "kats", kats: startKats(raum), leser: 0, antwort: null, aufgedeckt: null }),
   aktion(s, i, a, namen, raum) {
     const r = katAktion(s, i, a, raum.ab18);
-    if (r === "start") { s.karte = ziehen(s, "wer"); s.antwort = null; s.aufgedeckt = null; return; }
+    if (r === "start") { s.karte = ziehen(s, "wer", raum); s.antwort = null; s.aufgedeckt = null; return; }
     if (r) return;
     // Kein Muenzwurf mehr (Nico 31.10.2026: "die Frage wurde eh immer erfragt") - nach dem Nennen sehen alle die Frage
     if (a.typ === "nenne" && i === s.leser && s.antwort === null && a.ziel !== i && namen[a.ziel] !== undefined) { s.antwort = a.ziel; s.aufgedeckt = true; }
-    if (a.typ === "weiter" && s.antwort !== null) { s.leser = (s.leser + 1) % namen.length; s.karte = ziehen(s, "wer"); s.antwort = null; s.aufgedeckt = null; }
+    if (a.typ === "weiter" && s.antwort !== null) { s.leser = (s.leser + 1) % namen.length; s.karte = ziehen(s, "wer", raum); s.antwort = null; s.aufgedeckt = null; }
   },
   render(s, ich, namen, raum) {
     if (s.phase === "kats") return katWahl(s, ich, namen, "wer", raum.ab18);

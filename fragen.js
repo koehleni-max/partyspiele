@@ -1,5 +1,6 @@
 // Fragen und Aufgaben nach Kategorien - eigene Texte. Felder: nochnie, wer, wahrheit, pflicht, lieber ("A ODER B").
 // ab18: nur waehlbar, wenn in der Lobby "Alle ueber 18" bestaetigt ist.
+import { MEHR, HALLOWEEN } from "./fragen_mehr.js";
 export const KATEGORIEN = [
 { id: "klassiker", name: "Klassiker", emoji: "⭐", kurz: "Für jede Runde", farben: ["#6d5dfc", "#3a2d9c"],
   nochnie: ["im Kino geweint", "einen Strafzettel bekommen", "auf einer Party eingeschlafen", "mein Handy ins Klo fallen lassen", "bei einer Prüfung geschummelt",
@@ -220,3 +221,8 @@ export const KATEGORIEN = [
   lieber: ["Jede Woche Sex, aber immer gleich ODER einmal im Monat, aber immer anders", "Gefilmt werden ODER zuschauen müssen", "Sex nur noch im Dunkeln ODER nur noch mit Licht",
     "Dirty Talk ODER totale Stille", "Erwischt werden von den Eltern ODER von den Nachbarn", "Nie wieder Küssen ODER nie wieder Kuscheln"] },
 ];
+
+// Schritt 2 (31.10.2026): mehr Karten je Kategorie hinten anhaengen, dazu die Kategorie "Halloween" (vor den ab-18-Kategorien)
+const FELDER = ["nochnie", "wer", "wahrheit", "pflicht", "lieber"];
+KATEGORIEN.forEach((k) => FELDER.forEach((f) => { if (MEHR[k.id] && MEHR[k.id][f]) k[f] = [...(k[f] || []), ...MEHR[k.id][f]]; }));
+KATEGORIEN.splice(KATEGORIEN.findIndex((k) => k.ab18), 0, HALLOWEEN);

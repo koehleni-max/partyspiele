@@ -82,9 +82,10 @@ async function teilen(text, titel) {
   try { await navigator.clipboard.writeText(text); hinweis("Kopiert – jetzt in WhatsApp einfügen"); }
   catch (e) { prompt("Zum Kopieren:", text); }
 }
-function hinweis(text) {
+function hinweis(text, art = "") {
   const d = document.createElement("div");
   d.className = "toast";
+  if (art) d.dataset.art = art;
   d.textContent = text;
   document.body.appendChild(d);
   setTimeout(() => d.remove(), 2600);
@@ -295,8 +296,19 @@ async function raumOeffnen(anlass) {
     admins: [], gastgeber: meineId, spieler: [{ id: meineId, name: meinName, platz: 0, online: true, gast: 1 }], partien: {}, tafel: TAFEL.neu(),
     gastNr: 1, gruesse: [], beamer: B.steuer(null), glueck: null };
   G.sicher(raum);
+  glueckMerkenLesen();   // gestrichene Rad-Ergebnisse vom letzten Raum (Nico 31.10.2026: "wird gemerkt")
   geschrieben = null;
   gastgeberStart();
+}
+
+// Gluecksrad-Auswahl (abgeschaltete Felder, gestrichene Ergebnisse) auf dem Gastgeber-Geraet merken
+const GLUECK_MERK = "pa_glueck_auswahl";
+const GLUECK_MERKEN = new Set(["feld", "streichen", "allestreichen", "alleauf", "trinkaus"]);
+function glueckMerkenSchreiben() {
+  try { localStorage.setItem(GLUECK_MERK, JSON.stringify(G.merkStand(raum.glueck))); } catch (e) { /* privater Modus */ }
+}
+function glueckMerkenLesen() {
+  try { const m = JSON.parse(localStorage.getItem(GLUECK_MERK) || "null"); if (m) G.merkUebernehmen(raum, m); } catch (e) { /* kaputt: ignorieren */ }
 }
 
 async function gastgeberFortsetzen() {
@@ -395,7 +407,7 @@ function ausfuehren(von, a) {
       const sp = spiel(a.id);
       if (!sp || Object.keys(raum.partien).length >= MAX_PARTIEN) return;
       const pid = `p${raum.pNr++}`;
-      raum.partien[pid] = P.neu(pid, sp.id, von, Date.now());
+      raum.partien[pid] = P.neu(pid, sp.id, von, Date.now(), raum.ohneAlkohol);
       raum.meldung = { nr: (raum.meldung ? raum.meldung.nr : 0) + 1, pid, von };
       aend.lobby = true; aend.partien.add(pid);
     } else if (a.typ === "_ab18" && admin) { raum.ab18 = !raum.ab18; aend.lobby = true; }
@@ -404,13 +416,17 @@ function ausfuehren(von, a) {
     else if (a.typ === "_testkonten" && admin) { raum.testkonten = !K.testkontenAn(raum); aend.lobby = true; }
     else if (a.typ === "_beamer" && admin) { if (!B.steuerAktion(raum, a, Date.now())) return; aend.lobby = true; }
     // Gluecksrad: das Ergebnis entscheidet nur der Gastgeber (Rechte fuer Steuer-Aktionen prueft gluecksrad.js)
-    else if (a.typ === "_glueck") { if (!G.aktion(raum, von, a, Date.now(), admin)) return; aend.lobby = true; }
+    else if (a.typ === "_glueck") {
+      if (!G.aktion(raum, von, a, Date.now(), admin)) return;
+      aend.lobby = true;
+      if (admin && GLUECK_MERKEN.has(a.was)) glueckMerkenSchreiben();
+    }
     else if (a.typ === "_alle" && admin) {
       // Spiel fuer alle: jeder, der gerade verbunden ist, ist gleich dabei; die Spielleitung startet mit "Los"
       const sp = spiel(a.wert || a.id);
       if (!sp || Object.keys(raum.partien).length >= MAX_PARTIEN) return;
       const pid = `p${raum.pNr++}`;
-      const p = P.neu(pid, sp.id, von, Date.now());
+      const p = P.neu(pid, sp.id, von, Date.now(), raum.ohneAlkohol);
       raum.spieler.filter((x) => x.online && x.id !== von).forEach((x) => { if (p.mit.length < P.MAX_MIT) p.mit.push(x.id); });
       raum.partien[pid] = p;
       raum.meldung = { nr: (raum.meldung ? raum.meldung.nr : 0) + 1, pid, von, alle: true };
@@ -437,6 +453,8 @@ function ausfuehren(von, a) {
     if (!p.mit.some((id) => !P.istBot(id))) delete raum.partien[p.pid];
   } else if (a.typ === "_los") { if (!leitet || p.phase !== "sammeln") return; P.starten(p, sp, raum); }
   else if (a.typ === "_zurueck") { if (!leitet) return; partieWeg(p.pid); }
+  // Mit oder ohne Trinken fuer genau dieses Spiel (Spielleitung; vorbelegt mit dem Raum-Schalter, auch mitten im Spiel)
+  else if (a.typ === "_ohne") { if (!leitet) return; p.ohne = !!a.ohne; if (p.s) p.s.ohne = p.ohne; }
   else if (a.typ === "_neuauf") { if (!leitet || p.phase !== "laeuft" || !p.wartend.length) return; P.neueRunde(p, sp, raum); }
   else if (a.typ === "_botneu") { if (!leitet || !sp.bot || !P.botDazu(p, raum)) return; }
   else if (a.typ === "_botweg") { if (!leitet || !P.botWeg(p, a.id)) return; }
@@ -825,9 +843,15 @@ function standEmpfangen(stand) {
 }
 
 // ---------------------------------------------------------------- Ansicht, Meldungen
+// Name des zuletzt angesehenen Spiels je Partie: die Meldung "… ist beendet" nennt das Spiel, damit sie nicht wie das Ende
+// des naechsten Spiels aussieht (Abnahme 31.10.2026: Meldung stand mitten in einem neuen Spiel)
+const spielNamen = {};
 function ansichtPruefen() {
   if (!raum) return;
-  if (ansicht && !raum.partien[ansicht]) { ansicht = null; hinweis("Das Spiel ist beendet"); }
+  if (ansicht && raum.partien[ansicht]) { const sp = spiel(raum.partien[ansicht].spiel); if (sp) spielNamen[ansicht] = `${sp.emoji} ${sp.name}`; }
+  if (ansicht && !raum.partien[ansicht]) { hinweis(`${spielNamen[ansicht] || "Das Spiel"} ist beendet`, "ende"); ansicht = null; }
+  // sobald man in einem anderen Spiel ist, stoert die Meldung zum alten nicht mehr
+  if (ansicht && raum.partien[ansicht]) document.querySelectorAll(".toast[data-art='ende']").forEach((t) => t.remove());
   const m = raum.meldung;
   // wer ein Spiel startet, sieht es sofort
   if (m && istLokal(m.von) && m.nr > eigeneMeldung) {
@@ -998,7 +1022,7 @@ export function senden(a) {
 }
 // In wessen Namen eine Aktion geht: der Controller, der sie ausloest; Spielzuege per Touch fuer den Spieler, fuer den
 // das Spiel gerade gezeichnet ist; Leiten (Los, Beenden ...) darf, wer von diesem Geraet aus leiten darf.
-const LEITER_TYPEN = new Set(["_los", "_zurueck", "_neuauf", "_botneu", "_botweg"]);
+const LEITER_TYPEN = new Set(["_los", "_zurueck", "_neuauf", "_botneu", "_botweg", "_ohne"]);
 function absender(a) {
   const eigen = sendeAls || meineId;
   if (RAUM_TYPEN.has(a.typ) || a.p == null || !padIds().length) return eigen;
@@ -1193,7 +1217,7 @@ function zeichnen() {
   TON.still(anDerWand);
   let musik = null, partie = null;
   if (status || !raum) app.innerHTML = statusBild();
-  else if (steuerAuf && zeigeSteuer()) { einsetzen(steuerBild()); steuerSpiel = beamerSpielSig(); }
+  else if (steuerAuf && zeigeSteuer()) { einsetzen(glueckReiter ? glueckListeBild() : steuerBild()); steuerSpiel = beamerSpielSig(); }
   else if (tafelAuf) einsetzen(tafelBild());
   else if (ansicht && raum.partien[ansicht]) {
     const p = partie = raum.partien[ansicht];
@@ -1376,13 +1400,13 @@ function partieBild(p, sp, ich) {
   if (p.phase === "sammeln") inhalt = sammelBild(p, sp, nm, ich, leitet);
   else if (ich < 0 && !p.mit.some(istLokal)) inhalt = zuschauBild(p, sp, nm);
   else {
-    try { inhalt = sp.render(p.s, ich, nm, raum) + padMinis(p, sp, nm); if (raum.ohneAlkohol) inhalt = ohneAlkohol(inhalt); }
+    try { inhalt = sp.render(p.s, ich, nm, raum) + padMinis(p, sp, nm); if (P.ohneTrinken(raum, p)) inhalt = ohneAlkohol(inhalt); }
     catch (e) { console.error(e); inhalt = `<p class="fehler">Anzeigefehler: ${esc(e.message)}</p>`; }
     if (leitet && p.wartend.length) inhalt = `<div class="hinweisbox vorgemerkt">📌 ${p.wartend.length === 1 ? "1 wartet" : `${p.wartend.length} warten`} auf die nächste Runde: ${p.wartend.map((id) => esc(P.nameVon(raum, p, id))).join(", ")}
       ${knopf("🔄 Neue Runde mit allen", { typ: "_neuauf" }, "gelb")}</div>${inhalt}`;
   }
   return `${gastgeberHinweis()}
-    <div class="kopf"><span>${sp.emoji} ${esc(sp.name)}</span>
+    <div class="kopf"><span>${sp.emoji} ${esc(sp.name)}${p.phase === "laeuft" && P.ohneTrinken(raum, p) ? ` <small class="ohne-marke" title="ohne Trinken">🧃</small>` : ""}</span>
       <span class="kopfknoepfe"><button class="klein2 ${offen ? "tw-blinkt" : ""}" data-tt-auf title="Turniertafel">🏆 ${offen ? `⚔️ ${offen}` : rundenUhr() || "Tafel"}</button>
       <button class="klein2" data-ansicht="">‹ Übersicht</button>
       ${leitet ? `<button class="klein2" data-a='{"typ":"_zurueck"}'>⏹️ Beenden</button>` : ""}</span></div>
@@ -1400,8 +1424,18 @@ function sammelBild(p, sp, nm, ich, leitet) {
     <ul class="spieler">${liste}</ul>
     ${ich < 0 ? knopf("🙋 Mitmachen", { typ: "_mit" }, "gross gruen") : ich > 0 ? knopf("Doch nicht", { typ: "_raus" }, "zweit") : ""}
     ${leitet && sp.bot ? knopf("🤖 Computer-Mitspieler dazu", { typ: "_botneu" }, "zweit") : ""}
+    ${trinkWahl(p, leitet)}
     ${leitet ? knopf(`▶️ Los geht's (${p.mit.length} ${p.mit.length === 1 ? "Spieler" : "Spieler"})`, { typ: "_los" }, "gross", `data-klang="los"`)
       : `<div class="hinweisbox warten">${esc(nm[0])} startet, sobald alle dabei sind …</div>`}`;
+}
+
+// Mit oder ohne Trinken - je Spiel beim Start (Nico 31.10.2026, Punkt 7). Die Spielleitung waehlt, alle sehen die Wahl.
+function trinkWahl(p, leitet) {
+  const ohne = P.ohneTrinken(raum, p);
+  const text = ohne ? "🧃 Ohne Trinken: statt Schlucken gibt es Strafpunkte oder kleine Aufgaben" : "🍺 Mit Trinken";
+  if (!leitet) return `<p class="mitte leise klein trinkwahl-info">${text}</p>`;
+  return `<div class="trinkwahl"><div class="raster2">${knopf("🍺 Mit Trinken", { typ: "_ohne", ohne: false }, ohne ? "zweit" : "gewaehlt")}${knopf("🧃 Ohne Trinken", { typ: "_ohne", ohne: true }, ohne ? "gewaehlt" : "zweit")}</div>
+    <p class="mitte leise klein">${ohne ? "Statt Schlucken: Strafpunkte oder kleine Aufgaben." : `Vorbelegt mit dem Raum-Schalter${raum.ohneAlkohol ? " (ohne Alkohol)" : ""} – gilt nur für dieses Spiel.`}</p></div>`;
 }
 
 function zuschauBild(p, sp, nm) {
@@ -1517,13 +1551,38 @@ function steuerGlueck(schalter) {
       ${knopf("🃏 Joker geben", gl("joker"), "zweit", `data-feld="rf-gjoker"`)}
       <p class="leise klein">${joker.length ? `Joker: ${joker.join(" · ")}` : "Noch hat niemand einen Joker."}${erwischt.length ? `<br>Vom Rad erwischt: ${erwischt.slice(0, 8).join(" · ")}` : ""}</p>
       <h3 class="tt-unter">Felder auf dem Rad (${aufRad})</h3>
-      ${G.FELDER.map((f) => schalter("_glueck", !g.aus.includes(f.id), `${f.emo} ${esc(f.name)}`, f.trifft ? "trifft den Drehenden – Joker möglich" : "harmlos", { was: "feld", id: f.id })).join("")}
+      <button class="gross gl-reiter-knopf" data-gl-reiter>📋 Alle ${G.ergebnisZahl()} möglichen Ergebnisse – ansehen und streichen${g.gestrichen.length ? `<small>${g.gestrichen.length} gestrichen</small>` : ""}</button>
+      ${knopf(G.FELDER.filter((f) => f.trink).every((f) => g.aus.includes(f.id)) ? "🍺 Trink-Felder wieder an" : "🧃 Alle Trink-Felder aus", gl("trinkaus"), "zweit")}
+      ${G.FELDER.map((f) => schalter("_glueck", !g.aus.includes(f.id), `${f.emo} ${esc(f.name)}`, `${f.trifft ? "trifft den Drehenden – Joker möglich" : "harmlos"}${f.pool ? ` · ${G.poolFrei(g, f).length} von ${G.VORRAT[f.pool].length} Aufgaben` : ""}`, { was: "feld", id: f.id })).join("")}
       ${g.eigene.map((e) => `<div class="schalter rad-eigen"><span>✏️ ${esc(e.name)}<br><small class="leise">${esc(e.text || "eigenes Feld")}</small></span>${knopf("✕", gl("eigenweg", { id: e.id }), "klein2", `aria-label="Feld entfernen"`)}</div>`).join("")}
       ${g.eigene.length < G.EIGENE_MAX ? `<h3 class="tt-unter">Eigenes Feld dazu</h3>
       <label>Name (steht auf dem Rad)<input id="rf-gname" maxlength="${G.NAME_MAX}" placeholder="z. B. Lied singen" autocomplete="off"></label>
       <label>Kurzer Text (optional)<input id="rf-gtext" maxlength="${G.TEXT_MAX}" placeholder="z. B. singt eine Strophe vor" autocomplete="off"></label>
       ${knopf("➕ Feld aufs Rad", gl("eigen"), "zweit", `data-felder="rf-gname,rf-gtext" data-leeren`)}` : `<p class="leise klein">Mehr als ${G.EIGENE_MAX} eigene Felder gehen nicht.</p>`}
       <p class="leise klein">Gäste dürfen alle ${G.SPERRE / 60000} Minuten drehen. Das Rad bringt keine Punkte – es zählt nur, wer wie oft erwischt wurde.</p>
+    </div>`;
+}
+
+// Reiter "Alle Ergebnisse" des Gluecksrads (Nico 31.10.2026, Punkt 9): jede moegliche Aufgabe einzeln streichen
+let glueckReiter = false;
+function glueckListeBild() {
+  const g = G.sicher(JSON.parse(JSON.stringify({ glueck: raum.glueck || null })));
+  const gl = (was, mehr = {}) => ({ typ: "_glueck", was, ...mehr });
+  const liste = G.ergebnisListe(g);
+  const offen = liste.reduce((n, f) => n + (f.aus ? 0 : f.eintraege.filter((x) => !x.weg).length), 0);
+  const zeile = (f, x) => {
+    const a = x.ganz ? gl("feld", { id: f.feld }) : gl("streichen", { id: x.id });
+    const weg = x.weg || f.aus;
+    return `<div class="gl-eintrag ${weg ? "gestrichen" : ""}" data-a='${JSON.stringify(a).replace(/'/g, "&#39;")}'><input type="checkbox" ${weg ? "" : "checked"} tabindex="-1"><span>${esc(x.text)}</span></div>`;
+  };
+  return `${gastgeberHinweis()}
+    <div class="kopf"><span>📋 Glücksrad: alle Ergebnisse</span><button class="klein2" data-gl-zu>‹ Steuerseite</button></div>
+    <div class="karte steuerseite gl-liste">
+      <p class="leise klein">${offen} von ${G.ergebnisZahl()} Ergebnissen sind drin. Antippen streicht oder nimmt wieder auf. Die Auswahl gilt sofort und dieses Gerät merkt sie sich für den nächsten Raum.</p>
+      ${knopf(G.FELDER.filter((f) => f.trink).every((f) => g.aus.includes(f.id)) ? "🍺 Trink-Felder wieder an" : "🧃 Alle Trink-Felder aus", gl("trinkaus"), "zweit")}
+      ${liste.map((f) => `<div class="gl-kopf"><h3>${f.emo} ${esc(f.name)}${f.aus ? " <small class=\"leise\">(Feld aus)</small>" : ""}</h3>
+        ${f.eintraege.length > 1 ? knopf(f.eintraege.every((x) => x.weg) ? "alle wieder rein" : "alle streichen", gl(f.eintraege.every((x) => x.weg) ? "alleauf" : "allestreichen", { id: f.feld }), "klein2 zweit") : ""}</div>
+        ${f.eintraege.map((x) => zeile(f, x)).join("")}`).join("")}
     </div>`;
 }
 
@@ -1630,7 +1689,7 @@ document.addEventListener("click", async (ev) => {
     zeichnen(); window.scrollTo(0, 0);
     return;
   }
-  const el = ev.target.closest("[data-anlass],[data-zurueck],#beitreten,#weitermachen,[data-ansicht],[data-a],[data-teilen],[data-ansage-mit],[data-ansage-weg],[data-steuern],[data-code],[data-raum-neu],[data-uebernehmen],[data-ende-frage],[data-neu-laden],[data-steuer-auf],[data-steuer-zu],[data-ohne-code],[data-rad-hin],[data-padname],[data-padweg]");
+  const el = ev.target.closest("[data-anlass],[data-zurueck],#beitreten,#weitermachen,[data-ansicht],[data-a],[data-teilen],[data-ansage-mit],[data-ansage-weg],[data-steuern],[data-code],[data-raum-neu],[data-uebernehmen],[data-ende-frage],[data-neu-laden],[data-steuer-auf],[data-steuer-zu],[data-gl-reiter],[data-gl-zu],[data-ohne-code],[data-rad-hin],[data-padname],[data-padweg]");
   if (!el) return;
   if (el.dataset.gesperrt !== undefined) return;   // Ergebnis steht noch (ergebnisPruefen)
   // Controller umbenennen oder entfernen (nur dieses Geraet; der Spieler bleibt im Raum, wie ein Handy, das geht)
@@ -1651,8 +1710,13 @@ document.addEventListener("click", async (ev) => {
     padHallo(pad);
     return;
   }
+  if (el.dataset.glReiter !== undefined || el.dataset.glZu !== undefined) {
+    glueckReiter = el.dataset.glReiter !== undefined;
+    vibriere(20); TON.spiele("klick"); zeichnen(); window.scrollTo(0, 0);
+    return;
+  }
   if (el.dataset.steuerAuf !== undefined || el.dataset.steuerZu !== undefined) {
-    steuerAuf = el.dataset.steuerAuf !== undefined; tafelAuf = false;
+    steuerAuf = el.dataset.steuerAuf !== undefined; tafelAuf = false; glueckReiter = false;
     if (steuerAuf) { ansicht = null; ansichtMerken(); }
     vibriere(20); TON.spiele("klick"); zeichnen(); window.scrollTo(0, 0);
     return;
@@ -1751,7 +1815,9 @@ document.addEventListener("click", async (ev) => {
   }
   if (a.typ === "_raumende") endeFrage = false;
   if (a.typ === "_glueck" && a.was === "eigen" && !String((a.werte || [])[0] || "").trim()) { hinweis("Bitte einen Namen für das Feld eintippen"); return; }
-  if (a.typ === "_glueck" && el.dataset.felder && el.dataset.leeren !== undefined) el.dataset.felder.split(",").forEach((id) => { const f = document.getElementById(id); if (f) f.value = ""; });
+  if (a.typ === "vorschlag" && !String((a.werte || [])[1] || "").trim()) { hinweis("Bitte eine Figur eintippen"); return; }
+  // Eingabefelder nach dem Abschicken leeren (Auswahllisten bleiben stehen)
+  if (el.dataset.felder && el.dataset.leeren !== undefined) el.dataset.felder.split(",").forEach((id) => { const f = document.getElementById(id); if (f && f.tagName !== "SELECT") f.value = ""; });
   vibriere(25);
   TON.spiele(el.dataset.klang || "klick");
   senden(a);

@@ -1,4 +1,5 @@
-// Inhalte fuer die Gemeinschaftsspiele (eigene Listen).
+// Inhalte fuer die Gemeinschaftsspiele (eigene Listen). Seit Schritt 2 (31.10.2026) hinten verlaengert aus inhalte_mehr.js.
+import * as M from "./inhalte_mehr.js";
 // Begriffe erklaeren: [Begriff, verbotene Woerter...]
 export const BEGRIFFE = [
   ["Zahnarzt", "Zähne", "Bohrer", "Praxis", "Termin"], ["Kinderwagen", "Baby", "schieben", "Räder", "Spaziergang"], ["Wickeltisch", "Windel", "Baby", "wechseln", "Tisch"],
@@ -21,14 +22,14 @@ export const BEGRIFFE = [
   ["Lottogewinn", "Zahlen", "Millionen", "Glück", "Schein"], ["Umzug", "Kartons", "Wohnung", "tragen", "neu"], ["Kopfschmerzen", "Kopf", "Tablette", "weh", "Migräne"],
   ["Winterreifen", "Auto", "Schnee", "wechseln", "Gummi"], ["Klopapier", "Toilette", "Rolle", "Papier", "Bad"], ["Zahnspange", "Zähne", "gerade", "Draht", "Kieferorthopäde"],
   ["Sonnenbrand", "Sonne", "rot", "Haut", "Creme"], ["Muskelkater", "Sport", "weh", "Muskeln", "Training"], ["Elternzeit", "Baby", "Arbeit", "Pause", "Mutter"],
-];
+].concat(M.BEGRIFFE_MEHR);
 // Pantomime / Zeichnen: einfachere Begriffe
 export const PANTOMIME = [
   "Zähne putzen", "Baby wickeln", "Auto einparken", "Hund ausführen", "Fenster putzen", "Pizza backen", "Kuh melken", "Schneeballschlacht", "Achterbahn fahren", "Zug verpassen",
   "Fliege fangen", "Spaghetti essen", "Baum fällen", "Kinderwagen schieben", "Zelt aufbauen", "Geschenk auspacken", "Selfie machen", "Rasenmähen", "Gitarre spielen", "Schlittschuh laufen",
   "Koffer packen", "Fußball-Tor schießen", "Bügeln", "Angeln", "Babybrei füttern", "Wäsche aufhängen", "Kerzen auspusten", "Seil springen", "Surfen", "Bowling",
   "Zwiebel schneiden", "Einen Reifen wechseln", "Yoga", "Im Stau stehen", "Eis essen bei Hitze", "Ein Baby in den Schlaf wiegen", "Tanzen auf einer Hochzeit", "Taucher", "Bodybuilder", "Ballerina",
-];
+].concat(M.PANTOMIME_MEHR);
 // Wer bin ich: Figuren und Personen
 export const FIGUREN = [
   "Pumuckl", "Biene Maja", "Peppa Wutz", "Spongebob", "Homer Simpson", "Harry Potter", "Darth Vader", "Elsa (Eiskönigin)", "Shrek", "Mickey Maus",
@@ -37,17 +38,17 @@ export const FIGUREN = [
   "Gandalf", "Captain Jack Sparrow", "Tarzan", "Die Maus (Sendung mit der Maus)", "Bob der Baumeister", "Paw Patrol Chase", "Feuerwehrmann Sam", "Benjamin Blümchen", "Bibi Blocksberg", "Sandmännchen",
   "Lionel Messi", "Taylor Swift", "Elon Musk", "Queen Elizabeth", "Kleopatra", "Napoleon", "Mozart", "Asterix", "Obelix", "Garfield",
   "Winnie Puuh", "Kermit der Frosch", "Krümelmonster", "Nemo", "Dory", "Simba", "Olaf (Schneemann)", "Rapunzel", "Aladdin", "Die Biene aus der Werbung",
-];
+].concat(M.FIGUREN_MEHR);
 // Spion: Orte, an denen alle ausser dem Spion sind
 export const ORTE = [
   "Kreißsaal", "Kindergeburtstag", "Spielplatz", "Flugzeug", "Kreuzfahrtschiff", "Zahnarztpraxis", "Supermarkt-Kasse", "Hochzeit", "Fitnessstudio", "Kino",
   "Weihnachtsmarkt", "Schwimmbad", "Campingplatz", "Bauernhof", "Polizeiwache", "Krankenhaus", "Freizeitpark", "Fußballstadion", "Bibliothek", "Friseursalon",
   "Raumstation", "U-Boot", "Zirkus", "Zoo", "Elternabend", "Möbelhaus", "Tankstelle", "Oktoberfest", "Skihütte", "Strandbar",
   "Kindergarten", "Flughafen-Sicherheitskontrolle", "Autowaschanlage", "Escape Room", "Kirche", "Baumarkt", "Bäckerei", "Disco", "Waschsalon", "Piratenschiff",
-];
+].concat(M.ORTE_MEHR);
 // Stadt-Land-Fluss-Kategorien (immer 6 werden gezogen)
 export const SLF_KAT = ["Stadt", "Land", "Fluss", "Name", "Tier", "Beruf", "Essen", "Marke", "Promi", "Etwas im Kinderzimmer", "Ausrede fürs Zuspätkommen", "Film oder Serie",
-  "Getränk", "Sportart", "Körperteil", "Kleidung", "Musiker", "Pflanze", "Spielzeug", "Etwas im Badezimmer", "Schimpfwort (harmlos!)", "Grund zum Feiern"];
+  "Getränk", "Sportart", "Körperteil", "Kleidung", "Musiker", "Pflanze", "Spielzeug", "Etwas im Badezimmer", "Schimpfwort (harmlos!)", "Grund zum Feiern"].concat(M.SLF_MEHR);
 // Quiz: [Frage, richtige Antwort, falsch, falsch, falsch]
 export const QUIZ = [
   ["Wie viele Bundesländer hat Deutschland?", "16", "14", "15", "18"], ["Welches Tier ist das größte Säugetier?", "Blauwal", "Elefant", "Giraffe", "Pottwal"],
@@ -71,7 +72,7 @@ export const QUIZ = [
   ["Was ist das schnellste Landtier?", "Gepard", "Löwe", "Antilope", "Windhund"], ["Wie nennt man ein Baby-Känguru?", "Joey", "Kitz", "Welpe", "Fohlen"],
   ["Wie viele Ecken hat ein Würfel?", "8", "6", "12", "4"], ["Welcher Monat hat 28 oder 29 Tage?", "Februar", "April", "Juni", "November"],
   ["Woraus wird Butter gemacht?", "Sahne", "Milchpulver", "Joghurt", "Quark"], ["Wie heißt der Vogel, der rückwärts fliegen kann?", "Kolibri", "Specht", "Spatz", "Möwe"],
-];
+].concat(M.QUIZ_MEHR);
 
 // Quizshow: Halloween-Runde (selbst geschrieben, 27.10.2026; erste Antwort ist richtig, Anzeige mischt die Reihenfolge)
 export const QUIZ_HALLOWEEN = [
@@ -94,7 +95,7 @@ export const QUIZ_HALLOWEEN = [
   ["Wie viele Augen haben die meisten Spinnen?", "8", "2", "4", "6"],
   ["Wie nennt man die Angst vor Spinnen?", "Arachnophobie", "Klaustrophobie", "Akrophobie", "Agoraphobie"],
   ["Welches Fest feiert man in Mexiko am 1. und 2. November?", "Tag der Toten", "Fest der Geister", "Nacht der Masken", "Tag der Kerzen"],
-  ["Wie viele Knochen hat ein erwachsener Mensch?", "206", "186", "226", "312"],
+  ["Wie viele Knochen bilden den menschlichen Schädel (ca.)?", "22", "12", "32", "8"],   // 31.10.: war doppelt mit dem Quiz allgemein
   ["Welcher ist der größte Knochen des Menschen?", "Oberschenkelknochen", "Schienbein", "Oberarmknochen", "Becken"],
   ["Botanisch gesehen ist ein Kürbis eine …", "Beere", "Nuss", "Steinfrucht", "Wurzel"],
   ["Auf welchem Berg tanzen der Sage nach in der Walpurgisnacht die Hexen?", "Brocken", "Zugspitze", "Feldberg", "Watzmann"],
@@ -103,4 +104,4 @@ export const QUIZ_HALLOWEEN = [
   ["In welchem Ort spielt die Geschichte vom kopflosen Reiter?", "Sleepy Hollow", "Salem", "Transsilvanien", "Twin Peaks"],
   ["Welcher Vogel gilt im Volksglauben als „Totenvogel“?", "Steinkauz", "Amsel", "Specht", "Taube"],
   ["Welche Farbe hat das Blut einer Vogelspinne?", "bläulich", "rot", "grün", "gelb"],
-];
+].concat(M.QUIZ_HALLOWEEN_MEHR);

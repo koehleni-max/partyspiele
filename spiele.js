@@ -94,6 +94,12 @@ const KLATSCH_REGELN = {
   D: ["Fragenmeister", "Du bist Fragenmeister. Wer dir eine Frage beantwortet, klatscht."],
   K: ["Klatschglas", "Kipp einen Schluck ins Glas in der Mitte. Wer den vierten König zieht, trinkt das Glas aus!"],
 };
+// ohne Trinken (s.ohne): Karten, die sich nicht in Strafpunkte uebersetzen lassen, bekommen eine eigene Fassung
+const KLATSCH_OHNE = {
+  A: ["Wasserfall", "Alle klatschen gleichzeitig in die Hände. Keiner darf aufhören, bevor die Person rechts von ihm aufgehört hat. Wer gezogen hat, fängt an."],
+  K: ["Kronenkasse", "Leg einen Strafpunkt in die Mitte. Wer den vierten König zieht, bekommt alle Punkte aus der Mitte."],
+};
+const klatschRegel = (s, w) => (s.ohne && KLATSCH_OHNE[w]) || KLATSCH_REGELN[w];
 const klatschen = {
   id: "klatschen", name: "Klatschen", emoji: "🃏", farben: ["#8b5cf6","#4c1d95"], kurz: "Kartenkreis mit Regeln – ohne echte Karten",
   start: () => ({ stapel: K.deck52(), dran: 0, karte: null, koenige: 0, regeln: [], partner: {}, reaktion: null, gezogen: 0 }),
@@ -113,14 +119,16 @@ const klatschen = {
   render(s, ich, namen) {
     s.anzahl = namen.length;
     const grund = `<details class="grundregeln"><summary>📜 Grundregeln (immer gültig)</summary>
-      <ul><li>Das Wort „trinken“ ist verboten – es heißt <b>klatschen</b>.</li><li>Getrunken wird nur mit links.</li>
-      <li>Nicht fluchen, nicht mit dem Finger zeigen.</li><li>Wer patzt: 1 Schluck klatschen.</li></ul>
+      ${s.ohne ? `<ul><li>„Klatschen“ heißt hier: einen Strafpunkt bekommen. Wer am Ende die meisten hat, macht eine Aufgabe der Runde.</li>
+      <li>Nicht fluchen, nicht mit dem Finger zeigen.</li><li>Wer patzt: 1 Strafpunkt.</li></ul>`
+      : `<ul><li>Das Wort „trinken“ ist verboten – es heißt <b>klatschen</b>.</li><li>Getrunken wird nur mit links.</li>
+      <li>Nicht fluchen, nicht mit dem Finger zeigen.</li><li>Wer patzt: 1 Schluck klatschen.</li></ul>`}
       ${s.regeln.length ? `<b>Eigene Regeln:</b><ol>${s.regeln.map((r) => `<li>${esc(r.text)} <small class="leise">(${esc(namen[r.von])})</small></li>`).join("")}</ol>` : ""}</details>`;
     const kreis = `<div class="kreis"><div class="glas" title="Klatschglas">🥃<small>${s.koenige}/4 ♔</small></div><div class="rest">${s.stapel.length} Karten</div></div>`;
     if (!s.stapel.length && !s.karte) return `${grund}<div class="frage">Alle Karten gezogen! 🎉</div>${knopf("Neue Runde", { typ: "neustart" }, "gross")}`;
     if (!s.karte) return `${grund}${kreis}<div class="frage">${name(namen, s.dran)} zieht</div>
       ${ich === s.dran ? knopf("Karte ziehen", { typ: "ziehen" }, "gross") : `<p class="mitte leise">Warte auf ${esc(namen[s.dran])} …</p>`}`;
-    const [titel, text] = KLATSCH_REGELN[s.karte.w];
+    const [titel, text] = klatschRegel(s, s.karte.w);
     let zusatz = "";
     if (s.karte.w === "K" && s.koenige === 4) zusatz = `<div class="urteil">👑 Vierter König! ${name(namen, s.dran)} trinkt das Klatschglas aus!</div>`;
     if (s.reaktion) {

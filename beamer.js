@@ -303,7 +303,7 @@ export function ereignisHTML(raum, e, jetzt) {
     if (e.art === "schub") {
       if (!l.schub) return "";
       return `<div class="bm-e-box bm-e-schub"><div class="bm-e-emo">🃏</div><p class="bm-e-gross">${esc(G.schubText(l))}</p>
-        <p class="bm-e-klein">${l.feld === "wop" ? esc(l.zusatz) : `${esc(l.schub.anName)}: ${l.emo} ${esc(l.kurz)}`}</p></div>`;
+        <p class="bm-e-klein">${l.feld === "wop" || l.pool ? esc(l.zusatz) : `${esc(l.schub.anName)}: ${l.emo} ${esc(l.kurz)}`}</p></div>`;
     }
     return `<div class="bm-e-box bm-e-rad"><div class="bm-rad-bild">${G.radLaufSVG(l, raum.look, jetzt, true)}</div>
       <div class="bm-rad-text"><p class="bm-e-klein">🎡 Glücksrad</p><div data-rad-erg>${G.ergebnisHTML(l, jetzt, true)}</div></div></div>`;

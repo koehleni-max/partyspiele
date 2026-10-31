@@ -1,4 +1,6 @@
 // Fragen und Aufgaben - eigene Texte, fuer eine Runde unter Freunden und Familie.
+import { SCHAETZ_MEHR, MALEN_MEHR, AUFGABEN } from "./texte_mehr.js";
+export { AUFGABEN };
 export const WER_WUERDE = [
   "beim Karaoke als Erstes das Mikro schnappen", "sich auf einer Hochzeit danebenbenehmen", "im Urlaub den Pass vergessen",
   "bei einem Horrorfilm schreien", "aus Versehen den Chef auf WhatsApp anrufen", "nach drei Bier eine Rede halten",
@@ -61,9 +63,9 @@ export const SCHAETZ = [
   ["In welchem Jahr landete der erste Mensch auf dem Mond?", 1969], ["Wie viele Felder hat ein Schachbrett?", 64],
   ["Wie viele Kilometer ist der Mond von der Erde entfernt (in Tausend)?", 384], ["Wie viele Beine hat eine Spinne?", 8],
   ["Wie viele Sekunden hat eine Stunde?", 3600], ["Wie alt wurde Goethe?", 82], ["Wie viele Planeten hat unser Sonnensystem?", 8],
-];
+].concat(SCHAETZ_MEHR);
 export const MALEN = [
   "Katze", "Pizza", "Fahrrad", "Leuchtturm", "Schneemann", "Gitarre", "Dinosaurier", "Rakete", "Elefant", "Regenschirm",
   "Burg", "Kaktus", "Hai", "Zahnbürste", "Brille", "Ananas", "Feuerwehrauto", "Igel", "Toaster", "Einhorn", "Vulkan",
   "Bierglas", "Schnecke", "Hubschrauber", "Kuh", "Weihnachtsbaum", "Krone", "Skateboard", "Pinguin", "Sofa",
-];
+].concat(MALEN_MEHR);

@@ -11,8 +11,7 @@
 import { SPIELE, pferdeAbrechnung, ZIEL } from "./spiele.js";
 import * as P from "./partien.js";
 import * as T from "./texte.js";
-import { FIGUREN } from "./inhalte2.js";
-import { werbinich, QUIZ_ALLE, QUIZ_ZEIT } from "./elternspiele.js";
+import { werbinich, figurVon, QUIZ_ALLE, QUIZ_ZEIT } from "./elternspiele.js";
 import * as WW from "./werwolf.js";
 import { esc, schlucke, ohneAlkohol } from "./hilfe.js";
 
@@ -42,8 +41,8 @@ const AUSZUG = {
   },
   werbinich(s) {
     const alle = s.erraten.every((x) => x) || !!s.beendet;
-    return { dran: s.dran, beendet: !!s.beendet && !s.erraten.every((x) => x), figur: FIGUREN[s.figur[s.dran]] || "", erraten: s.erraten.slice(), fragen: (s.fragen || []).slice(), seit: s.seit || 0,
-      zeit: werbinich.zeit, alle, figuren: alle ? s.figur.map((f) => FIGUREN[f]) : null };
+    return { dran: s.dran, beendet: !!s.beendet && !s.erraten.every((x) => x), figur: figurVon(s, s.dran), erraten: s.erraten.slice(), fragen: (s.fragen || []).slice(), seit: s.seit || 0,
+      zeit: werbinich.zeit, alle, figuren: alle ? s.figur.map((_, j) => figurVon(s, j)) : null };
   },
   malen(s) {
     const fertig = s.geloest !== null;
@@ -79,7 +78,7 @@ AUSZUG.quiz = (s) => {
 export function auszug(raum) {
   const partien = {};
   Object.values((raum && raum.partien) || {}).forEach((p) => {
-    const k = { pid: p.pid, spiel: p.spiel, phase: p.phase, mit: p.mit, bots: p.bots || {}, von: p.von, start: p.start, runde: p.runde || 1, t: p.t || 0 };
+    const k = { pid: p.pid, spiel: p.spiel, phase: p.phase, mit: p.mit, bots: p.bots || {}, von: p.von, start: p.start, runde: p.runde || 1, t: p.t || 0, ohne: typeof p.ohne === "boolean" ? p.ohne : undefined };
     if (p.phase === "laeuft" && p.s && AUSZUG[p.spiel]) {
       try { k.bm = AUSZUG[p.spiel](p.s, P.namen(raum, p), p, raum); } catch (e) { k.bm = null; }
     }
@@ -244,8 +243,8 @@ function htmlMalen(d, nm, sp) {
   let info;
   if (d.geloest === null) info = `<p class="bm-gross">${maler} malt …</p><p class="bsm-muster">${esc(d.muster || "")}</p><p class="bm-leise">Ratet am Handy – wer es zuerst hat, bekommt einen Punkt, ${maler} auch.</p>`;
   else if (d.geloest >= 0) info = `<div class="bs-sieg">🎉 ${esc(nm[d.geloest] || "")} hat es!</div><p class="bm-gross">${esc(d.wort)}</p>
-    <p class="bm-zeile">+1 Punkt für ${esc(nm[d.geloest] || "")} und ${maler} · alle anderen trinken 1, ${maler} verteilt 2</p>`;
-  else info = `<p class="bm-gross">Aufgegeben – es war: <b>${esc(d.wort)}</b></p><p class="bm-zeile">${maler} trinkt 2</p>`;
+    <p class="bm-zeile">+1 Punkt für ${esc(nm[d.geloest] || "")} und ${maler} · alle anderen trinken 1 Schluck, ${maler} verteilt ${schlucke(2)}</p>`;
+  else info = `<p class="bm-gross">Aufgegeben – es war: <b>${esc(d.wort)}</b></p><p class="bm-zeile">${maler} trinkt ${schlucke(2)}</p>`;
   const punkte = Object.entries(d.wertung || {}).map(([j, n]) => [Number(j), n]).filter(([j]) => nm[j] !== undefined).sort((x, y) => y[1] - x[1]);
   return `<div class="bsm">${kopf(sp, `Runde ${d.runde}`)}<div class="bsm-reihe">
       <div class="bsm-blatt"><canvas class="bsm-lw" width="900" height="900" data-bs-leinwand data-striche="${d.striche.length}"></canvas></div>
@@ -317,7 +316,7 @@ function htmlSchaetzen(d, nm, sp) {
       <div class="bss-loesung">${zahl(d.loesung)}</div>
       <ol class="bm-rang bss-rang">${abst.map(([j, t, u]) => `<li class="${Math.abs(u) === bestes ? "p1" : ""}"><span class="bm-platz">${Math.abs(u) === bestes ? "🎯" : ""}</span>
         <span class="bm-name">${esc(nm[j])}</span><b class="bm-wert">${zahl(t)}</b><small class="bss-ab">${u === 0 ? "genau!" : (u > 0 ? "+" : "−") + zahl(Math.abs(u))}</small></li>`).join("")}</ol>
-      ${abst.length ? `<p class="bm-zeile mitte">${esc(nm[abst[abst.length - 1][0]])} trinkt 2 · ${esc(nm[abst[0][0]])} verteilt 2</p>` : ""}</div>`;
+      ${abst.length ? `<p class="bm-zeile mitte">${esc(nm[abst[abst.length - 1][0]])} trinkt ${schlucke(2)} · ${esc(nm[abst[0][0]])} verteilt ${schlucke(2)}</p>` : ""}</div>`;
 }
 
 const BUCHST = ["A", "B", "C", "D"];
@@ -348,7 +347,7 @@ export function html(raum, p, d, merk, vorbei = false) {
   try { h = HTML[p.spiel](d, P.namen(raum, p), sp, merk); } catch (e) { console.error(e); return ""; }
   if (vorbei) h = `<div class="bs-vorbei">⏹️ ${esc(sp.name)} ist beendet – gleich geht die Diashow weiter</div>${h}`;
   h = `<div class="bs bs-${p.spiel}" data-bs-spiel="${p.spiel}">${h}</div>`;
-  return raum.ohneAlkohol ? ohneAlkohol(h) : h;
+  return P.ohneTrinken(raum, p) ? ohneAlkohol(h) : h;   // je Partie (p.ohne), alte Partien: Raum-Schalter
 }
 
 // Nach dem Einsetzen: Leinwand zeichnen, Reaktions-Flaeche schalten. lokal = {gruen: {key: Zeitpunkt}} des Beamers

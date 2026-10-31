@@ -837,3 +837,31 @@ kbd.taste-start, kbd.taste-select, kbd.taste-kreuz { background: #3b3f63; border
 .wbi-falsch { margin: 8px 0; overflow-wrap: anywhere; }
 button[data-gesperrt] { opacity: .55; filter: grayscale(.6); cursor: wait; }
 button[data-gesperrt]:active { transform: none; }
+
+/* Schritt 2 (31.10.2026): lange Figurennamen nicht mitten im Wort trennen - Schrift nach laengstem Wort kleiner,
+   Trennung nur als letzter Ausweg mit Trennstrich */
+.figurkarte b { overflow-wrap: break-word; hyphens: auto; -webkit-hyphens: auto; line-height: 1.2; }
+.figurkarte b.lang1 { font-size: 16px; } .figurkarte b.lang2 { font-size: 14px; } .figurkarte b.lang3 { font-size: 12.5px; }
+.figurkarte .wbi-gruppe-marke { color: #c9c2ff; font-size: 11px; }
+.wbi-gruppe { display: grid; gap: 8px; margin: 14px 0 6px; padding: 12px; border: 2px dashed var(--rand); border-radius: 16px; background: #0f1022; overflow-wrap: anywhere; }
+.wbi-gruppe > small { line-height: 1.35; }
+.wbi-gruppe label.wbi-ziel { display: grid; gap: 4px; font-weight: 800; }
+.wbi-gruppe select { width: 100%; }
+.wbi-gruppe .zeile-knoepfe { margin: 0; }
+.wbi-vorschlag { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; background: #1b1c2e; border-radius: 12px; padding: 8px 10px; }
+.wbi-vorschlag > span:first-child { flex: 1 1 180px; min-width: 0; display: block; line-height: 1.35; }
+.wbi-vorschlag > span:first-child small { display: block; margin-top: 2px; }
+.wbi-stimmen { display: flex; gap: 6px; flex: 0 0 auto; }
+.wbi-stimmen button, .wbi-vorschlag > button { margin: 0; }
+.trinkwahl { margin: 12px 0; }
+.trinkwahl .raster2 button { min-width: 0; overflow-wrap: anywhere; }
+.ohne-marke { font-size: .8em; }
+/* Gluecksrad: Liste aller Ergebnisse zum Streichen */
+.gl-liste h3 { margin: 16px 0 6px; overflow-wrap: anywhere; }
+.gl-eintrag { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; margin: 0 0 6px; border-radius: 12px; background: #0f1022; border: 2px solid var(--rand); cursor: pointer; overflow-wrap: anywhere; }
+.gl-eintrag input { flex: 0 0 auto; width: 22px; height: 22px; margin: 2px 0 0; }
+.gl-eintrag span { min-width: 0; flex: 1; }
+.gl-eintrag.gestrichen span { text-decoration: line-through; opacity: .55; }
+.gl-kopf { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.gl-kopf > * { min-width: 0; }
+.gl-reiter-knopf { overflow-wrap: anywhere; } .gl-reiter-knopf small { display: block; font-size: 12px; opacity: .85; }

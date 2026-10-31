@@ -16,8 +16,14 @@
 //   nochmal   id, die sofort wieder drehen darf     joker     {id: Anzahl}      erwischt   {Name: Anzahl}
 //   verlauf   letzte Drehungen (neueste zuerst)     letzter   {name, preis} fuer die Diashow
 //   jokerNr + jokerNeu {nr, ids, grund}            letzte Joker-Vergabe (Meldung am Handy)
+//
+// Schritt 2 (Nico 31.10.2026: "Gluecksrad wurde schnell langweilig"): acht weitere Felder, und viele Felder ziehen aus einem
+// eigenen Vorrat (pool) eine von vielen Aufgaben. Die Spielleitung sieht in einem eigenen Reiter alle moeglichen
+// Ergebnisse und kann einzelne streichen (gestrichen = ["feld:nr", ...]); das Gastgeber-Geraet merkt sich die Auswahl
+// fuer den naechsten Raum (app.js, merkenLesen/merkenSchreiben). Felder ohne Vorrat streicht man als Ganzes (aus).
 import { esc } from "./hilfe.js";
 import * as K from "./konten.js";
+import * as M from "./texte_mehr.js";
 
 export const SPERRE = 2 * 60000;     // je Gast, damit niemand das Rad zuspammt
 export const DREH = 6500;            // Drehdauer in ms (an allen Geraeten gleich)
@@ -30,16 +36,26 @@ export const VERLAUF_MAX = 5;
 export const MIN_FELDER = 2;
 export const JOKER_SPIELE = ["reaktion"];   // Sieger dieser App-Spiele bekommen automatisch einen Joker
 
-// trifft = das Ergebnis trifft den Drehenden (darf mit Joker weitergeschoben werden)
+// trifft = das Ergebnis trifft den Drehenden (darf mit Joker weitergeschoben werden); trink = ans Trinken gebunden
+// (Schnellknopf "Trink-Felder aus"); pool = Name des Vorrats in VORRAT (eine Aufgabe je Drehung)
 export const FELDER = [
-  { id: "shot", emo: "🥃", name: "Shot", rad: "Shot", kurz: "SHOT!", text: "trinkt einen Shot", schub: "den SHOT", trifft: true },
-  { id: "exen", emo: "🍺", name: "Exen", rad: "Exen", kurz: "EXEN!", text: "trinkt das Glas leer", schub: "das EXEN", trifft: true },
-  { id: "verteilen", emo: "🎁", name: "Drei Schlucke verteilen", rad: "3 verteilen", kurz: "3 SCHLUCKE VERTEILEN!", text: "darf drei Schlucke verteilen" },
-  { id: "wop", emo: "🎭", name: "Wahrheit oder Pflicht", rad: "Wahrheit/Pflicht", kurz: "WAHRHEIT ODER PFLICHT!", text: "", schub: "WAHRHEIT ODER PFLICHT", trifft: true },
-  { id: "zwei", emo: "🍻", name: "Zwei Schlucke trinken", rad: "2 Schlucke", kurz: "2 SCHLUCKE!", text: "trinkt zwei Schlucke", schub: "die 2 SCHLUCKE", trifft: true },
+  { id: "shot", emo: "🥃", name: "Shot", rad: "Shot", kurz: "SHOT!", text: "trinkt einen Shot", schub: "den SHOT", trifft: true, trink: true },
+  { id: "exen", emo: "🍺", name: "Exen", rad: "Exen", kurz: "EXEN!", text: "trinkt das Glas leer", schub: "das EXEN", trifft: true, trink: true },
+  { id: "verteilen", emo: "🎁", name: "Drei Schlucke verteilen", rad: "3 verteilen", kurz: "3 SCHLUCKE VERTEILEN!", text: "darf drei Schlucke verteilen", trink: true },
+  { id: "wop", emo: "🎭", name: "Wahrheit oder Pflicht", rad: "Wahrheit/Pflicht", kurz: "WAHRHEIT ODER PFLICHT!", text: "", schub: "WAHRHEIT ODER PFLICHT", trifft: true, pool: "wop" },
+  { id: "zwei", emo: "🍻", name: "Zwei Schlucke trinken", rad: "2 Schlucke", kurz: "2 SCHLUCKE!", text: "trinkt zwei Schlucke", schub: "die 2 SCHLUCKE", trifft: true, trink: true },
   { id: "glueck", emo: "🍀", name: "Glück gehabt", rad: "Glück gehabt", kurz: "GLÜCK GEHABT!", text: "kommt diesmal ungeschoren davon" },
   { id: "nochmal", emo: "🔁", name: "Nochmal drehen", rad: "Nochmal", kurz: "NOCHMAL DREHEN!", text: "darf gleich nochmal drehen" },
   { id: "joker", emo: "🃏", name: "Joker gewonnen", rad: "Joker", kurz: "JOKER!", text: "bekommt einen Joker" },
+  // ---- Schritt 2 (31.10.2026)
+  { id: "aufgabe", emo: "🎯", name: "Aufgabe", rad: "Aufgabe", kurz: "AUFGABE!", text: "", schub: "die AUFGABE", trifft: true, pool: "aufgabe" },
+  { id: "regel", emo: "📜", name: "Neue Regel für alle", rad: "Neue Regel", kurz: "NEUE REGEL!", text: "stellt eine Regel auf – gilt 10 Minuten, wer patzt: 1 Schluck oder 5 Kniebeugen", pool: "regel" },
+  { id: "duell", emo: "⚔️", name: "Duell", rad: "Duell", kurz: "DUELL!", text: "sucht sich einen Gegner – wer verliert: 2 Schlucke oder 10 Kniebeugen", schub: "das DUELL", trifft: true, pool: "duell" },
+  { id: "alle", emo: "🥂", name: "Alle trinken", rad: "Alle trinken", kurz: "ALLE TRINKEN!", text: "bringt den Trinkspruch – alle trinken einen Schluck", trink: true, pool: "alle" },
+  { id: "nachbar", emo: "👉", name: "Nachbar ist dran", rad: "Nachbar", kurz: "NACHBAR!", text: "", trink: true, pool: "nachbar" },
+  { id: "kategorie", emo: "🗂️", name: "Kategorie-Runde", rad: "Kategorie", kurz: "KATEGORIE-RUNDE!", text: "fängt an, dann reihum – wer stockt: 1 Schluck oder 5 Kniebeugen", pool: "kategorie" },
+  { id: "nachmachen", emo: "🦜", name: "Nachmachen", rad: "Nachmachen", kurz: "NACHMACHEN!", text: "", schub: "das NACHMACHEN", trifft: true, pool: "nachmachen" },
+  { id: "grusel", emo: "👻", name: "Grusel-Aufgabe", rad: "Grusel", kurz: "GRUSEL-AUFGABE!", text: "", schub: "die GRUSEL-AUFGABE", trifft: true, pool: "grusel" },
 ];
 
 // Harmlose, eigene Fragen und Aufgaben fuer "Wahrheit oder Pflicht" (nichts Intimes, nichts Gefaehrliches, fuer alle Alter)
@@ -56,7 +72,32 @@ export const PFLICHT = [
   "Stell pantomimisch einen Kürbis dar.", "Mach jemandem hier ein ehrliches Kompliment.", "Imitiere die Person links von dir – die anderen raten.",
   "Erfinde einen Trinkspruch und sag ihn laut.", "Lauf einmal wie ein Zombie um den Tisch.", "Sag das Alphabet rückwärts bis M.",
   "Halte 30 Sekunden ernst Blickkontakt mit jemandem.", "Zeig deinen besten Tanzschritt.",
-];
+].concat(M.RAD_PFLICHT);
+WAHRHEIT.push(...M.RAD_WAHRHEIT);
+
+// Alle moeglichen Ergebnisse je Vorrat - Kennung "feld:nr" bleibt fest, solange Listen nur hinten wachsen
+const vorrat = (feld, liste, vor = "", kennung = "") => liste.map((t, i) => ({ id: `${feld}:${kennung}${i}`, text: vor + t }));
+export const VORRAT = {
+  wop: [...vorrat("wop", WAHRHEIT, "Wahrheit: ", "w"), ...vorrat("wop", PFLICHT, "Pflicht: ", "p")],
+  aufgabe: vorrat("aufgabe", M.AUFGABEN), regel: vorrat("regel", M.REGELN, "Neue Regel: "), duell: vorrat("duell", M.DUELLE, "Duell: "),
+  alle: vorrat("alle", M.TRINKSPRUECHE, "Trinkspruch: "), nachbar: vorrat("nachbar", M.NACHBARN), kategorie: vorrat("kategorie", M.KATEGORIE_RUNDEN, "Kategorie: "),
+  nachmachen: vorrat("nachmachen", M.NACHMACHEN, "Mach nach: "), grusel: vorrat("grusel", M.GRUSEL),
+};
+// Was aus dem Vorrat eines Feldes noch drin ist (gestrichene raus)
+export function poolFrei(g, f) {
+  const weg = new Set((g && g.gestrichen) || []);
+  return (VORRAT[f.pool] || []).filter((x) => !weg.has(x.id));
+}
+// Liste aller moeglichen Ergebnisse fuer den Reiter der Spielleitung: je Feld die Eintraege mit Kennung und Status
+export function ergebnisListe(g) {
+  const aus = new Set(g.aus || []), weg = new Set(g.gestrichen || []);
+  return FELDER.map((f) => ({
+    feld: f.id, emo: f.emo, name: f.name, aus: aus.has(f.id), trink: !!f.trink,
+    eintraege: f.pool ? VORRAT[f.pool].map((x) => ({ id: x.id, text: x.text, weg: weg.has(x.id) }))
+      : [{ id: f.id, text: `${f.name}${f.text ? ` – ${f.text}` : ""}`, weg: aus.has(f.id), ganz: true }],
+  }));
+}
+export const ergebnisZahl = () => FELDER.reduce((n, f) => n + (f.pool ? VORRAT[f.pool].length : 1), 0);
 
 const zahl = (x) => (Number.isFinite(Number(x)) ? Number(x) : 0);
 const sauber = (t, max) => String(t ?? "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -69,6 +110,7 @@ export function sicher(raum) {
   const g = raum.glueck;
   g.frei = g.frei !== false;
   g.aus = Array.isArray(g.aus) ? g.aus.filter((id) => FELDER.some((f) => f.id === id)) : [];
+  g.gestrichen = Array.isArray(g.gestrichen) ? g.gestrichen.filter((id) => typeof id === "string") : [];
   g.eigene = Array.isArray(g.eigene) ? g.eigene.slice(0, EIGENE_MAX) : [];
   ["eNr", "nr", "schub", "jokerNr"].forEach((k) => { g[k] = zahl(g[k]); });
   ["zuletzt", "joker", "erwischt"].forEach((k) => { if (!g[k] || typeof g[k] !== "object") g[k] = {}; });
@@ -80,11 +122,24 @@ export function sicher(raum) {
   return g;
 }
 const lesen = (raum) => (raum && raum.glueck) || {};
+// Streichliste und abgeschaltete Felder merkt sich das Gastgeber-Geraet fuer den naechsten Raum ("wird gemerkt")
+export const merkStand = (g) => ({ aus: (g && g.aus) || [], gestrichen: (g && g.gestrichen) || [] });
+export function merkUebernehmen(raum, m) {
+  if (!m || typeof m !== "object") return false;
+  const g = sicher(raum);
+  const alleIds = new Set(Object.values(VORRAT).flat().map((x) => x.id));
+  const aus = (Array.isArray(m.aus) ? m.aus : []).filter((id) => FELDER.some((f) => f.id === id));
+  const gestrichen = (Array.isArray(m.gestrichen) ? m.gestrichen : []).filter((id) => alleIds.has(id));
+  if (felder({ ...g, aus, gestrichen }).length < MIN_FELDER) return false;
+  g.aus = aus; g.gestrichen = gestrichen;
+  return true;
+}
 
 // Felder, die gerade auf dem Rad sind (Standardfelder ohne die abgeschalteten, dann die eigenen)
 export function felder(g) {
   const aus = new Set(g.aus || []);
-  return [...FELDER.filter((f) => !aus.has(f.id)), ...(g.eigene || []).map((e) => ({ id: e.id, emo: "✏️", name: e.name, rad: e.name,
+  // ein Feld, dessen Vorrat ganz gestrichen ist, faellt vom Rad
+  return [...FELDER.filter((f) => !aus.has(f.id) && (!f.pool || poolFrei(g, f).length)), ...(g.eigene || []).map((e) => ({ id: e.id, emo: "✏️", name: e.name, rad: e.name,
     kurz: `${e.name.toLocaleUpperCase("de")}!`, text: e.text || "", schub: `„${e.name}“`, trifft: true, eigen: true }))];
 }
 
@@ -133,13 +188,13 @@ export function drehen(raum, id, jetzt, zufall = Math.random, fuer = false) {
   const sp = spielerVon(raum, id);
   g.nr += 1;
   let zusatz = "";
-  if (f.id === "wop") zusatz = zufall() < 0.5 ? `Wahrheit: ${WAHRHEIT[Math.floor(zufall() * WAHRHEIT.length)]}` : `Pflicht: ${PFLICHT[Math.floor(zufall() * PFLICHT.length)]}`;
+  if (f.pool) { const frei = poolFrei(g, f); zusatz = frei.length ? frei[Math.min(frei.length - 1, Math.floor(zufall() * frei.length))].text : ""; }
   if (f.id === "joker" && jokerVon(raum, id) >= JOKER_MAX) zusatz = `Du hast schon ${JOKER_MAX} Joker – mehr geht nicht.`;
   const ende = jetzt + DREH;
   const trifft = !!f.trifft;
   g.lauf = {
     nr: g.nr, wer: id, name: sp.name, fuer: !!fuer, felder: liste.map((x) => ({ id: x.id, emo: x.emo, rad: x.rad })), ziel,
-    feld: f.id, emo: f.emo, kurz: f.kurz, text: f.text, schubText: f.schub || "", zusatz, trifft, winkel: winkel(liste.length, ziel, g.nr),
+    feld: f.id, emo: f.emo, kurz: f.kurz, text: f.text, schubText: f.schub || "", zusatz, pool: !!f.pool, trifft, winkel: winkel(liste.length, ziel, g.nr),
     t: jetzt, ende, frist: trifft && jokerVon(raum, id) > 0 ? ende + JOKER_ZEIT : 0, getroffen: trifft ? id : null,
     getroffenName: trifft ? sp.name : null, schub: null, fertig: false,
   };
@@ -181,7 +236,7 @@ export function abschliessen(raum, jetzt = Date.now()) {
   const wer = l.trifft ? l.getroffenName : l.name;
   if (l.trifft && !K.istTestkonto(raum, wer)) g.erwischt = { ...g.erwischt, [wer]: zahl(g.erwischt[wer]) + 1 };
   const preis = `${l.emo} ${l.kurz.replace(/!$/, "")}`;
-  g.letzter = { name: wer, preis, aufgabe: l.feld === "wop" ? l.zusatz : l.eigen ? l.text : "", schub: l.schub ? l.schub.vonName : null, nr: l.nr };
+  g.letzter = { name: wer, preis, aufgabe: l.feld === "wop" || l.pool ? l.zusatz : l.eigen ? l.text : "", schub: l.schub ? l.schub.vonName : null, nr: l.nr };
   g.verlauf = [{ nr: l.nr, name: wer, preis, schub: l.schub ? l.schub.vonName : null }, ...g.verlauf.filter((x) => x.nr !== l.nr)].slice(0, VERLAUF_MAX);
   return true;
 }
@@ -252,6 +307,37 @@ export function aktion(raum, von, a, jetzt, admin, zufall = Math.random) {
     g.eigene = [...g.eigene, { id: `e${g.eNr}`, name, text }];
     return true;
   }
+  // einzelnes Ergebnis aus einem Vorrat streichen / wieder aufnehmen (Reiter "Alle Ergebnisse")
+  if (a.was === "streichen") {
+    const id = String(a.id ?? "");
+    const f = FELDER.find((x) => x.pool && id.startsWith(`${x.id}:`));
+    if (!f || !VORRAT[f.pool].some((x) => x.id === id)) return false;
+    if (g.gestrichen.includes(id)) { g.gestrichen = g.gestrichen.filter((x) => x !== id); return true; }
+    const vorher = felder(g).length;
+    g.gestrichen = [...g.gestrichen, id];
+    if (felder(g).length < Math.min(vorher, MIN_FELDER)) { g.gestrichen = g.gestrichen.filter((x) => x !== id); return false; }
+    return true;
+  }
+  // ganzes Feld: alle Eintraege seines Vorrats streichen bzw. wieder aufnehmen
+  if (a.was === "allestreichen" || a.was === "alleauf") {
+    const f = FELDER.find((x) => x.id === a.id && x.pool);
+    if (!f) return false;
+    const ids = VORRAT[f.pool].map((x) => x.id);
+    if (a.was === "alleauf") { g.gestrichen = g.gestrichen.filter((x) => !ids.includes(x)); return true; }
+    const neu = [...new Set([...g.gestrichen, ...ids])];
+    if (felder({ ...g, gestrichen: neu }).length < MIN_FELDER) return false;
+    g.gestrichen = neu;
+    return true;
+  }
+  // Schnellknopf: alle Trink-Felder aus (oder wieder an, wenn schon alle aus sind)
+  if (a.was === "trinkaus") {
+    const trink = FELDER.filter((f) => f.trink).map((f) => f.id);
+    if (trink.every((id) => g.aus.includes(id))) { g.aus = g.aus.filter((id) => !trink.includes(id)); return true; }
+    const neu = [...new Set([...g.aus, ...trink])];
+    if (felder({ ...g, aus: neu }).length < MIN_FELDER) return false;
+    g.aus = neu;
+    return true;
+  }
   if (a.was === "eigenweg") {
     if (!g.eigene.some((e) => e.id === a.id) || felder(g).length <= MIN_FELDER) return false;
     g.eigene = g.eigene.filter((e) => e.id !== a.id);
@@ -319,7 +405,8 @@ export function ergebnisHTML(l, jetzt, gross = false) {
   const kopf = l.schub ? `<p class="rad-schub">🃏 ${esc(schubText(l))}</p>` : "";
   const name = l.trifft ? l.getroffenName : l.name;
   const erg = `<p class="rad-ergebnis"><span class="rad-name">${esc(name)}:</span> <b>${l.emo} ${esc(l.kurz)}</b></p>`;
-  const text = l.feld === "wop" ? `<p class="rad-aufgabe">${esc(l.zusatz)}</p>` : `${l.text ? `<p class="rad-text">${esc(name)} ${esc(l.text)}</p>` : ""}${l.zusatz ? `<p class="rad-text">${esc(l.zusatz)}</p>` : ""}`;
+  const text = l.feld === "wop" || l.pool ? `<p class="rad-aufgabe">${esc(l.zusatz)}</p>${l.text ? `<p class="rad-text">${esc(name)} ${esc(l.text)}</p>` : ""}`
+    : `${l.text ? `<p class="rad-text">${esc(name)} ${esc(l.text)}</p>` : ""}${l.zusatz ? `<p class="rad-text">${esc(l.zusatz)}</p>` : ""}`;
   const joker = ph === "joker" ? `<p class="rad-joker">🃏 ${esc(l.getroffenName)} hat einen Joker – weiterschieben? <b data-gcd="${l.frist}" data-sek>${Math.max(0, Math.ceil((l.frist - jetzt) / 1000))}</b> s</p>` : "";
   return `<div class="rad-erg ${gross ? "gross" : ""}">${kopf}${erg}${text}${joker}</div>`;
 }

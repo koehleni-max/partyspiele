@@ -26,9 +26,13 @@ export const BOTNAMEN = ["🤖 Robo-Rudi", "🤖 Bot Berta", "🤖 Cyber-Claus",
 export const MAX_MIT = 30;
 export const istBot = (id) => String(id).startsWith("bot:");
 
-export function neu(pid, spiel, von, jetzt) {
-  return { pid, spiel, phase: "sammeln", mit: [von], bots: {}, wartend: [], von, start: jetzt, s: null, zuletzt: null, runde: 1 };
+// ohne = "ohne Trinken" fuer genau diese Partie (Nico 31.10.2026: "Trinkelemente pro Spiel waehlbar, da nicht alle
+// trinken"). Vorbelegt mit dem Raum-Schalter, die Spielleitung stellt es vor "Los" um (Aktion _ohne).
+export function neu(pid, spiel, von, jetzt, ohne = false) {
+  return { pid, spiel, phase: "sammeln", mit: [von], bots: {}, wartend: [], von, start: jetzt, s: null, zuletzt: null, runde: 1, ohne: !!ohne };
 }
+// Partien von vor dem 31.10. kennen kein eigenes "ohne" - dort gilt der Raum-Schalter
+export const ohneTrinken = (raum, p) => (p && typeof p.ohne === "boolean" ? p.ohne : !!(raum && raum.ohneAlkohol));
 
 export function nameVon(raum, p, id) {
   if (istBot(id)) return (p && p.bots && p.bots[id]) || "🤖 Bot";
@@ -64,8 +68,10 @@ export function raus(p, id) {
 }
 
 export function starten(p, sp, raum) {
-  p.s = sp.start(namen(raum, p));
+  // raum: fuer Inhalte ohne Wiederholung ueber den ganzen Abend (stapel.js, z. B. die Figuren bei Wer bin ich)
+  p.s = sp.start(namen(raum, p), raum);
   p.s.anzahl = p.mit.length;
+  p.s.ohne = ohneTrinken(raum, p);   // die Spiele lesen es selbst (Aufgaben statt Schlucke, Trinkkarten weglassen)
   p.phase = "laeuft";
   p.zuletzt = null;
 }

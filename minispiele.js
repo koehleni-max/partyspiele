@@ -2,6 +2,7 @@
 import { spiele as klang } from "./ton.js";
 import { esc, knopf, zufall, ziehe, mischen, name, schlucke } from "./hilfe.js";
 import * as T from "./texte.js";
+import * as STAPEL from "./stapel.js";
 
 // ================================================================ Reaktion
 // Jedes Handy misst selbst (keine Uhrenabgleich-Probleme): Start kommt vom Gastgeber, Gruen nach eigener Wartezeit.
@@ -62,7 +63,8 @@ const reaktion = {
 // ================================================================ Schaetzen
 const schaetzen = {
   id: "schaetzen", name: "Schätzmeister", emoji: "🎯", farben: ["#f97316","#7c2d12"], kurz: "Zahlen schätzen – wer am weitesten weg liegt, trinkt",
-  start: () => { const s = { tipps: {}, phase: "tippen" }; s.rest = mischen(T.SCHAETZ.map((_, i) => i)); s.nr = s.rest.pop(); return s; },
+  // Fragen ohne Wiederholung am ganzen Abend (stapel.js); s.rest bleibt als Zaehler fuer Wertung und Eingabefeld
+  start: (namen, raum) => { const s = { tipps: {}, phase: "tippen" }; s.rest = mischen(T.SCHAETZ.map((_, i) => i)); s.nr = raum ? STAPEL.eins(raum, "schaetzen", T.SCHAETZ.length) : s.rest.pop(); return s; },
   // Gesamtwertung: je Frage, wer am naechsten dran war
   ergebnis(s) {
     if (s.phase !== "aufloesung") return null;
@@ -72,12 +74,17 @@ const schaetzen = {
     const min = Math.min(...abst.map((x) => x[1]));
     return { nr: `s${s.nr}-${s.rest.length}`, sieger: abst.filter((x) => x[1] === min).map((x) => x[0]) };
   },
-  aktion(s, i, a) {
+  aktion(s, i, a, namen, raum) {
     if (a.typ === "tipp" && s.phase === "tippen" && a.wert !== "" && !isNaN(Number(a.wert))) {
       s.tipps[i] = Number(a.wert);
       if (Object.keys(s.tipps).length >= s.anzahl) s.phase = "aufloesung";
     }
-    if (a.typ === "weiter") { if (!s.rest.length) s.rest = mischen(T.SCHAETZ.map((_, k) => k)); s.nr = s.rest.pop(); s.tipps = {}; s.phase = "tippen"; }
+    if (a.typ === "weiter") {
+      if (!s.rest.length) s.rest = mischen(T.SCHAETZ.map((_, k) => k));
+      const nr = s.rest.pop();
+      s.nr = raum ? STAPEL.eins(raum, "schaetzen", T.SCHAETZ.length) : nr;
+      s.tipps = {}; s.phase = "tippen";
+    }
   },
   render(s, ich, namen) {
     const [frage, loesung] = T.SCHAETZ[s.nr];
@@ -88,7 +95,7 @@ const schaetzen = {
     const abst = namen.map((_, j) => [j, Math.abs(s.tipps[j] - loesung)]).filter(([j]) => s.tipps[j] !== undefined).sort((x, y) => x[1] - y[1]);
     return `<div class="frage">${esc(frage)}<br><span class="gross2">${loesung}</span></div>
       <ol class="rangliste">${abst.map(([j]) => `<li>${name(namen, j)}: ${s.tipps[j]}</li>`).join("")}</ol>
-      <div class="urteil">${name(namen, abst[abst.length - 1][0])} trinkt 2 · ${name(namen, abst[0][0])} verteilt 2</div>
+      <div class="urteil">${name(namen, abst[abst.length - 1][0])} trinkt ${schlucke(2)} · ${name(namen, abst[0][0])} verteilt ${schlucke(2)}</div>
       ${knopf("Nächste Frage", { typ: "weiter" }, "gross")}`;
   },
 };
@@ -97,10 +104,11 @@ const schaetzen = {
 let malLokal = { pfad: null };
 const malen = {
   id: "malen", name: "Malen & Raten", emoji: "🎨", farben: ["#ec4899","#6d28d9"], kurz: "Einer malt, die anderen raten – reihum",
-  start: () => ({ maler: 0, wort: ziehe(T.MALEN), striche: [], tipps: [], geloest: null, runde: 1 }),
+  // Woerter ohne Wiederholung am ganzen Abend (stapel.js)
+  start: (namen, raum) => ({ maler: 0, wort: raum ? T.MALEN[STAPEL.eins(raum, "malen", T.MALEN.length)] : ziehe(T.MALEN), striche: [], tipps: [], geloest: null, runde: 1 }),
   // Gesamtwertung: wer es erraten hat und wer es gemalt hat
   ergebnis: (s) => (s.geloest !== null && s.geloest >= 0 ? { nr: `m${s.runde}`, sieger: [s.geloest, s.maler] } : null),
-  aktion(s, i, a, namen) {
+  aktion(s, i, a, namen, raum) {
     // Punkte heissen "pfad": "p" ist seit den gleichzeitigen Spielen die Partie-Nummer (app.js setzt sie) und hat die
     // Striche ueberschrieben - so kam kein Strich mehr an (gefunden 26.10.2026 beim Beamer-Durchklick)
     const pfad = Array.isArray(a.pfad) ? a.pfad : a.p;
@@ -117,7 +125,7 @@ const malen = {
       }
     }
     if (a.typ === "aufgeben" && i === s.maler) s.geloest = -1;
-    if (a.typ === "weiter") { s.maler = (s.maler + 1) % s.anzahl; s.wort = ziehe(T.MALEN); s.striche = []; s.tipps = []; s.geloest = null; s.runde++; }
+    if (a.typ === "weiter") { s.maler = (s.maler + 1) % s.anzahl; s.wort = raum ? T.MALEN[STAPEL.eins(raum, "malen", T.MALEN.length)] : ziehe(T.MALEN); s.striche = []; s.tipps = []; s.geloest = null; s.runde++; }
   },
   render(s, ich, namen) {
     const istMaler = ich === s.maler;
@@ -125,7 +133,7 @@ const malen = {
     const tipps = `<div class="tipps">${s.tipps.slice(-6).map((x) => `<span>${esc(namen[x.von])}: ${esc(x.t)}</span>`).join("")}</div>`;
     let unten = "";
     if (s.geloest !== null) {
-      unten = `<div class="urteil">${s.geloest >= 0 ? `${name(namen, s.geloest)} hat es: <b>${esc(s.wort)}</b>! Alle anderen trinken 1, ${esc(namen[s.maler])} verteilt 2.` : `Aufgegeben – es war <b>${esc(s.wort)}</b>. ${esc(namen[s.maler])} trinkt 2.`}</div>${knopf("Nächster Maler", { typ: "weiter" }, "gross")}`;
+      unten = `<div class="urteil">${s.geloest >= 0 ? `${name(namen, s.geloest)} hat es: <b>${esc(s.wort)}</b>! Alle anderen trinken 1 Schluck, ${esc(namen[s.maler])} verteilt ${schlucke(2)}.` : `Aufgegeben – es war <b>${esc(s.wort)}</b>. ${esc(namen[s.maler])} trinkt ${schlucke(2)}.`}</div>${knopf("Nächster Maler", { typ: "weiter" }, "gross")}`;
     } else if (istMaler) unten = `<div class="zeile-knoepfe">${knopf("Alles löschen", { typ: "loeschen" })}${knopf("Aufgeben", { typ: "aufgeben" }, "rot")}</div>`;
     else unten = `<div class="zeile-knoepfe"><input id="raten" data-rk="${s.runde}" placeholder="Dein Tipp" autocomplete="off" enterkeyhint="send">${knopf("Raten", { typ: "rate" }, "", `data-feld="raten" data-leeren`)}</div>`;
     return `${kopf}<canvas id="leinwand" class="leinwand ${istMaler && s.geloest === null ? "aktiv" : ""}" width="600" height="600"></canvas>${tipps}${unten}`;

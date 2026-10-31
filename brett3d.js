@@ -4,8 +4,8 @@ import { spiele as klang } from "./ton.js";
 import * as THREE from "./vendor/three.module.js";
 
 const FARBEN_SP = [0xff5fae, 0x3fd0ff, 0xffd23f, 0x5ef08a];
-const FELDFARBE = { m: 0x2fbf62, v: 0xe0464e, t: 0xf39c2b, e: 0x4a7dff, d: 0xa84bff };
-const SYMBOL = { m: "🪙", v: "💸", t: "🍺", e: "❓", d: "⚔️" };
+const FELDFARBE = { m: 0x2fbf62, v: 0xe0464e, t: 0xf39c2b, a: 0xf39c2b, e: 0x4a7dff, d: 0xa84bff };
+const SYMBOL = { m: "🪙", v: "💸", t: "🍺", a: "🎯", e: "❓", d: "⚔️" };   // a = Aufgabenfeld (Trinkfeld ohne Trinken)
 
 let g = null;
 
@@ -209,13 +209,14 @@ function schleife() {
 }
 
 export function brett3dZeigen(container, s, muster) {
+  // neu bauen, wenn sich Spielerzahl oder Felder aendern (ohne Trinken: Aufgabenfelder statt Trinkfelder)
+  if (g && (g.figuren.length !== s.pos.length || g.muster !== muster)) g = null;
   try {
-    if (!g) aufbauen(muster, s.pos.length);
+    if (!g) { aufbauen(muster, s.pos.length); g.muster = muster; }
   } catch (e) {
     console.error(e);
     return false;
   }
-  if (g.figuren.length !== s.pos.length) { g = null; aufbauen(muster, s.pos.length); }
   g.container = container;
   container.appendChild(g.renderer.domElement);
   const breite = container.clientWidth || 360;

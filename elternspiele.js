@@ -2,11 +2,19 @@
 import { spiele as klang } from "./ton.js";
 import { esc, knopf, zufall, mischen, name } from "./hilfe.js";
 import { BEGRIFFE, PANTOMIME, FIGUREN, ORTE, SLF_KAT, QUIZ, QUIZ_HALLOWEEN } from "./inhalte2.js";
+import * as STAPEL from "./stapel.js";
 
 const punkteTafel = (namen, punkte) => `<div class="tafel">${namen.map((nm, j) => `<div><span class="farbe f${j}"></span><b>${esc(nm)}</b><span>🏅 ${punkte[j] || 0}</span></div>`).join("")}</div>`;
-function stapelZiehen(s, liste) {
+// mit raum: ohne Wiederholung ueber den ganzen Abend (stapel.js); ohne raum (alte Aufrufe, Tests): je Partie
+function stapelZiehen(s, liste, raum, schluessel) {
+  if (raum && schluessel) return STAPEL.eins(raum, schluessel, liste.length);
   if (!s.rest || !s.rest.length) s.rest = mischen(liste.map((_, i) => i));
   return s.rest.pop();
+}
+// lange Woerter (Figuren, Orte) am Handy nicht mitten im Wort trennen: Schrift je nach laengstem Wort kleiner
+export function wortKlasse(t) {
+  const l = Math.max(0, ...String(t ?? "").split(/[\s-]+/).map((w) => w.length));
+  return l > 15 ? "lang3" : l > 12 ? "lang2" : l > 10 ? "lang1" : "";
 }
 
 // lokaler Countdown, je Handy selbst gezaehlt (keine Uhren-Abgleiche noetig)
@@ -40,12 +48,13 @@ function erklaerSpiel(id, titel, emoji, kurz, farben, liste, mitVerboten, sekund
       const max = Math.max(...plus);
       return max > 0 ? { nr: `k${s.runde}`, sieger: plus.map((p, j) => (p === max ? j : -1)).filter((j) => j >= 0) } : null;
     },
-    aktion(s, i, a, namen) {
-      if (a.typ === "start" && i === s.dran && s.phase === "bereit") { if (s.dran === 0) s.kreisStart = [...s.punkte]; s.phase = "laeuft"; s.runde++; s.geschafft = 0; s.wort = stapelZiehen(s, liste); }
+    aktion(s, i, a, namen, raum) {
+      const zieh = () => stapelZiehen(s, liste, raum, id);
+      if (a.typ === "start" && i === s.dran && s.phase === "bereit") { if (s.dran === 0) s.kreisStart = [...s.punkte]; s.phase = "laeuft"; s.runde++; s.geschafft = 0; s.wort = zieh(); }
       else if (s.phase === "laeuft" && i === s.dran) {
-        if (a.typ === "richtig") { s.punkte[i]++; if (a.wer !== undefined && a.wer !== i) s.punkte[a.wer]++; s.geschafft++; s.wort = stapelZiehen(s, liste); }
-        if (a.typ === "skip") s.wort = stapelZiehen(s, liste);
-        if (a.typ === "verboten") { s.punkte[i] = Math.max(0, s.punkte[i] - 1); s.wort = stapelZiehen(s, liste); }
+        if (a.typ === "richtig") { s.punkte[i]++; if (a.wer !== undefined && a.wer !== i) s.punkte[a.wer]++; s.geschafft++; s.wort = zieh(); }
+        if (a.typ === "skip") s.wort = zieh();
+        if (a.typ === "verboten") { s.punkte[i] = Math.max(0, s.punkte[i] - 1); s.wort = zieh(); }
         if (a.typ === "zeit") { s.phase = "pause"; }
       } else if (a.typ === "weiter" && s.phase === "pause") { s.dran = (s.dran + 1) % namen.length; s.phase = "bereit"; }
     },
@@ -115,47 +124,121 @@ export function nameTreffer(eingabe, figur) {
   // ganzer Satz mit dem Namen darin ("ich bin Harry Potter")
   return ganze.some((k) => k.replace(/ /g, "").length >= 4 && ek.includes(k.replace(/ /g, "")));
 }
+// Figur von Spieler j: von der Gruppe gewaehlt (s.eigen) oder aus der Liste
+export const figurVon = (s, j) => (s && s.eigen && s.eigen[j]) || FIGUREN[s.figur[j]] || "";
+// Gruppe waehlt (Nico 31.10.2026, Punkt 10): einer schlaegt fuer einen Mitspieler eine Figur vor, die anderen stimmen zu,
+// der Betroffene sieht davon nichts. Angenommen ist sie mit der Mehrheit der anderen (der Vorschlagende zaehlt mit).
+const mehrheit = (n) => Math.floor((n - 1) / 2) + 1;
+const VORSCHLAG_MAX = 40;
 export const werbinich = {
   id: "werbinich", name: "Wer bin ich?", emoji: "🎭", kurz: "Alle sehen deine Figur – nur du nicht. Ja/Nein-Fragen stellen!", farben: ["#a29bfe", "#4834d4"],
   zeit: 180, // Nico 27.10.2026: 3 Minuten je Zug
-  start: (namen) => { const f = mischen(FIGUREN.map((_, i) => i)).slice(0, namen.length); return { figur: f, erraten: namen.map(() => 0), dran: 0, nr: 0, seit: Date.now(), fragen: namen.map(() => 0), falsch: {} }; },
+  // Figuren ohne Wiederholung am ganzen Abend: der Raum merkt sich die gezogenen (stapel.js, Nico 31.10.2026)
+  start: (namen, raum) => {
+    const f = raum ? STAPEL.ziehen(raum, "figuren", FIGUREN.length, namen.length) : mischen(FIGUREN.map((_, i) => i)).slice(0, namen.length);
+    return { figur: f, erraten: namen.map(() => 0), dran: 0, nr: 0, seit: Date.now(), fragen: namen.map(() => 0), falsch: {}, eigen: {}, vorschlag: {} };
+  },
   // Gesamtwertung (Nico 27.10.2026): JEDER, der seine Figur erraten hat, bekommt einen Punkt - gebucht, sobald alle
   // durch sind oder jemand "Spiel beenden" drueckt (wer bis dahin nicht erraten hat, geht leer aus).
   ergebnis: (s) => ((s.erraten.every((x) => x) || s.beendet) && s.erraten.some((x) => x)
     ? { nr: s.figur.join("-"), sieger: s.erraten.map((x, j) => (x ? j : -1)).filter((j) => j >= 0) } : null),
-  aktion(s, i, a, namen) {
+  aktion(s, i, a, namen, raum) {
+    const n = namen.length;
     if (a.typ === "erraten" && !s.erraten[i] && String(a.wert ?? "").trim()) {
       const t = String(a.wert).replace(/\s+/g, " ").trim().slice(0, 40);
-      if (nameTreffer(t, FIGUREN[s.figur[i]])) { s.nr++; s.erraten[i] = s.nr; if (s.falsch) delete s.falsch[i]; }
+      if (nameTreffer(t, figurVon(s, i))) { s.nr++; s.erraten[i] = s.nr; if (s.falsch) delete s.falsch[i]; if (s.vorschlag) delete s.vorschlag[i]; }
       else { s.falsch = s.falsch || {}; s.falsch[i] = { t, n: ((s.falsch[i] && s.falsch[i].n) || 0) + 1 }; }
     }
     if (a.typ === "naechster") {
       if (Array.isArray(s.fragen)) s.fragen[s.dran] = (s.fragen[s.dran] || 0) + 1;
-      s.dran = (s.dran + 1) % namen.length; s.seit = Date.now();
+      s.dran = (s.dran + 1) % n; s.seit = Date.now();
     }
+    // ---- Gruppe waehlt: vorschlagen (werte = [Ziel, Name]), zustimmen/ablehnen, zuruecknehmen
+    if (a.typ === "vorschlag") {
+      const w = Array.isArray(a.werte) ? a.werte : [a.ziel, a.wert];
+      const ziel = Number(w[0]), t = String(w[1] ?? "").replace(/\s+/g, " ").trim().slice(0, VORSCHLAG_MAX);
+      s.vorschlag = s.vorschlag || {};
+      if (!Number.isInteger(ziel) || ziel < 0 || ziel >= n || ziel === i || s.erraten[ziel] || !t || s.vorschlag[ziel]) return;
+      s.vorschlag[ziel] = { von: i, name: t, ja: [i], nein: [] };
+      vorschlagPruefen(s, ziel, n);
+    }
+    if (a.typ === "zustimmung" && s.vorschlag && s.vorschlag[a.ziel] && a.ziel !== i) {
+      const v = s.vorschlag[a.ziel];
+      if (v.ja.includes(i) || v.nein.includes(i)) return;
+      (a.ja ? v.ja : v.nein).push(i);
+      vorschlagPruefen(s, a.ziel, n);
+    }
+    if (a.typ === "zuruecknehmen" && s.vorschlag && s.vorschlag[a.ziel] && s.vorschlag[a.ziel].von === i) delete s.vorschlag[a.ziel];
     if (a.typ === "beenden" && s.erraten.some((x) => x)) s.beendet = true;
-    if (a.typ === "neu") { Object.assign(s, werbinich.start(namen)); s.beendet = false; }
+    if (a.typ === "neu") { Object.assign(s, werbinich.start(namen, raum)); s.beendet = false; }
   },
   render(s, ich, namen) {
     const alle = s.erraten.every((x) => x) || s.beendet;
     const falsch = !s.erraten[ich] && s.falsch && s.falsch[ich];
     const raten = s.erraten[ich] || alle ? "" : `<div class="zeile-knoepfe wbi-raten"><input id="wbi-name" data-rk="${esc(s.figur.join("-"))}" maxlength="40" placeholder="Wer bist du?" autocomplete="off" autocapitalize="words" enterkeyhint="send">${knopf("✅ Raten", { typ: "erraten" }, "gruen", `data-feld="wbi-name" data-leeren`)}</div>
       ${falsch ? `<div class="hinweisbox wbi-falsch" data-key="wbf-${falsch.n}">❌ „${esc(falsch.t)}“ ist es nicht – weiter fragen!</div>` : ""}`;
+    const karte = (nm, j) => {
+      const verdeckt = j === ich && !s.erraten[j];
+      const f = figurVon(s, j);
+      // der Betroffene sieht nichts von der Gruppenwahl - auch nicht, dass es sie gab
+      const gruppe = !verdeckt && s.eigen && s.eigen[j] ? `<em class="wbi-gruppe-marke">🗳️ von der Gruppe</em>` : "";
+      return `<div class="figurkarte ${j === ich ? "ich" : ""} ${s.erraten[j] ? "geschafft" : ""}">
+        <small>${esc(nm)}${j === ich ? " (du)" : ""}</small><b class="${verdeckt ? "" : wortKlasse(f)}">${verdeckt ? "❓ ??? ❓" : esc(f)}</b>${gruppe}${s.erraten[j] ? `<em>#${s.erraten[j]} erraten</em>` : ""}</div>`;
+    };
     return `<div class="frage">${name(namen, s.dran)} stellt eine Ja/Nein-Frage über sich</div>
-      <div class="figurenliste">${namen.map((nm, j) => `<div class="figurkarte ${j === ich ? "ich" : ""} ${s.erraten[j] ? "geschafft" : ""}">
-        <small>${esc(nm)}${j === ich ? " (du)" : ""}</small><b>${j === ich && !s.erraten[j] ? "❓ ??? ❓" : esc(FIGUREN[s.figur[j]])}</b>${s.erraten[j] ? `<em>#${s.erraten[j]} erraten</em>` : ""}</div>`).join("")}</div>
+      <div class="figurenliste">${namen.map(karte).join("")}</div>
       ${raten}
       ${knopf("➜ Nächster fragt", { typ: "naechster" }, "zweit")}
       ${!alle && s.erraten.some((x) => x) ? knopf("🏁 Spiel beenden", { typ: "beenden" }, "zweit") : ""}
       ${alle ? `<div class="urteil">🏆 ${s.erraten.every((x) => x) ? "Alle erraten!" : "Spiel beendet!"} Je einen Punkt: ${s.erraten.map((x, j) => (x ? name(namen, j) : "")).filter(Boolean).join(", ")}</div>${knopf("Neue Figuren", { typ: "neu" }, "gross")}` : ""}
+      ${alle ? "" : gruppenWahl(s, ich, namen)}
       <p class="mitte leise klein">Tipp: Wer mit „Nein“ antwortet bekommt, ist der Nächste dran.</p>`;
   },
 };
+function vorschlagPruefen(s, ziel, n) {
+  const v = s.vorschlag[ziel];
+  const noetig = mehrheit(n), stimmen = n - 1;
+  if (v.ja.length >= noetig) {
+    s.eigen = s.eigen || {};
+    s.eigen[ziel] = v.name;
+    if (s.falsch) delete s.falsch[ziel];
+    delete s.vorschlag[ziel];
+    s.gruppeNr = (s.gruppeNr || 0) + 1;
+  } else if (v.nein.length > stimmen - noetig) delete s.vorschlag[ziel];
+}
+// Kasten "Gruppe waehlt": offene Vorschlaege fuer andere (zustimmen/ablehnen) und ein eigener Vorschlag. Vorschlaege fuer
+// mich selbst tauchen hier nie auf.
+function gruppenWahl(s, ich, namen) {
+  if (ich < 0) return "";
+  const n = namen.length, noetig = mehrheit(n);
+  const v = s.vorschlag || {};
+  const offen = Object.keys(v).map(Number).filter((j) => j !== ich && v[j] && !s.erraten[j]).map((j) => {
+    const x = v[j], abgestimmt = x.ja.includes(ich) || x.nein.includes(ich);
+    return `<div class="wbi-vorschlag" data-key="wbv-${j}-${esc(x.name)}"><span>${name(namen, x.von)} schlägt für ${name(namen, j)} vor: <b>${esc(x.name)}</b>
+      <small class="leise">👍 ${x.ja.length} von ${noetig} nötig${x.nein.length ? ` · 👎 ${x.nein.length}` : ""}</small></span>
+      ${x.von === ich ? knopf("Zurücknehmen", { typ: "zuruecknehmen", ziel: j }, "klein2 zweit")
+        : abgestimmt ? `<small class="ok">✓ abgestimmt</small>`
+        : `<span class="wbi-stimmen">${knopf("👍 Ja", { typ: "zustimmung", ziel: j, ja: true }, "klein2 gruen")}${knopf("👎 Nein", { typ: "zustimmung", ziel: j, ja: false }, "klein2 rot")}</span>`}</div>`;
+  }).join("");
+  const ziele = namen.map((nm, j) => j).filter((j) => j !== ich && !s.erraten[j] && !v[j]);
+  const form = ziele.length ? `<label class="wbi-ziel">Für wen?<select id="wbi-ziel" data-rk="${esc(s.figur.join("-"))}">${ziele.map((j) => `<option value="${j}">${esc(namen[j])}</option>`).join("")}</select></label>
+      <div class="zeile-knoepfe wbi-raten"><input id="wbi-vor" data-rk="${esc(s.figur.join("-"))}" maxlength="${VORSCHLAG_MAX}" placeholder="Figur, z. B. Gandalf" autocomplete="off" autocapitalize="words">${knopf("🗳️ Vorschlagen", { typ: "vorschlag" }, "", `data-felder="wbi-ziel,wbi-vor" data-leeren`)}</div>` : "";
+  if (!offen && !form) return "";
+  return `<div class="wbi-gruppe"><b>🗳️ Gruppe wählt eine Figur</b>
+    <small class="leise">Statt Zufall: schlagt jemandem eine Figur vor. Stimmt die Mehrheit zu, gilt sie – die Person selbst sieht davon nichts.</small>
+    ${offen}${form}</div>`;
+}
 
 // ================================================================ Spion
+const ORT_AUSWAHL = 30;   // so viele Orte stehen dem Spion zur Wahl (wie die Ortsliste bei bekannten Spionspielen)
 export const spion = {
   id: "spion", name: "Der Spion", emoji: "🕵️", kurz: "Alle kennen den Ort – bis auf einen. Findet den Spion!", farben: ["#2d3436", "#6c5ce7"],
-  start: (namen) => ({ ort: zufall(ORTE.length), spion: zufall(namen.length), phase: "fragen", runde: Date.now() % 100000, stimmen: {}, tipp: null }),
+  // Orte ohne Wiederholung am Abend; der Spion raet aus ORT_AUSWAHL Orten (der richtige ist dabei) statt aus allen
+  start: (namen, raum) => {
+    const ort = raum ? STAPEL.eins(raum, "orte", ORTE.length) : zufall(ORTE.length);
+    const auswahl = mischen([ort, ...mischen(ORTE.map((_, i) => i).filter((i) => i !== ort)).slice(0, ORT_AUSWAHL - 1)]);
+    return { ort, auswahl, spion: zufall(namen.length), phase: "fragen", runde: Date.now() % 100000, stimmen: {}, tipp: null };
+  },
   // Gesamtwertung: gleiche Regel wie die Aufloesung unten - der Spion allein oder alle anderen
   ergebnis(s, namen) {
     if (s.phase !== "ende") return null;
@@ -169,12 +252,12 @@ export const spion = {
     }
     return { nr: String(s.runde), sieger: spionGewinnt ? [s.spion] : andere };
   },
-  aktion(s, i, a, namen) {
+  aktion(s, i, a, namen, raum) {
     if (a.typ === "abstimmen" && s.phase === "fragen") s.phase = "wahl";
     if (a.typ === "stimme" && s.phase === "wahl") { s.stimmen[i] = a.ziel; if (Object.keys(s.stimmen).length >= namen.length) s.phase = "aufloesung"; }
     if (a.typ === "ortraten" && i === s.spion && s.phase !== "ende") { s.tipp = a.ort; s.phase = "ende"; }
     if (a.typ === "aufloesen" && s.phase === "aufloesung") s.phase = "ende";
-    if (a.typ === "neu") Object.assign(s, spion.start(namen));
+    if (a.typ === "neu") Object.assign(s, spion.start(namen, raum));
   },
   render(s, ich, namen) {
     const binSpion = ich === s.spion;
@@ -185,7 +268,7 @@ export const spion = {
     if (s.phase === "fragen") return `${verdeckt}<div class="uhr" data-uhr="spion-${s.runde}">⏱️ 360</div>
       <p class="mitte">Reihum stellt jeder jemandem eine Frage zum Ort. Nicht zu deutlich – sonst weiß der Spion Bescheid!</p>
       ${knopf("🗳️ Jetzt abstimmen", { typ: "abstimmen" }, "gross")}
-      ${binSpion ? `<details class="grundregeln"><summary>🕵️ Ort raten (beendet das Spiel)</summary><div class="raster">${ORTE.map((o, k) => knopf(esc(o), { typ: "ortraten", ort: k }, "klein2")).join("")}</div></details>` : ""}`;
+      ${binSpion ? `<details class="grundregeln"><summary>🕵️ Ort raten (beendet das Spiel)</summary><div class="raster">${(s.auswahl || ORTE.map((_, k) => k)).map((k) => knopf(esc(ORTE[k]), { typ: "ortraten", ort: k }, "klein2")).join("")}</div></details>` : ""}`;
     if (s.phase === "wahl") return `${verdeckt}<div class="frage">Wer ist der Spion?</div>
       <div class="raster">${namen.map((nm, j) => (j === ich ? "" : knopf(esc(nm), { typ: "stimme", ziel: j }, `wahl ${s.stimmen[ich] === j ? "gewaehlt" : ""}`))).join("")}</div>
       <p class="mitte leise">${Object.keys(s.stimmen).length}/${namen.length} abgestimmt</p>`;
@@ -269,10 +352,17 @@ const PAKETE = {
   gemischt: ["🔀 Gemischt", QUIZ_ALLE.map((_, i) => i)],
 };
 export const QUIZ_ZEIT = 20;
-function quizZiehen(s) {
+function quizZiehen(s, raum) {
   const pool = (PAKETE[s.paket] || PAKETE.allgemein)[1];
-  if (!s.rest || !s.rest.length || s.restPaket !== s.paket) { s.rest = mischen(pool.slice()); s.restPaket = s.paket; }
-  s.frage = s.rest.pop(); s.reihe = mischen([0, 1, 2, 3]); s.seit = Date.now(); s.antworten = {}; s.phase = "frage";
+  if (raum) {
+    // ohne Wiederholung am ganzen Abend, ueber alle Pakete (eine Halloween-Frage kommt im Gemischt-Paket nicht nochmal)
+    const im = new Set(pool);
+    s.frage = STAPEL.eins(raum, "quiz", QUIZ_ALLE.length, Math.random, (i) => im.has(i));
+  } else {
+    if (!s.rest || !s.rest.length || s.restPaket !== s.paket) { s.rest = mischen(pool.slice()); s.restPaket = s.paket; }
+    s.frage = s.rest.pop();
+  }
+  s.reihe = mischen([0, 1, 2, 3]); s.seit = Date.now(); s.antworten = {}; s.phase = "frage";
 }
 function quizAufloesen(s) {
   s.phase = "aufloesung";
@@ -282,7 +372,7 @@ function quizAufloesen(s) {
 export const quiz = {
   id: "quiz", name: "Quizshow", emoji: "🧠", kurz: "Frage am Beamer, Antwort am Handy – schnell und richtig gibt Punkte", farben: ["#0984e3", "#2d1e8a"],
   zeit: QUIZ_ZEIT,
-  start: (namen) => { const s = { nr: 0, punkte: namen.map(() => 0), paket: "allgemein" }; quizZiehen(s); return s; },
+  start: (namen, raum) => { const s = { nr: 0, punkte: namen.map(() => 0), paket: "allgemein" }; quizZiehen(s, raum); return s; },
   botPause: () => 4500,
   // Gesamtwertung: je Frage, wer am schnellsten richtig lag
   ergebnis(s) {
@@ -295,14 +385,14 @@ export const quiz = {
     const w = Math.random() < 0.55 ? 0 : 1 + Math.floor(Math.random() * 3);
     return { typ: "antwort", w, ms: 2500 + Math.floor(Math.random() * 7000) };
   },
-  aktion(s, i, a, namen) {
+  aktion(s, i, a, namen, raum) {
     if (a.typ === "antwort" && s.phase === "frage" && s.antworten[i] === undefined) {
       s.antworten[i] = { w: a.w, ms: Number(a.ms) || 9999 };
       if (Object.keys(s.antworten).length >= namen.length) quizAufloesen(s);
     } else if (a.typ === "zeit" && s.phase === "frage" && a.nr === s.nr) {
       quizAufloesen(s);
     } else if (a.typ === "weiter" && s.phase === "aufloesung") {
-      s.nr++; quizZiehen(s);
+      s.nr++; quizZiehen(s, raum);
     } else if (a.typ === "paket" && PAKETE[a.paket]) {
       s.paket = a.paket;
     }

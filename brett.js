@@ -9,16 +9,20 @@ const FELDER = 28;
 const STERNPREIS = 10;
 // Feldarten: m = +3 Muenzen, v = -3 Muenzen, t = Trinkfeld, e = Ereignis, d = Duell
 const MUSTER = "mmtmevmdmtmemvmtmmdemtmvmemt";
-const ART = { m: ["🪙", "+3 Münzen"], v: ["💸", "−3 Münzen"], t: ["🍺", "Trinkfeld"], e: ["❓", "Ereignis"], d: ["⚔️", "Duell"] };
+// ohne Trinken (s.ohne, Nico 31.10.2026): aus dem Trinkfeld wird ein Aufgabenfeld (a) - kleine Aufgabe, sonst -2 Muenzen
+const MUSTER_OHNE = MUSTER.replace(/t/g, "a");
+const muster = (s) => (s && s.ohne ? MUSTER_OHNE : MUSTER);
+const AUFGABE_STRAFE = 2;
+const ART = { m: ["🪙", "+3 Münzen"], v: ["💸", "−3 Münzen"], t: ["🍺", "Trinkfeld"], a: ["🎯", "Aufgabenfeld"], e: ["❓", "Ereignis"], d: ["⚔️", "Duell"] };
 const EREIGNISSE = [
   ["Glückspilz! +6 Münzen", (s, i) => (s.muenzen[i] += 6)],
   ["Taschendieb! Du verlierst 5 Münzen", (s, i) => (s.muenzen[i] = Math.max(0, s.muenzen[i] - 5))],
   ["Robin Hood: der Reichste gibt dir 4 Münzen", (s, i) => { const r = s.muenzen.indexOf(Math.max(...s.muenzen)); const n = Math.min(4, s.muenzen[r]); s.muenzen[r] -= n; s.muenzen[i] += n; }],
-  ["Alle anderen trinken einen Schluck auf dich", () => {}],
+  ["Alle anderen trinken einen Schluck auf dich", () => {}, "Alle anderen applaudieren dir 5 Sekunden lang"],
   ["Teleport! Du landest 4 Felder weiter", (s, i) => { s.pos[i] = (s.pos[i] + 4) % FELDER; }],
   ["Stern-Umzug: der Stern wandert woanders hin", (s) => { s.stern = neuerStern(s); }],
-  ["Du trinkst 2 Schlucke – dafür +4 Münzen", (s, i) => (s.muenzen[i] += 4)],
-  ["Schenk jemandem 3 Münzen – oder trink 3 Schlucke", () => {}],
+  ["Du trinkst 2 Schlucke – dafür +4 Münzen", (s, i) => (s.muenzen[i] += 4), "Mach 10 Kniebeugen – dafür +4 Münzen"],
+  ["Schenk jemandem 3 Münzen – oder trink 3 Schlucke", () => {}, "Schenk jemandem 3 Münzen – oder die Runde denkt sich eine kleine Aufgabe für dich aus"],
 ];
 const MINI = ["tappen", "farbwort", "reaktion", "gedaechtnis", "schaetzen"];
 
@@ -53,22 +57,26 @@ export const brett = {
         s.pos[i] = (s.pos[i] + 1) % FELDER;
         if (s.pos[i] === s.stern) passiert = true;
       }
-      const feld = MUSTER[s.pos[i]];
+      const feld = muster(s)[s.pos[i]];
       s.meldung = `${namen[i]} würfelt eine ${s.wurf}.`;
       if (passiert && s.muenzen[i] >= STERNPREIS) { s.phase = "stern"; s.meldung += " Am Stern vorbei – kaufen?"; return; }
       if (passiert) s.meldung += ` Am Stern vorbei, aber zu wenig Münzen (${STERNPREIS} nötig).`;
       feldWirkung(s, i, feld, namen);
     } else if (s.phase === "stern" && i === s.dran && (a.typ === "kaufen" || a.typ === "nein")) {
-      if (a.typ === "kaufen") { s.muenzen[i] -= STERNPREIS; s.sterne[i]++; s.meldung = `⭐ ${namen[i]} kauft einen Stern! Alle anderen trinken 1.`; s.stern = neuerStern(s); }
-      feldWirkung(s, i, MUSTER[s.pos[i]], namen, true);
+      if (a.typ === "kaufen") { s.muenzen[i] -= STERNPREIS; s.sterne[i]++; s.meldung = `⭐ ${namen[i]} kauft einen Stern! Alle anderen trinken 1 Schluck.`; s.stern = neuerStern(s); }
+      feldWirkung(s, i, muster(s)[s.pos[i]], namen, true);
     } else if (s.phase === "duell" && i === s.dran && a.typ === "duell" && a.ziel !== i) {
       const ich = 1 + zufall(6), du = 1 + zufall(6);
       const sieger = ich >= du ? i : a.ziel, verl = sieger === i ? a.ziel : i;
       const beute = Math.min(4, s.muenzen[verl]);
       s.muenzen[verl] -= beute; s.muenzen[sieger] += beute;
-      s.meldung = `⚔️ Duell: ${namen[i]} ${ich} gegen ${namen[a.ziel]} ${du} – ${namen[sieger]} gewinnt ${beute} Münzen, ${namen[verl]} trinkt 2!`;
+      s.meldung = `⚔️ Duell: ${namen[i]} ${ich} gegen ${namen[a.ziel]} ${du} – ${namen[sieger]} gewinnt ${beute} Münzen, ${namen[verl]} trinkt 2 Schlucke!`;
       zugEnde(s);
     } else if (s.phase === "weiter" && a.typ === "weiter") {
+      zugEnde(s);
+    } else if (s.phase === "aufgabe" && a.typ === "aufgabe" && i === s.dran) {
+      if (!a.ok) { s.muenzen[i] = Math.max(0, s.muenzen[i] - AUFGABE_STRAFE); s.meldung = `🙅 ${namen[i]} kneift – −${AUFGABE_STRAFE} Münzen.`; }
+      else s.meldung = `✅ ${namen[i]} hat die Aufgabe erledigt.`;
       zugEnde(s);
     } else if (s.phase === "mini") {
       miniAktion(s, i, a, namen);
@@ -82,19 +90,20 @@ export const brett = {
     const koord = brettKoord();
     const felder = koord.map(([x, y], f) => {
       const figuren = namen.map((_, j) => (s.pos[j] === f ? `<i class="fig f${j}"></i>` : "")).join("");
-      return `<div class="feld art-${MUSTER[f]} ${f === s.stern ? "sternfeld" : ""}" style="grid-column:${x + 1};grid-row:${y + 1}">
-        ${f === s.stern ? "⭐" : ART[MUSTER[f]][0]}<div class="figs">${figuren}</div></div>`;
+      const art = muster(s)[f];
+      return `<div class="feld art-${art === "a" ? "t" : art} ${f === s.stern ? "sternfeld" : ""}" style="grid-column:${x + 1};grid-row:${y + 1}">
+        ${f === s.stern ? "⭐" : ART[art][0]}<div class="figs">${figuren}</div></div>`;
     }).join("");
     const mitte = `<div class="brettmitte">Runde ${Math.min(s.runde, RUNDEN)}/${RUNDEN}${s.wurf ? `<div class="wuerfel">🎲 ${s.wurf}</div>` : ""}</div>`;
     const brettHtml = `<div id="brett3d" class="brett3d"><div class="brett brett2d">${felder}${mitte}</div><div class="brett3d-info">Runde ${Math.min(s.runde, RUNDEN)}/${RUNDEN}${s.wurf ? ` · 🎲 ${s.wurf}` : ""}</div></div>`;
     const m = s.meldung || "";
-    const klang = /kauft einen Stern/.test(m) ? "stern" : /\+3 Münzen/.test(m) ? "richtig" : /−3 Münzen/.test(m) ? "falsch" : /❓/.test(m) ? "magie" : /Duell/.test(m) ? "spannung" : /Trinkfeld/.test(m) ? "pop" : "";
+    const klang = /kauft einen Stern/.test(m) ? "stern" : /\+3 Münzen/.test(m) ? "richtig" : /−3 Münzen/.test(m) ? "falsch" : /❓/.test(m) ? "magie" : /Duell/.test(m) ? "spannung" : /Trinkfeld|Aufgabenfeld/.test(m) ? "pop" : "";
     const meldung = `<div class="meldung">${esc(m)}</div>${klang ? `<i hidden data-key="bt-${s.runde}-${s.dran}-${m.length}-${klang}" data-ton="${klang}" data-ton-nach="${s.wurf && klang !== "stern" ? 400 + s.wurf * 280 : 0}"></i>` : ""}`;
     if (s.ende) {
       const rang = namen.map((_, j) => j).sort((a, b) => s.sterne[b] - s.sterne[a] || s.muenzen[b] - s.muenzen[a]);
       return `${tafel}<div class="urteil">🏆 ${name(namen, rang[0])} gewinnt das Partybrett!</div>
         <ol class="rangliste">${rang.map((j) => `<li>${name(namen, j)}: ⭐${s.sterne[j]} 🪙${s.muenzen[j]}</li>`).join("")}</ol>
-        <p class="mitte">Letzter Platz trinkt 3 Schlucke 🍺</p>${knopf("Neues Spiel", { typ: "neustart" }, "gross")}`;
+        <p class="mitte">${s.ohne ? `🎯 Letzter Platz: ${esc(T.AUFGABEN[(s.pos.length * 7 + s.muenzen.reduce((x, y) => x + y, 0)) % T.AUFGABEN.length])}` : "Letzter Platz trinkt 3 Schlucke 🍺"}</p>${knopf("Neues Spiel", { typ: "neustart" }, "gross")}`;
     }
     if (s.phase === "mini") return `${tafel}<i hidden data-key="btmini-${s.runde}-${s.mini && s.mini.art}" data-ton="los"></i>${miniRender(s, ich, namen)}`;
     let steuer = "";
@@ -103,9 +112,11 @@ export const brett = {
     if (s.phase === "stern") steuer = istDran ? `<div class="raster2">${knopf(`⭐ Kaufen (${STERNPREIS})`, { typ: "kaufen" }, "gross gelb")}${knopf("Nein", { typ: "nein" }, "gross")}</div>` : `<p class="mitte leise">${esc(namen[s.dran])} überlegt …</p>`;
     if (s.phase === "duell") steuer = istDran ? `<p class="mitte">Wen forderst du heraus?</p><div class="raster">${namen.map((nm, j) => (j === ich ? "" : knopf(esc(nm), { typ: "duell", ziel: j }, "gross"))).join("")}</div>` : `<p class="mitte leise">${esc(namen[s.dran])} wählt einen Gegner …</p>`;
     if (s.phase === "weiter") steuer = knopf("Weiter", { typ: "weiter" }, "gross");
+    if (s.phase === "aufgabe") steuer = istDran ? `<div class="raster2">${knopf("✅ Erledigt", { typ: "aufgabe", ok: true }, "gross gruen")}${knopf(`🙅 Keine Lust (−${AUFGABE_STRAFE} 🪙)`, { typ: "aufgabe", ok: false }, "gross")}</div>`
+      : `<p class="mitte leise">${esc(namen[s.dran])} ist mit der Aufgabe dran …</p>`;
     // nach dem Wurf steht das Feld erst eine Weile: Weiter, Kaufen/Nein und die Duell-Wahl sind kurz gesperrt (app.js),
     // damit ein zweiter Tipp auf "Wuerfeln" nicht gleich das Ergebnis wegtippt
-    const nachWurf = ["weiter", "stern", "duell"].includes(s.phase) ? `<i hidden data-ergebnis="bw-${s.runde}-${s.dran}-${s.phase}-${m.length}"></i>` : "";
+    const nachWurf = ["weiter", "stern", "duell", "aufgabe"].includes(s.phase) ? `<i hidden data-ergebnis="bw-${s.runde}-${s.dran}-${s.phase}-${m.length}"></i>` : "";
     return `${tafel}${brettHtml}${meldung}${nachWurf}${steuer}`;
   },
   musik(s) { return s.ende ? null : "brett"; },
@@ -127,6 +138,7 @@ export const brett = {
     if (s.phase === "stern") return { typ: "kaufen" };
     if (s.phase === "duell") { const andere = [...Array(n).keys()].filter((j) => j !== i).sort((a, b) => s.muenzen[b] - s.muenzen[a]); return { typ: "duell", ziel: andere[0] }; }
     if (s.phase === "weiter") return { typ: "weiter" };
+    if (s.phase === "aufgabe") return { typ: "aufgabe", ok: true };
     return null;
   },
   nach(s, ich, senden) {
@@ -134,7 +146,7 @@ export const brett = {
     const c = document.getElementById("brett3d");
     if (c && !s.ende) {
       const zweiD = c.querySelector(".brett2d");
-      if (brett3dZeigen(c, s, MUSTER) && zweiD) zweiD.remove();
+      if (brett3dZeigen(c, s, muster(s)) && zweiD) zweiD.remove();
     }
   },
 };
@@ -144,7 +156,9 @@ function feldWirkung(s, i, feld, namen, nachStern = false) {
   if (feld === "m") { s.muenzen[i] += 3; s.meldung = pre + "+3 Münzen."; s.phase = "weiter"; }
   else if (feld === "v") { s.muenzen[i] = Math.max(0, s.muenzen[i] - 3); s.meldung = pre + "−3 Münzen."; s.phase = "weiter"; }
   else if (feld === "t") { s.meldung = pre + `🍺 Trinkfeld: ${namen[i]} trinkt ${schlucke(1 + zufall(3))}.`; s.phase = "weiter"; }
-  else if (feld === "e") { const [text, f] = ziehe(EREIGNISSE); f(s, i); s.meldung = pre + "❓ " + text; s.phase = "weiter"; }
+  // Aufgabenfeld (ohne Trinken): kleine Aufgabe; wer nicht will, gibt Muenzen ab
+  else if (feld === "a") { s.meldung = pre + `🎯 Aufgabenfeld: ${namen[i]} – ${ziehe(T.AUFGABEN)}`; s.phase = "aufgabe"; }
+  else if (feld === "e") { const [text, f, ohneText] = ziehe(EREIGNISSE); f(s, i); s.meldung = pre + "❓ " + (s.ohne && ohneText ? ohneText : text); s.phase = "weiter"; }
   else if (feld === "d") { s.meldung = pre + "⚔️ Duellfeld!"; s.phase = "duell"; }
 }
 
