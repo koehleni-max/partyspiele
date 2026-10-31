@@ -6,9 +6,16 @@
 import { spiele as klang } from "./ton.js";
 import * as THREE from "./vendor/three.module.js";
 
-// gleiche Farben wie die Namenspunkte (style.css: f0-f3 fest, ab f4 hsl(188 + 47*k, 85%, 62%))
-const FARBEN_SP = [0xff5fae, 0x3fd0ff, 0xffd23f, 0x5ef08a,
-  ...Array.from({ length: 16 }, (_, k) => new THREE.Color().setHSL(((188 + 47 * k) % 360) / 360, 0.85, 0.62).getHex())];
+// gleiche Farben wie die Namenspunkte: die 20 festen Spielerfarben --s0 ... --s19 aus style.css (eine Quelle, 31.10.2026)
+// (erst beim Aufbau gelesen, dann ist style.css sicher geladen)
+const ERSATZ_SP = [0xff5fae, 0x3fd0ff, 0xffd23f, 0x5ef08a];
+let FARBEN_SP = ERSATZ_SP;
+function spielerFarbenLesen() {
+  FARBEN_SP = Array.from({ length: 20 }, (_, j) => {
+    const css = getComputedStyle(document.documentElement).getPropertyValue(`--s${j}`).trim();
+    return css ? new THREE.Color(css).getHex() : ERSATZ_SP[j % 4];
+  });
+}
 const FELDFARBE = { m: 0x2fbf62, v: 0xe0464e, t: 0xf39c2b, a: 0xf39c2b, e: 0x4a7dff, d: 0xa84bff, l: 0x18b6b0 };
 const SYMBOL = { m: "🪙", v: "💸", t: "🍺", a: "🎯", e: "❓", d: "⚔️", l: "🛒" };   // a = Aufgabenfeld (Trinkfeld ohne Trinken)
 
@@ -78,9 +85,9 @@ function aufbauen(muster, anzahlSpieler, brett) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0x0d0e1a, 28, 52);
-  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 200);
-  camera.position.set(0, 19, 19);
-  camera.lookAt(0, 0, 0);
+  const camera = new THREE.PerspectiveCamera(42, 1 / 0.82, 0.1, 200);
+  camera.position.set(0, 23.5, 20);
+  camera.lookAt(0, 0, 0.8);
   scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x2a1840, 1.1));
   const sonne = new THREE.DirectionalLight(0xffffff, 2.2);
   sonne.position.set(8, 16, 6); sonne.castShadow = true;
@@ -172,6 +179,7 @@ function aufbauen(muster, anzahlSpieler, brett) {
   ring.rotation.x = -Math.PI / 2; scene.add(ring);
 
   // Spielfiguren
+  spielerFarbenLesen();
   const figuren = [];
   for (let j = 0; j < anzahlSpieler; j++) {
     const { fig, fuesse, koerper } = figurBauen(FARBEN_SP[j % FARBEN_SP.length]);
@@ -188,7 +196,8 @@ function aufbauen(muster, anzahlSpieler, brett) {
   scene.add(funken);
 
   g = { renderer, scene, camera, felder, figuren, stern, sternLicht, saeule, ring, wuerfel, funken, n, wurfSchluessel: null, wurfStart: 0, wurfZahlen: [1],
-    funkenZeit: 0, uhr: new THREE.Clock(), container: null, aktiv: 0, laeuft: false, schweber: [], fallenObj: {}, effektNr: null, lage };
+    funkenZeit: 0, uhr: new THREE.Clock(), container: null, aktiv: 0, laeuft: false, schweber: [], fallenObj: {}, effektNr: null, lage,
+    blick: new THREE.Vector3(0, 0, 0.8) };
 }
 
 function funkenAn(pos, farbe = null) {
@@ -272,13 +281,46 @@ function schleife() {
     if (x.t > 1.8) { g.scene.remove(x.sp); x.sp.material.map.dispose(); x.sp.material.dispose(); return false; }
     return true;
   });
-  // Kamera folgt sanft dem aktiven Spieler
+  // Kamera folgt sanft dem aktiven Spieler - aber nur so weit, dass die ganze Insel im Bild bleibt (31.10.2026: vorher
+  // schnitt sie am Handy den linken/rechten Rand an). Blickpunkt gleitet, der Abstand wird je Bild passend gerechnet.
   const ziel = akt ? akt.obj.position : new THREE.Vector3();
-  const kamZiel = new THREE.Vector3(ziel.x * 0.22, 23.5, ziel.z * 0.22 + 20);
-  g.camera.position.lerp(kamZiel, Math.min(1, dt * 1.5));
-  g.camera.lookAt(ziel.x * 0.25, 0, ziel.z * 0.25 + 0.8);
+  g.blick.lerp(new THREE.Vector3(ziel.x * 0.25, 0, ziel.z * 0.25 + 0.8), Math.min(1, dt * 1.5));
+  kameraSetzen(g.blick);
   g.renderer.render(g.scene, g.camera);
 }
+
+// Punkte am Rand der Insel (Oberkante, Unterkante der Erde, Baumspitzen am Rand) - die muessen alle ins Bild
+const RAND_PUNKTE = [];
+for (let k = 0; k < 48; k++) {
+  const a = (k / 48) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+  RAND_PUNKTE.push(new THREE.Vector3(c * 14.6, -0.1, s * 14.6), new THREE.Vector3(c * 13, -1.5, s * 13), new THREE.Vector3(c * 9.5, -4.5, s * 9.5),
+    new THREE.Vector3(c * 13.2, 1.9, s * 13.2));
+}
+const KAM_RICHTUNG = new THREE.Vector3(0, 23.5, 19.2).normalize();
+const RAND_NDC = 0.96;   // etwas Luft zum Rand des Bildes
+const _p = new THREE.Vector3();
+function randWert(cam) {
+  cam.updateMatrixWorld(); cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
+  let m = 0;
+  for (const q of RAND_PUNKTE) { _p.copy(q).project(cam); m = Math.max(m, Math.abs(_p.x), Math.abs(_p.y)); }
+  return m;
+}
+// Kamera in fester Blickrichtung auf den Punkt "blick" - so nah wie moeglich, aber mit der ganzen Insel im Bild
+function kameraSetzen(blick) {
+  const cam = g.camera;
+  let nah = 18, fern = 90;
+  for (let i = 0; i < 14; i++) {
+    const mitte = (nah + fern) / 2;
+    cam.position.copy(blick).addScaledVector(KAM_RICHTUNG, mitte); cam.lookAt(blick);
+    if (randWert(cam) <= RAND_NDC) fern = mitte; else nah = mitte;
+  }
+  cam.position.copy(blick).addScaledVector(KAM_RICHTUNG, fern); cam.lookAt(blick);
+  cam.updateMatrixWorld();
+  // Nebel wandert mit dem Abstand (wie vorher: beginnt kurz vor dem Blickpunkt, bei Abstand 30 also 28 bis 52)
+  if (g.scene.fog) { g.scene.fog.near = fern - 2.3; g.scene.fog.far = fern + 21.7; }
+}
+// fuer die Tests: wie weit ragt die Insel gerade an den Bildrand? (<= 1 heisst: alles im Bild)
+export function kameraRand() { return g ? randWert(g.camera) : null; }
 
 // brett = { lage: [{x, z}], next: [[...]], waren }  (aus brett.js)
 export function brett3dZeigen(container, s, muster, brett) {

@@ -5,7 +5,11 @@
   --text: #f4f5ff; --leise: #9aa0c7; --blurple: #6d5dfc; --blurple-lippe: #4a3cd6;
   --gruen: #58cc02; --gruen-lippe: #3f9a00; --rot: #ff4b4b; --rot-lippe: #c92f2f; --gelb: #ffc800; --gelb-lippe: #d29a00;
   --pink: #eb459e; --pink-lippe: #b62c77; --blau: #1cb0f6; --blau-lippe: #1286c0; --orange: #ff9600;
-  --s0: #ff5fae; --s1: #3fd0ff; --s2: #ffd23f; --s3: #5ef08a;
+  /* 20 feste Spielerfarben (31.10.2026): jedes Paar klar verschieden, alle hell genug fuer den dunklen Grund - geprueft in
+     test_farben.py. Die ersten vier bleiben wie bisher. brett3d.js liest dieselben Variablen fuer die 3D-Figuren. */
+  --s0: #ff5fae; --s1: #3fd0ff; --s2: #ffd23f; --s3: #5ef08a; --s4: #ff8020; --s5: #c020e0; --s6: #ff2020; --s7: #2060ff;
+  --s8: #e0ff60; --s9: #60a0ff; --s10: #a06020; --s11: #e0a0ff; --s12: #208060; --s13: #ffa0a0; --s14: #e0e0ff; --s15: #40a020;
+  --s16: #8080a0; --s17: #a0a080; --s18: #a06060; --s19: #ffffe0;
   --radius: 20px;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -249,23 +253,23 @@ details.verdeckt summary { cursor: pointer; font-weight: 900; text-align: center
 .meinerolle { margin-top: 12px; color: var(--leise); font-weight: 700; text-align: center; } .meinerolle summary { cursor: pointer; }
 .rollenaufloesung { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 8px 0; } .rollenaufloesung span { background: #0f1022; padding: 5px 9px; border-radius: 10px; font-weight: 700; font-size: 14px; }
 body.nachtmodus { background: #020208; } body.nachtmodus::before { opacity: .15; } body.nachtmodus .fuss, body.nachtmodus .kopf { opacity: .35; }
-/* Farben fuer bis zu 20 Spieler */
-.f4 { background: hsl(188 85% 62%); color: hsl(188 85% 62%); } .n4 { color: hsl(188 90% 72%); } .fig.f4 { background: hsl(188 85% 62%); }
-.f5 { background: hsl(235 85% 62%); color: hsl(235 85% 62%); } .n5 { color: hsl(235 90% 72%); } .fig.f5 { background: hsl(235 85% 62%); }
-.f6 { background: hsl(282 85% 62%); color: hsl(282 85% 62%); } .n6 { color: hsl(282 90% 72%); } .fig.f6 { background: hsl(282 85% 62%); }
-.f7 { background: hsl(329 85% 62%); color: hsl(329 85% 62%); } .n7 { color: hsl(329 90% 72%); } .fig.f7 { background: hsl(329 85% 62%); }
-.f8 { background: hsl(16 85% 62%); color: hsl(16 85% 62%); } .n8 { color: hsl(16 90% 72%); } .fig.f8 { background: hsl(16 85% 62%); }
-.f9 { background: hsl(63 85% 62%); color: hsl(63 85% 62%); } .n9 { color: hsl(63 90% 72%); } .fig.f9 { background: hsl(63 85% 62%); }
-.f10 { background: hsl(110 85% 62%); color: hsl(110 85% 62%); } .n10 { color: hsl(110 90% 72%); } .fig.f10 { background: hsl(110 85% 62%); }
-.f11 { background: hsl(157 85% 62%); color: hsl(157 85% 62%); } .n11 { color: hsl(157 90% 72%); } .fig.f11 { background: hsl(157 85% 62%); }
-.f12 { background: hsl(204 85% 62%); color: hsl(204 85% 62%); } .n12 { color: hsl(204 90% 72%); } .fig.f12 { background: hsl(204 85% 62%); }
-.f13 { background: hsl(251 85% 62%); color: hsl(251 85% 62%); } .n13 { color: hsl(251 90% 72%); } .fig.f13 { background: hsl(251 85% 62%); }
-.f14 { background: hsl(298 85% 62%); color: hsl(298 85% 62%); } .n14 { color: hsl(298 90% 72%); } .fig.f14 { background: hsl(298 85% 62%); }
-.f15 { background: hsl(345 85% 62%); color: hsl(345 85% 62%); } .n15 { color: hsl(345 90% 72%); } .fig.f15 { background: hsl(345 85% 62%); }
-.f16 { background: hsl(32 85% 62%); color: hsl(32 85% 62%); } .n16 { color: hsl(32 90% 72%); } .fig.f16 { background: hsl(32 85% 62%); }
-.f17 { background: hsl(79 85% 62%); color: hsl(79 85% 62%); } .n17 { color: hsl(79 90% 72%); } .fig.f17 { background: hsl(79 85% 62%); }
-.f18 { background: hsl(126 85% 62%); color: hsl(126 85% 62%); } .n18 { color: hsl(126 90% 72%); } .fig.f18 { background: hsl(126 85% 62%); }
-.f19 { background: hsl(173 85% 62%); color: hsl(173 85% 62%); } .n19 { color: hsl(173 90% 72%); } .fig.f19 { background: hsl(173 85% 62%); }
+/* Farben fuer Spieler 5 bis 20 (feste Liste --s4 ... --s19 oben, 31.10.2026) */
+.f4 { background: var(--s4); color: var(--s4); } .n4 { color: var(--s4); } .fig.f4 { background: var(--s4); } .brett2d .fig2.f4 { fill: var(--s4); }
+.f5 { background: var(--s5); color: var(--s5); } .n5 { color: var(--s5); } .fig.f5 { background: var(--s5); } .brett2d .fig2.f5 { fill: var(--s5); }
+.f6 { background: var(--s6); color: var(--s6); } .n6 { color: var(--s6); } .fig.f6 { background: var(--s6); } .brett2d .fig2.f6 { fill: var(--s6); }
+.f7 { background: var(--s7); color: var(--s7); } .n7 { color: var(--s7); } .fig.f7 { background: var(--s7); } .brett2d .fig2.f7 { fill: var(--s7); }
+.f8 { background: var(--s8); color: var(--s8); } .n8 { color: var(--s8); } .fig.f8 { background: var(--s8); } .brett2d .fig2.f8 { fill: var(--s8); }
+.f9 { background: var(--s9); color: var(--s9); } .n9 { color: var(--s9); } .fig.f9 { background: var(--s9); } .brett2d .fig2.f9 { fill: var(--s9); }
+.f10 { background: var(--s10); color: var(--s10); } .n10 { color: var(--s10); } .fig.f10 { background: var(--s10); } .brett2d .fig2.f10 { fill: var(--s10); }
+.f11 { background: var(--s11); color: var(--s11); } .n11 { color: var(--s11); } .fig.f11 { background: var(--s11); } .brett2d .fig2.f11 { fill: var(--s11); }
+.f12 { background: var(--s12); color: var(--s12); } .n12 { color: var(--s12); } .fig.f12 { background: var(--s12); } .brett2d .fig2.f12 { fill: var(--s12); }
+.f13 { background: var(--s13); color: var(--s13); } .n13 { color: var(--s13); } .fig.f13 { background: var(--s13); } .brett2d .fig2.f13 { fill: var(--s13); }
+.f14 { background: var(--s14); color: var(--s14); } .n14 { color: var(--s14); } .fig.f14 { background: var(--s14); } .brett2d .fig2.f14 { fill: var(--s14); }
+.f15 { background: var(--s15); color: var(--s15); } .n15 { color: var(--s15); } .fig.f15 { background: var(--s15); } .brett2d .fig2.f15 { fill: var(--s15); }
+.f16 { background: var(--s16); color: var(--s16); } .n16 { color: var(--s16); } .fig.f16 { background: var(--s16); } .brett2d .fig2.f16 { fill: var(--s16); }
+.f17 { background: var(--s17); color: var(--s17); } .n17 { color: var(--s17); } .fig.f17 { background: var(--s17); } .brett2d .fig2.f17 { fill: var(--s17); }
+.f18 { background: var(--s18); color: var(--s18); } .n18 { color: var(--s18); } .fig.f18 { background: var(--s18); } .brett2d .fig2.f18 { fill: var(--s18); }
+.f19 { background: var(--s19); color: var(--s19); } .n19 { color: var(--s19); } .fig.f19 { background: var(--s19); } .brett2d .fig2.f19 { fill: var(--s19); }
 /* Fertige Spiele */
 .fremd-buehne { --accent: var(--blurple); --accent-hover: #8577ff; --border: var(--rand); --text-muted: var(--leise); --text: var(--text); --surface: var(--flaeche2); --warning: var(--gelb); --bg: var(--flaeche); --font-mono: ui-monospace, monospace; --ship-color: #7f8fa6; }
 .fremd-buehne { background: #0f1022; border: 2px solid var(--rand); border-radius: 18px; padding: 10px; overflow-x: auto; }
@@ -302,8 +306,10 @@ body.nachtmodus { background: #020208; } body.nachtmodus::before { opacity: .15;
 .fremd-buehne .bs-firing-col { width: 100%; }
 .fremd-buehne .bs-firing-col { display: flex; flex-direction: column; align-items: stretch; max-width: 360px; margin: 0 auto; }
 
-/* Ton-Schalter unten links */
-.ton-schalter { position: fixed; left: 12px; bottom: 12px; z-index: 50; width: 46px; height: 46px; padding: 0; border-radius: 50%;
+/* Ton-Schalter unten links. Am Handy/PC (31.10.2026) nicht mehr schwebend: er steht am Seitenende unter allem
+   (body haengt ihn hinter #app an) und verdeckt so nie einen Spieler-Chip oder Knopf. Nur am Beamer (kein Scrollen) schwebt er. */
+.ton-schalter { position: relative; display: block; margin: -10px 0 calc(12px + env(safe-area-inset-bottom)) max(12px, calc(50% - 266px));
+  z-index: 50; width: 46px; height: 46px; padding: 0; border-radius: 50%;
   font-size: 20px; line-height: 1; background: rgba(30, 31, 48, 0.85); border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 4px 14px rgba(0,0,0,0.4);
   backdrop-filter: blur(8px); min-height: 0; }
 .ton-schalter:active { transform: scale(0.92); }
@@ -528,7 +534,7 @@ button.schreckknopf { font-size: 22px; letter-spacing: .5px; }
 body.beamer { padding: 0; overflow: hidden; font-size: min(2.1vw, 3.75vh); }
 body.beamer #app { max-width: none; margin: 0; padding: 0; }
 body.beamer.maus-weg, body.beamer.maus-weg * { cursor: none !important; }
-body.beamer .ton-schalter { opacity: .3; } body.beamer .ton-schalter:hover { opacity: 1; }
+body.beamer .ton-schalter { position: fixed; left: 12px; bottom: 12px; margin: 0; opacity: .3; } body.beamer .ton-schalter:hover { opacity: 1; }
 body.beamer::before { animation-duration: 12s; }
 body.beamer[data-look="halloween"]::after { height: 46vh; animation: nebelwogen 9s ease-in-out infinite alternate; }
 @keyframes nebelwogen { from { opacity: .55; transform: translateX(-3vw) scaleY(.9); } to { opacity: 1; transform: translateX(3vw) scaleY(1.1); } }
