@@ -8,6 +8,7 @@
 // 9 = Start/Options, 12-15 Steuerkreuz, Achsen 0/1 linker Stick. Der Browser zeigt einen Controller erst nach dem
 // ersten Tastendruck - genau der Druck meldet ihn als Mitspieler an.
 import { esc } from "./hilfe.js";
+import * as R from "./brett_minis.js";
 
 const TOTZONE = 0.5;
 
@@ -72,7 +73,8 @@ let fokusKey = null;
 const ZIELE = "#ansage button, #app button:not([disabled]), #app .schalter, #app a.knopf-link";
 const schluessel = (el) => el.dataset.a || (el.dataset.ansicht !== undefined ? "ansicht:" + el.dataset.ansicht : "") || el.id || el.textContent.trim().slice(0, 40);
 function sichtbar(el) { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden"; }
-export function ziele() { return [...document.querySelectorAll(ZIELE)].filter((el) => !el.closest(".padbox") && sichtbar(el)); }
+// Minispiel-Knoepfe (data-mt) gehoeren dem Handy - Controller spielen in ihrem eigenen Feld (brett_minis.js)
+export function ziele() { return [...document.querySelectorAll(ZIELE)].filter((el) => !el.closest(".padbox") && !el.matches("[data-mt]") && sichtbar(el)); }
 export function fokus() { const el = document.querySelector(".pad-fokus"); return el && document.contains(el) ? el : null; }
 export function fokusSetzen(el) {
   document.querySelectorAll(".pad-fokus").forEach((x) => x.classList.remove("pad-fokus"));
@@ -132,6 +134,8 @@ export function miniHTML(m, pads, schaetz, senden) {
   const offen = pads.filter(({ j }) => m.werte[j] === undefined);
   aktiv = { m, pads, schaetz, senden };
   if (!pads.length) return "";
+  // neue Minispiele (Ausbau 31.10.2026): gleiche Logik wie am Handy, Tasten kommen von miniTaste
+  if (R.istNeu(m.art)) pads.forEach(({ pad }) => R.anmelden(m, pad.id, (wert, mk) => aktiv && aktiv.senden(pad.id, wert, mk), (t) => taste(pad.art, t)));
   if (m.art === "reaktion") planeGruen(m);
   if (m.art === "gedaechtnis") planeVerstecken(m);
   return `<div class="padminis ${offen.length ? "" : "alle-fertig"}">${pads.map(({ pad, j }) => `<div class="padbox" id="padbox-${pad.nr}" data-pad="${esc(pad.id)}">
@@ -160,6 +164,7 @@ function zifferHTML(s) {
 }
 function inhalt(pad, j, m) {
   const a = pad.art;
+  if (R.istNeu(m.art)) return m.werte[j] !== undefined ? `<div class="padfertig">✓ Erledigt</div>` : R.html(m, pad.id, (t) => taste(a, t));
   const s = st(pad, m);
   if (m.werte[j] !== undefined || s.gesendet) return `<div class="padfertig">✓ Erledigt</div>`;
   if (m.art === "tappen") {
@@ -185,7 +190,7 @@ function inhalt(pad, j, m) {
 }
 
 function zeigen() {
-  if (!aktiv) return;
+  if (!aktiv || R.istNeu(aktiv.m.art)) return;   // neue Minispiele zeichnen ihr Feld selbst
   aktiv.pads.forEach(({ pad, j }) => {
     const box = document.querySelector(`#padbox-${pad.nr} .padinhalt`);
     if (box) { const h = inhalt(pad, j, aktiv.m); if (box.innerHTML !== h) box.innerHTML = h; }
@@ -206,6 +211,7 @@ export function miniTaste(padId, t) {
   const e = aktiv.pads.find(({ pad }) => pad.id === padId);
   if (!e) return false;
   const { pad, j } = e, m = aktiv.m;
+  if (R.istNeu(m.art)) return m.werte[j] !== undefined ? true : R.taste(pad.id, t);
   const s = st(pad, m);
   if (m.werte[j] !== undefined || s.gesendet) return true;
   const fertig = (wert) => { s.gesendet = true; aktiv.senden(pad.id, wert); zeigen(); };

@@ -17,6 +17,7 @@ import { knopf, ohneAlkohol } from "./hilfe.js";
 import * as BS from "./beamer_spiele.js";
 import * as C from "./controller.js";
 import * as T from "./texte.js";
+import * as BE from "./brett_ereignisse.js";
 
 const app = document.getElementById("app");
 const BASIS = location.href.split("#")[0];
@@ -66,7 +67,7 @@ let anzeige = { pid: null, id: null };   // fuer wen das angezeigte Spiel gerade
 //   jemand weitergeblaettert (p.wv), verfaellt der zweite Tipp (Doppeltipp, zwei Handys gleichzeitig).
 const ERGEBNIS_SPERRE = 2000;
 const WEITER_TYPEN = new Set(["weiter", "naechster", "miniweiter", "neu", "neustart", "los", "start", "aufloesen"]);
-const SPERR_TYPEN = new Set([...WEITER_TYPEN, "kaufen", "nein", "duell"]);
+const SPERR_TYPEN = new Set([...WEITER_TYPEN, "kaufen", "nein", "duell", "weg", "kaufware"]);
 let ergebnisSperre = { key: "", bis: 0, timer: null };
 // Zurueck-Knopf des Handys: aus Spiel, Tafel oder Steuerseite zur Uebersicht statt aus dem Raum
 let zurueckEintrag = !!(history.state && history.state.pa === "unter");
@@ -297,6 +298,7 @@ async function raumOeffnen(anlass) {
     gastNr: 1, gruesse: [], beamer: B.steuer(null), glueck: null };
   G.sicher(raum);
   glueckMerkenLesen();   // gestrichene Rad-Ergebnisse vom letzten Raum (Nico 31.10.2026: "wird gemerkt")
+  brettMerkenLesen();    // gestrichene Partybrett-Ereignisse ebenso
   geschrieben = null;
   gastgeberStart();
 }
@@ -309,6 +311,14 @@ function glueckMerkenSchreiben() {
 }
 function glueckMerkenLesen() {
   try { const m = JSON.parse(localStorage.getItem(GLUECK_MERK) || "null"); if (m) G.merkUebernehmen(raum, m); } catch (e) { /* kaputt: ignorieren */ }
+}
+// Partybrett: gestrichene Ereignisse (Nico 31.10.2026, Punkt 8: "wird gemerkt") - gleiche Art wie beim Gluecksrad
+const BRETT_MERK = "pa_brett_ereignisse_weg";
+function brettMerkenSchreiben() {
+  try { localStorage.setItem(BRETT_MERK, JSON.stringify(raum.brettWeg || [])); } catch (e) { /* privater Modus */ }
+}
+function brettMerkenLesen() {
+  try { const m = JSON.parse(localStorage.getItem(BRETT_MERK) || "null"); if (m) BE.merkUebernehmen(raum, m); } catch (e) { /* kaputt: ignorieren */ }
 }
 
 async function gastgeberFortsetzen() {
@@ -393,7 +403,7 @@ function anwesenheitUebernehmen() {
   if (neu) { const aend = neueAenderung(); aend.lobby = true; verteilen(aend); }
 }
 
-const RAUM_TYPEN = new Set(["_hallo", "_spielwahl", "_ab18", "_trink", "_look", "_testkonten", "_tafel", "_admin", "_adminweg", "_raumende", "_beamer", "_alle", "_glueck"]);
+const RAUM_TYPEN = new Set(["_hallo", "_spielwahl", "_ab18", "_trink", "_look", "_testkonten", "_tafel", "_admin", "_adminweg", "_raumende", "_beamer", "_alle", "_glueck", "_brettweg"]);
 
 function ausfuehren(von, a) {
   if (!raum || !a || typeof a !== "object" || typeof a.typ !== "string") return;
@@ -420,6 +430,12 @@ function ausfuehren(von, a) {
       if (!G.aktion(raum, von, a, Date.now(), admin)) return;
       aend.lobby = true;
       if (admin && GLUECK_MERKEN.has(a.was)) glueckMerkenSchreiben();
+    }
+    // Partybrett-Ereignisse streichen: nur die Spielleitung; gilt fuer alle Partybretter im Raum ab dem naechsten "?"-Feld
+    else if (a.typ === "_brettweg") {
+      if (!admin || !BE.streichAktion(raum, a)) return;
+      aend.lobby = true;
+      brettMerkenSchreiben();
     }
     else if (a.typ === "_alle" && admin) {
       // Spiel fuer alle: jeder, der gerade verbunden ist, ist gleich dabei; die Spielleitung startet mit "Los"
@@ -775,9 +791,12 @@ function anzeigeIch(p, sp) {
 }
 function padMinis(p, sp, nm) {
   if (sp.id !== "brett" || p.phase !== "laeuft" || !p.s || p.s.phase !== "mini" || !p.s.mini || p.s.mini.fertig) { C.miniAus(); return ""; }
-  const hier = Object.values(pads).map((pad) => ({ pad, j: p.mit.indexOf(pad.id) })).filter((x) => x.j >= 0);
   const m = p.s.mini;
-  return C.miniHTML(m, hier, m.art === "schaetzen" ? T.SCHAETZ[m.frage] : null, (id, wert) => sendenAls(id, { typ: "mini", wert, p: p.pid }));
+  // nur Controller, die in diesem Minispiel mitspielen (Duell: nur die zwei; Ausbau 31.10.2026)
+  const hier = Object.values(pads).map((pad) => ({ pad, j: p.mit.indexOf(pad.id) })).filter((x) => x.j >= 0 && (!Array.isArray(m.teil) || m.teil.includes(x.j)));
+  const zuschauer = Object.values(pads).filter((pad) => { const j = p.mit.indexOf(pad.id); return j >= 0 && Array.isArray(m.teil) && !m.teil.includes(j); });
+  const zusch = zuschauer.length ? `<p class="mitte leise klein">👀 ${zuschauer.map((x) => esc(x.name)).join(", ")} ${zuschauer.length > 1 ? "schauen" : "schaut"} diesmal zu</p>` : "";
+  return C.miniHTML(m, hier, m.art === "schaetzen" ? T.SCHAETZ[m.frage] : null, (id, wert, mk) => sendenAls(id, mk ? { typ: "mini", wert, mk, p: p.pid } : { typ: "mini", wert, p: p.pid })) + zusch;
 }
 // Leiste unter dem Spiel: welche Controller hier dabei sind und was ihre Tasten gerade tun
 function padLeiste(p, sp) {
@@ -1194,7 +1213,7 @@ window.addEventListener("popstate", (ev) => {
   zurueckEintrag = false;
   if (!raum || status) return;
   if (ansicht || tafelAuf || steuerAuf) {
-    ansicht = null; tafelAuf = false; steuerAuf = false; ansichtMerken();
+    ansicht = null; tafelAuf = false; steuerAuf = false; glueckReiter = false; brettReiter = false; ansichtMerken();
     vibriere(20); zeichnen(); window.scrollTo(0, 0);
   } else hinweis("Noch einmal Zurück verlässt den Raum");
 });
@@ -1217,7 +1236,7 @@ function zeichnen() {
   TON.still(anDerWand);
   let musik = null, partie = null;
   if (status || !raum) app.innerHTML = statusBild();
-  else if (steuerAuf && zeigeSteuer()) { einsetzen(glueckReiter ? glueckListeBild() : steuerBild()); steuerSpiel = beamerSpielSig(); }
+  else if (steuerAuf && zeigeSteuer()) { einsetzen(brettReiter ? brettListeBild() : glueckReiter ? glueckListeBild() : steuerBild()); steuerSpiel = beamerSpielSig(); }
   else if (tafelAuf) einsetzen(tafelBild());
   else if (ansicht && raum.partien[ansicht]) {
     const p = partie = raum.partien[ansicht];
@@ -1425,6 +1444,7 @@ function sammelBild(p, sp, nm, ich, leitet) {
     ${ich < 0 ? knopf("🙋 Mitmachen", { typ: "_mit" }, "gross gruen") : ich > 0 ? knopf("Doch nicht", { typ: "_raus" }, "zweit") : ""}
     ${leitet && sp.bot ? knopf("🤖 Computer-Mitspieler dazu", { typ: "_botneu" }, "zweit") : ""}
     ${trinkWahl(p, leitet)}
+    ${sp.id === "brett" && zeigeSteuer() ? `<button class="zweit" data-br-reiter>📋 Ereignisse des ❓-Felds ansehen und streichen</button>` : ""}
     ${leitet ? knopf(`▶️ Los geht's (${p.mit.length} ${p.mit.length === 1 ? "Spieler" : "Spieler"})`, { typ: "_los" }, "gross", `data-klang="los"`)
       : `<div class="hinweisbox warten">${esc(nm[0])} startet, sobald alle dabei sind …</div>`}`;
 }
@@ -1496,6 +1516,7 @@ function steuerBild() {
         <p class="leise klein">Am Beamer erscheint 2–3 Sekunden ein Gruselgesicht mit Schrei. Nur im Halloween-Aussehen.</p>` : ""}
     </div>
     ${steuerGlueck(schalter)}
+    ${steuerBrett()}
     <div class="karte steuerseite">
       <h2>🎮 Spiel für alle starten</h2>
       <p class="leise klein">Alle, die gerade verbunden sind, sind sofort dabei. Du startest dann mit „Los“.</p>
@@ -1583,6 +1604,32 @@ function glueckListeBild() {
       ${liste.map((f) => `<div class="gl-kopf"><h3>${f.emo} ${esc(f.name)}${f.aus ? " <small class=\"leise\">(Feld aus)</small>" : ""}</h3>
         ${f.eintraege.length > 1 ? knopf(f.eintraege.every((x) => x.weg) ? "alle wieder rein" : "alle streichen", gl(f.eintraege.every((x) => x.weg) ? "alleauf" : "allestreichen", { id: f.feld }), "klein2 zweit") : ""}</div>
         ${f.eintraege.map((x) => zeile(f, x)).join("")}`).join("")}
+    </div>`;
+}
+
+// Partybrett auf der Steuerseite: Reiter mit allen Ereignissen des "?"-Felds (Nico 31.10.2026, Punkt 8)
+function steuerBrett() {
+  const weg = (raum.brettWeg || []).length;
+  return `<div class="karte steuerseite steuer-brett">
+      <h2>🎲 Partybrett</h2>
+      <p class="leise klein">Auf dem ❓-Feld wartet einer von ${BE.anzahl()} Zufällen. Trink-Ereignisse kommen nur, wenn das Brett mit Trinken gespielt wird.</p>
+      <button class="gross gl-reiter-knopf" data-br-reiter>📋 Alle ${BE.anzahl()} Ereignisse – ansehen und streichen${weg ? `<small>${weg} gestrichen</small>` : ""}</button>
+    </div>`;
+}
+let brettReiter = false;
+function brettListeBild() {
+  const weg = new Set(raum.brettWeg || []);
+  const offen = BE.EREIGNISSE.filter((x) => !weg.has(x.id)).length;
+  const br = (was, mehr = {}) => ({ typ: "_brettweg", was, ...mehr });
+  const zeile = (x) => `<div class="gl-eintrag ${weg.has(x.id) ? "gestrichen" : ""}" data-a='${JSON.stringify(br("streichen", { id: x.id })).replace(/'/g, "&#39;")}'><input type="checkbox" ${weg.has(x.id) ? "" : "checked"} tabindex="-1"><span>${esc(x.text)}</span></div>`;
+  return `${gastgeberHinweis()}
+    <div class="kopf"><span>📋 Partybrett: alle Ereignisse</span><button class="klein2" data-br-zu>‹ Steuerseite</button></div>
+    <div class="karte steuerseite gl-liste br-liste">
+      <p class="leise klein">${offen} von ${BE.anzahl()} Ereignissen sind drin. Antippen streicht oder nimmt wieder auf. Die Auswahl gilt sofort für alle Partybretter im Raum, und dieses Gerät merkt sie sich für den nächsten Raum.</p>
+      ${weg.size ? knopf("Alle wieder rein", br("alleauf"), "zweit") : ""}
+      ${BE.KATEGORIEN.map(([k, titel]) => { const l = BE.EREIGNISSE.filter((x) => x.kat === k); const alleWeg = l.every((x) => weg.has(x.id));
+        return `<div class="gl-kopf"><h3>${titel} <small class="leise">(${l.filter((x) => !weg.has(x.id)).length}/${l.length})</small></h3>${knopf(alleWeg ? "alle wieder rein" : "alle streichen", br("kat", { kat: k }), "klein2 zweit")}</div>
+        ${l.map(zeile).join("")}`; }).join("")}
     </div>`;
 }
 
@@ -1689,7 +1736,7 @@ document.addEventListener("click", async (ev) => {
     zeichnen(); window.scrollTo(0, 0);
     return;
   }
-  const el = ev.target.closest("[data-anlass],[data-zurueck],#beitreten,#weitermachen,[data-ansicht],[data-a],[data-teilen],[data-ansage-mit],[data-ansage-weg],[data-steuern],[data-code],[data-raum-neu],[data-uebernehmen],[data-ende-frage],[data-neu-laden],[data-steuer-auf],[data-steuer-zu],[data-gl-reiter],[data-gl-zu],[data-ohne-code],[data-rad-hin],[data-padname],[data-padweg]");
+  const el = ev.target.closest("[data-anlass],[data-zurueck],#beitreten,#weitermachen,[data-ansicht],[data-a],[data-teilen],[data-ansage-mit],[data-ansage-weg],[data-steuern],[data-code],[data-raum-neu],[data-uebernehmen],[data-ende-frage],[data-neu-laden],[data-steuer-auf],[data-steuer-zu],[data-gl-reiter],[data-gl-zu],[data-br-reiter],[data-br-zu],[data-ohne-code],[data-rad-hin],[data-padname],[data-padweg]");
   if (!el) return;
   if (el.dataset.gesperrt !== undefined) return;   // Ergebnis steht noch (ergebnisPruefen)
   // Controller umbenennen oder entfernen (nur dieses Geraet; der Spieler bleibt im Raum, wie ein Handy, das geht)
@@ -1710,13 +1757,19 @@ document.addEventListener("click", async (ev) => {
     padHallo(pad);
     return;
   }
+  if (el.dataset.brReiter !== undefined || el.dataset.brZu !== undefined) {
+    brettReiter = el.dataset.brReiter !== undefined; glueckReiter = false;
+    if (brettReiter && !steuerAuf) { steuerAuf = true; tafelAuf = false; ansicht = null; ansichtMerken(); }
+    vibriere(20); TON.spiele("klick"); zeichnen(); window.scrollTo(0, 0);
+    return;
+  }
   if (el.dataset.glReiter !== undefined || el.dataset.glZu !== undefined) {
-    glueckReiter = el.dataset.glReiter !== undefined;
+    glueckReiter = el.dataset.glReiter !== undefined; brettReiter = false;
     vibriere(20); TON.spiele("klick"); zeichnen(); window.scrollTo(0, 0);
     return;
   }
   if (el.dataset.steuerAuf !== undefined || el.dataset.steuerZu !== undefined) {
-    steuerAuf = el.dataset.steuerAuf !== undefined; tafelAuf = false; glueckReiter = false;
+    steuerAuf = el.dataset.steuerAuf !== undefined; tafelAuf = false; glueckReiter = false; brettReiter = false;
     if (steuerAuf) { ansicht = null; ansichtMerken(); }
     vibriere(20); TON.spiele("klick"); zeichnen(); window.scrollTo(0, 0);
     return;

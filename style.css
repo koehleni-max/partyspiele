@@ -865,3 +865,83 @@ button[data-gesperrt]:active { transform: none; }
 .gl-kopf { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
 .gl-kopf > * { min-width: 0; }
 .gl-reiter-knopf { overflow-wrap: anywhere; } .gl-reiter-knopf small { display: block; font-size: 12px; opacity: .85; }
+
+/* ---- Partybrett-Ausbau (Nico 31.10.2026, Punkt 8): Minispiele, Laden, Wege, Schlussrunden, Bonussterne, flaches Brett */
+.mini-modus { text-align: center; font-weight: 800; font-size: 14px; background: #0f1022; border: 2px solid var(--rand); border-radius: 14px; padding: 7px 10px; margin: 0 0 8px; overflow-wrap: anywhere; }
+.mini-kopf { text-align: center; font-weight: 900; color: var(--gelb); margin: 6px 0; overflow-wrap: anywhere; }
+.mini-typ { display: block; font-size: 12px; color: var(--leise); font-weight: 800; letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
+.mini-abbruch { margin-top: 14px; }
+.mn { background: var(--flaeche2); border: 2px solid var(--rand); border-radius: 20px; padding: 10px; margin: 8px 0; text-align: center; user-select: none; -webkit-user-select: none; touch-action: manipulation; min-width: 0; }
+.mn-uhr { min-height: 22px; font-weight: 900; color: var(--leise); font-variant-numeric: tabular-nums; }
+.mn-los { display: inline-block; font-size: 30px; color: var(--gelb); animation: aufploppen .4s; }
+.mn-bild { min-height: 150px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; overflow: hidden; min-width: 0; }
+.mn-bild small { color: var(--leise); font-weight: 800; overflow-wrap: anywhere; }
+.mn-regel { font-size: 17px; font-weight: 800; line-height: 1.4; padding: 6px; overflow-wrap: anywhere; }
+.mn-fertig { font-size: 24px; font-weight: 900; color: var(--gruen); } .mn-fertig small { display: block; font-size: 15px; color: var(--text); margin-top: 4px; }
+.mn-gross { font-size: 40px; font-weight: 900; line-height: 1.15; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; max-width: 100%; }
+.mn-knoepfe { display: grid; gap: 8px; margin-top: 8px; }
+.mn-knoepfe.mn-r1 { grid-template-columns: 1fr; } .mn-knoepfe.mn-r2, .mn-knoepfe.mn-r22 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.mn-knoepfe.mn-r3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.mn-knoepfe.mn-rkreuz { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: ". o ." "l . r" ". u ."; }
+.mn-rkreuz .mn-t-hoch { grid-area: o; } .mn-rkreuz .mn-t-links { grid-area: l; } .mn-rkreuz .mn-t-rechts { grid-area: r; } .mn-rkreuz .mn-t-runter { grid-area: u; }
+.mn-k { margin: 0; min-height: 64px; font-size: 19px; padding: 10px 6px; background: var(--blurple); box-shadow: 0 5px 0 var(--blurple-lippe); overflow-wrap: anywhere; min-width: 0; touch-action: manipulation; }
+.mn-k:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--blurple-lippe); }
+.mn-k.gruen { background: var(--gruen); box-shadow: 0 5px 0 var(--gruen-lippe); }
+.mn-k.farbe-a { background: #16a34a; box-shadow: 0 5px 0 #0d6b30; } .mn-k.farbe-b { background: #e11d48; box-shadow: 0 5px 0 #9f1239; }
+.mn-k.farbe-x { background: #2563eb; box-shadow: 0 5px 0 #1e40af; } .mn-k.farbe-y { background: #ca8a04; box-shadow: 0 5px 0 #854d0e; }
+.mn-emo { font-size: 36px; line-height: 1; }
+.mn-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 6px; }
+.mn-chip { background: #0f1022; border: 2px solid var(--rand); border-radius: 10px; padding: 4px 8px; font-weight: 800; font-size: 14px; overflow-wrap: anywhere; max-width: 100%; }
+.mn-pad .mn-bild { min-height: 110px; } .mn-pad .mn-gross { font-size: 30px; } .mn-pad .mn-regel { font-size: 14px; }
+.mn-ballon { line-height: 1; transition: font-size .12s; }
+.mn-folge { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; font-size: 24px; }
+.mn-folge span { opacity: .45; border-radius: 8px; padding: 2px; } .mn-folge span.ok { opacity: .2; } .mn-folge span.an { opacity: 1; outline: 3px solid var(--gelb); transform: scale(1.15); }
+.mn-punkte { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.mn-punkte i { width: 38px; height: 38px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-style: normal; font-weight: 900; box-shadow: 0 3px 0 #0008; }
+.mn-punkte i.leer { background: #0f1022; border: 2px dashed var(--rand); color: var(--leise); }
+.mn-karte { width: 96px; height: 130px; border-radius: 14px; background: #fffdf5; color: #b4231f; font-size: 52px; font-weight: 900; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 0 #0008; animation: aufploppen .25s; }
+.mn-truhen { display: flex; gap: 14px; font-size: 44px; } .mn-truhen span { display: flex; flex-direction: column; align-items: center; opacity: .75; }
+.mn-truhen span.an { opacity: 1; transform: scale(1.15); } .mn-truhen small { font-size: 16px; color: var(--gelb) !important; }
+.mn-ziel { font-size: 26px; }
+.mn-gewimmel { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; font-size: 24px; width: 100%; max-width: 320px; }
+.mn-balken { position: relative; width: 100%; height: 46px; border-radius: 99px; background: #0f1022; border: 2px solid var(--rand); overflow: hidden; }
+.mn-zone { position: absolute; left: 42%; width: 16%; top: 0; bottom: 0; background: #58cc0255; border-left: 2px solid var(--gruen); border-right: 2px solid var(--gruen); }
+.mn-zeiger { position: absolute; top: 4px; bottom: 4px; width: 8px; margin-left: -4px; border-radius: 4px; background: var(--gelb); box-shadow: 0 0 12px var(--gelb); }
+.mn-turm { position: relative; width: 100%; height: 170px; border-bottom: 3px solid var(--rand); overflow: hidden; }
+.mn-turm i { position: absolute; height: 18px; border-radius: 4px; box-shadow: inset 0 -3px 0 #0004; }
+.mn-turm i.schwebt { background: var(--gelb); box-shadow: 0 0 10px var(--gelb); }
+.mn-bahn { position: relative; width: 100%; height: 60px; background: repeating-linear-gradient(90deg, #0f1022 0 18px, #16182e 18px 36px); border-radius: 12px; overflow: hidden; }
+.mn-bahn span { position: absolute; bottom: 6px; font-size: 34px; transform: scaleX(-1); } .mn-bahn i { position: absolute; right: 4px; top: 10px; font-style: normal; font-size: 28px; }
+.mn-schnur { width: 100%; height: 12px; border-radius: 99px; background: #0f1022; overflow: hidden; } .mn-schnur i { display: block; height: 100%; background: linear-gradient(90deg, #a16207, #ff9600); }
+.mn-wuerfel { font-size: 64px; letter-spacing: 6px; line-height: 1; }
+.mn-blitz { font-size: 64px; color: var(--gelb); }
+.mn-pfeil { font-size: 56px; line-height: 1; }
+.mn-ampel { width: 100%; height: 170px; border-radius: 22px; display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 900; cursor: pointer; }
+.mn-ampel.grau { background: #2a2c40; color: var(--leise); } .mn-ampel.rot { background: radial-gradient(circle, #ef4444, #7f1d1d); } .mn-ampel.gruen { background: radial-gradient(circle, #4ade80, #15803d); }
+.mn-lauf { position: relative; width: 100%; height: 110px; border-bottom: 4px solid #8a6a3a; overflow: hidden; }
+.mn-lauf span { position: absolute; left: 6%; font-size: 38px; transform: scaleX(-1); } .mn-lauf i { position: absolute; bottom: 0; font-style: normal; font-size: 28px; }
+.mn-regen { position: relative; width: 100%; height: 200px; background: linear-gradient(#11132a, #1d2040); border-radius: 14px; overflow: hidden; }
+.mn-regen i { position: absolute; font-style: normal; font-size: 28px; } .mn-regen span { position: absolute; bottom: 4px; font-size: 40px; transition: left .08s; }
+.mn-zahlen { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+.mn-zahlen span { width: 40px; height: 44px; border-radius: 10px; background: #0f1022; border: 2px solid var(--rand); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 900; }
+.mn-zahlen span.an { border-color: var(--gelb); color: var(--gelb); }
+.schlussband { text-align: center; font-weight: 900; background: linear-gradient(90deg, #7c2d12, #b4231f); border-radius: 14px; padding: 8px 10px; margin: 0 0 8px; overflow-wrap: anywhere; animation: pulsieren 1.6s ease-in-out infinite; }
+.beutel { letter-spacing: 1px; }
+.waren button, .wege button { min-width: 0; overflow-wrap: anywhere; }
+.wege button small, .waren button small { display: block; font-size: 12px; font-weight: 700; opacity: .85; margin-top: 4px; }
+.laden { display: grid; gap: 8px; margin: 8px 0; }
+.ware-knopf { margin: 0; text-align: left; display: flex; flex-direction: column; gap: 2px; background: #11423f; box-shadow: 0 4px 0 #082826; overflow-wrap: anywhere; min-width: 0; }
+.ware-knopf span { display: flex; justify-content: space-between; gap: 8px; } .ware-knopf span b { white-space: nowrap; color: var(--gelb); }
+.ware-knopf small { font-size: 13px; font-weight: 700; opacity: .85; }
+.ware-knopf:disabled { opacity: .45; }
+.bonusliste { display: grid; gap: 8px; margin: 10px 0; }
+.bonus { display: flex; gap: 10px; align-items: center; background: #0f1022; border: 2px solid var(--gelb); border-radius: 14px; padding: 8px 12px; animation: aufploppen .5s; min-width: 0; }
+.bonus .emo { font-size: 30px; flex: 0 0 auto; } .bonus span:last-child { min-width: 0; overflow-wrap: anywhere; } .bonus small { display: block; color: var(--leise); font-weight: 700; }
+svg.brett2d { display: block; width: 100%; height: auto; }
+.brett2d .wege line { stroke: #e8d9b0; stroke-width: .35; opacity: .7; }
+.brett2d circle { stroke: #0008; stroke-width: .08; }
+.brett2d .f2 text { font-size: .8px; text-anchor: middle; }
+.brett2d .art-m circle { fill: #2fbf62; } .brett2d .art-v circle { fill: #e0464e; } .brett2d .art-t circle { fill: #f39c2b; } .brett2d .art-e circle { fill: #4a7dff; }
+.brett2d .art-d circle { fill: #a84bff; } .brett2d .art-l circle { fill: #18b6b0; } .brett2d .sternfeld circle { fill: #ffd23f; }
+.brett2d .fig2 { stroke: #fff; stroke-width: .1; fill: #fff; }
+.brett2d .fig2.f0 { fill: var(--s0); } .brett2d .fig2.f1 { fill: var(--s1); } .brett2d .fig2.f2 { fill: var(--s2); } .brett2d .fig2.f3 { fill: var(--s3); }
