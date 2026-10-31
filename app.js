@@ -410,9 +410,18 @@ function ausfuehren(von, a) {
   if (!raum || !a || typeof a !== "object" || typeof a.typ !== "string") return;
   const aend = neueAenderung();
   if (a.typ === "_hallo") { if (hallo(von, a.name)) aend.lobby = true; return verteilen(aend); }
-  const ich = raum.spieler.find((x) => x.id === von);
-  if (!ich) return;
+  let ich = raum.spieler.find((x) => x.id === von);
+  // Steuerpult am Beamer (Nico 31.10.2026): das Beamer-Geraet ist KEIN Spieler. Es darf sich mit dem Freischaltcode als
+  // Spielleitung ausweisen und danach steuern (Raum, Beamer, Spiele starten/leiten) - nie mitspielen.
+  const pult = !ich && B.istPult(von);
+  if (!ich && !pult) return;
   const admin = K.istAdmin(raum, von);
+  if (pult) {
+    if (a.typ === "_admin") { adminPruefen(von, a.beweis); return; }
+    if (!admin || !B.pultErlaubt(a)) return;
+    if (a.typ === "_spielwahl") a = { ...a, typ: "_alle", wert: a.id };   // ein Spiel vom Pult startet immer fuer alle
+    ich = { id: von, name: "📽️ Beamer" };
+  }
   if (RAUM_TYPEN.has(a.typ)) {
     if (a.typ === "_spielwahl") {
       const sp = spiel(a.id);
@@ -445,6 +454,7 @@ function ausfuehren(von, a) {
       const pid = `p${raum.pNr++}`;
       const p = P.neu(pid, sp.id, von, Date.now(), raum.ohneAlkohol);
       raum.spieler.filter((x) => x.online && x.id !== von).forEach((x) => { if (p.mit.length < P.MAX_MIT) p.mit.push(x.id); });
+      if (pult) { p.mit = p.mit.filter((x) => x !== von); p.von = p.mit[0] || von; }   // der Beamer spielt nicht mit
       raum.partien[pid] = p;
       raum.meldung = { nr: (raum.meldung ? raum.meldung.nr : 0) + 1, pid, von, alle: true };
       aend.lobby = true; aend.partien.add(pid);

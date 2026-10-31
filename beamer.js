@@ -27,6 +27,9 @@ import * as P from "./partien.js";
 import * as A from "./anlass.js";
 import * as G from "./gluecksrad.js";
 import { esc } from "./hilfe.js";
+import * as PULT from "./beamer_pult.js";
+// Steuerpult am Beamer (Nico 31.10.2026): app.js fragt hier, welche Kennung ein Pult ist und was es darf
+export { istPult, pultErlaubt } from "./beamer_pult.js";
 
 export const PAUSE = 30 * 60000;          // von Hand gewaehlte Seite bleibt so lange stehen
 export const DAUERN = [10, 15, 30, 60];   // Sekunden je Seite (Steuerseite)
@@ -238,9 +241,13 @@ function pillen(raum, p, max = 12) {
 function seiteSpiele(raum, liste) {
   const zeig = liste.slice(0, 6);
   return `<h2 class="bm-h">🎮 Laufende Spiele</h2>
-    <div class="bm-partien ${zeig.length > 2 ? "drei" : ""}">${zeig.map((p) => { const sp = spiel(p.spiel); return `
-      <div class="bm-partie ${p.phase === "sammeln" ? "sammelt" : ""}"><div class="bm-partie-kopf"><span class="bm-emo">${sp.emoji}</span><span><b>${esc(sp.name)}</b><small>${partieZustand(p)}</small></span></div>
-        <div class="bm-pillen">${pillen(raum, p, zeig.length > 2 ? 8 : 14)}</div></div>`; }).join("")}</div>
+    <div class="bm-partien ${zeig.length > 2 ? "drei" : ""}">${zeig.map((p) => { const sp = spiel(p.spiel);
+      // Zuschauen: laufende Spiele mit Zuschau-Ansicht live als kleines Bild, Antippen zeigt sie gross
+      const live = p.phase === "laeuft" && p.bm && BS.HTML_DA(p.spiel);
+      const mini = live && BS.FREMD_ZUSCHAUEN.includes(p.spiel) ? `<div class="bm-mini">${BS.html(raum, p, p.bm, null)}</div>` : "";
+      return `
+      <div class="bm-partie ${p.phase === "sammeln" ? "sammelt" : ""} ${live ? "live" : ""}" ${live ? `data-bm-fokus="${esc(p.pid)}" role="button"` : ""}><div class="bm-partie-kopf"><span class="bm-emo">${sp.emoji}</span><span><b>${esc(sp.name)}</b><small>${partieZustand(p)}${live ? " · antippen = groß" : ""}</small></span></div>
+        ${mini || `<div class="bm-pillen">${pillen(raum, p, zeig.length > 2 ? 8 : 14)}</div>`}</div>`; }).join("")}</div>
     ${liste.length > zeig.length ? `<p class="bm-leise mitte">+ ${liste.length - zeig.length} weitere Spiele</p>` : ""}`;
 }
 
@@ -342,6 +349,13 @@ let zuletztFledermaus = 0;
 // Spielansicht: je Partie der letzte Auszug (Klaenge bei Aenderung, Pferde-Animation), beendetes Spiel, lokale Reaktionsuhr
 const bsMerk = {}, bsLokal = { gruen: {}, timer: null };
 let spielZuletzt = null, spielKey = "";
+// Zuschauen (Nico 31.10.2026): von Hand am Beamer gewaehltes Spiel im Grossbild (nur an diesem Geraet, nicht im Raum)
+let meineId = null, fokus = null;
+function fokusSetzen(pid) {
+  fokus = pid && raum && raum.partien[pid] ? pid : null;
+  merke({ fokus });
+  if (raum) takt(true);
+}
 const teile = {}, gelesen = new Set();   // stand/lobby, stand/tafel, stand/beamer (nie stand/partien)
 const verlauf = [];
 const jetztG = () => (netz && raum ? Date.now() + netz.versatz - (raum.uhr || 0) : Date.now());
@@ -352,14 +366,15 @@ export async function start(code, wurzel) {
   document.body.classList.add("beamer");
   document.title = "📽️ Beamer – Partyspiele";
   window.__beamer = { raum: () => raum, seite: () => zustand.seite, ereignis: () => (laufend ? laufend.art : null), verlauf: () => verlauf.slice(),
-    spiel: () => (spielKey ? spielKey.split(":")[0] : null), pfade: () => [...gelesen], roh: () => ({ ...teile }) };
+    spiel: () => (spielKey ? spielKey.split(":")[0] : null), pfade: () => [...gelesen], roh: () => ({ ...teile }), id: () => meineId, fokus: () => fokus };
   app.innerHTML = `<div class="bm-effekte" aria-hidden="true"></div><div class="bm">
-      <div class="bm-kopf"><span class="bm-titel">📽️ Beamer</span><span class="bm-zeit"></span></div>
+      <div class="bm-kopf"><span class="bm-titel">📽️ Beamer</span><span class="bm-rechts"><span class="bm-zeit"></span><button class="bm-pult-knopf" data-pult-auf>🛠️ Steuern</button></span></div>
       <div class="bm-buehne"><div class="bm-inhalt"><div class="bm-leer"><div class="bm-pokalbild">⏳</div><p class="bm-leise">Raum wird geladen …</p></div></div><i class="bm-fortschritt"></i></div>
       <div class="bm-fuss"><div class="bm-punkte"></div><div class="bm-modus"></div><div class="bm-qrklein" data-bqr title="Mitmachen"></div></div>
     </div>
     <div class="bm-ereignis" hidden></div>
     <div class="bm-schreck" hidden></div>
+    <aside class="bm-pult" hidden></aside>
     <button class="bm-start" data-bm-start><span>▶️ Vollbild und Ton an</span><small>einmal klicken – danach läuft alles von selbst</small></button>`;
   document.querySelector("[data-bm-start]").addEventListener("click", vollbild);
   // aendert sich der Platz (Vollbild, Fuss bricht um, QR-Code geladen), passt der Inhalt sich neu ein
@@ -369,10 +384,20 @@ export async function start(code, wurzel) {
   }
   ["mousemove", "pointerdown"].forEach((t) => document.addEventListener(t, mausDa, { passive: true }));
   mausDa();
+  // Antippen im Beamer-Bild: Spiel gross zeigen (Uebersicht, Leiste unten) bzw. Grossbild beenden
+  app.addEventListener("click", (e) => {
+    const t = e.target.closest("[data-bm-fokus]");
+    if (t) fokusSetzen(t.dataset.bmFokus || null);
+  });
+  // Kennung bleibt beim Neuladen im selben Tab gleich (sonst muesste das Pult nach jedem Neuladen neu freigeschaltet werden)
+  meineId = sessionStorage.getItem(`pa_beamer_${code}`) || `beamer-${zufallsText(10)}`;
+  try { sessionStorage.setItem(`pa_beamer_${code}`, meineId); } catch (e) { /* privater Modus */ }
   try {
     netz = await new Verbindung(code).start();
   } catch (e) { return fehler("Keine Verbindung zum Raum. Ist das Internet an? Dann die Seite neu laden."); }
-  netz.anwesend(`beamer-${zufallsText(10)}`, "📽️ Beamer");   // nur fuer die Anzeige "Beamer verbunden" - kein Spieler
+  netz.anwesend(meineId, "📽️ Beamer");   // nur fuer die Anzeige "Beamer verbunden" - kein Spieler
+  PULT.start({ netz, id: meineId, code, raum: () => raum, jetzt: () => jetztG(), B: { SEITEN, DAUERN, steuer, modus, verfuegbar, seiteName },
+    fokus: fokusSetzen, fokusPid: () => fokus });
   // drei Teile getrennt lesen; erst wenn alle einmal da sind, gilt der Stand (sonst kaemen alte Ereignisse als neue)
   ["lobby", "tafel", "beamer"].forEach((k) => {
     gelesen.add(`stand/${k}`);
@@ -435,11 +460,19 @@ function empfangen() {
   spielStand();
   radErgebnis();
   takt(true);
+  PULT.neu();
 }
 
 // Neuer Stand der Spiele: merken, und fuer das Spiel an der Wand Klaenge, Effekte und Erzaehler abspielen
+function fokusSpiel() {
+  if (!fokus || !raum) return null;
+  const p = raum.partien[fokus];
+  if (!p) { fokus = null; return null; }
+  if (p.phase !== "laeuft" || !p.bm || !BS.HTML_DA(p.spiel)) return null;
+  return { p, d: p.bm, fokus: true };
+}
 function spielStand() {
-  const g = BS.gezeigt(raum, jetztG());
+  const g = fokusSpiel() || BS.gezeigt(raum, jetztG());
   Object.values(raum.partien).forEach((p) => {
     if (!p.bm) return;
     const m = bsMerk[p.pid] || (bsMerk[p.pid] = { d: null, pos: null });
@@ -460,7 +493,7 @@ function spielStand() {
 
 // Welches Spiel steht an der Wand? Auch ein gerade beendetes (Partie weg) bleibt noch kurz mit seinem Ergebnis stehen.
 function spielJetzt(jetzt) {
-  const g = BS.gezeigt(raum, jetzt);
+  const g = fokusSpiel() || BS.gezeigt(raum, jetzt);
   if (g) { spielZuletzt = { p: g.p, d: g.d, bis: 0 }; return g; }
   if (spielZuletzt && !raum.partien[spielZuletzt.p.pid] && !BS.ausgeblendet(raum).includes(spielZuletzt.p.pid)) {
     if (!spielZuletzt.bis) spielZuletzt.bis = Date.now() + BS.NACHLAUF;
@@ -519,9 +552,13 @@ function zeichnen(neueSeite, g = null) {
   if (kopf) kopf.textContent = A.titel(raum.anlass);
   const sp = g && SPIELE.find((x) => x.id === g.p.spiel);
   const punkte = app.querySelector(".bm-punkte");
-  if (punkte) punkte.innerHTML = (sp ? `<span class="an">${sp.emoji} ${esc(sp.name)}</span>` : "") + SEITEN.filter((s) => da.includes(s.id) || s.id === zustand.seite).map((s) => `<span class="${s.id === zustand.seite && !sp ? "an" : ""}">${s.emo} ${esc(s.name.replace(/ \(.*\)/, ""))}</span>`).join("");
+  // Laufen weitere Spiele mit Zuschau-Ansicht, stehen sie unten als Knopf: Antippen zeigt sie gross (Zuschauen)
+  const andere = P.liste(raum).filter((p) => p.phase === "laeuft" && p.bm && BS.HTML_DA(p.spiel) && (!g || p.pid !== g.p.pid));
+  if (punkte) punkte.innerHTML = (sp ? `<span class="an">${sp.emoji} ${esc(sp.name)}</span>${g.fokus ? `<button class="bm-fokus-knopf" data-bm-fokus="">✕ Großbild beenden</button>` : ""}` : "")
+    + andere.map((p) => { const s = spiel(p.spiel); return `<button class="bm-fokus-knopf" data-bm-fokus="${esc(p.pid)}" title="groß zeigen">👁️ ${s.emoji} ${esc(s.name)}</button>`; }).join("")
+    + SEITEN.filter((s) => da.includes(s.id) || s.id === zustand.seite).map((s) => `<span class="${s.id === zustand.seite && !sp ? "an" : ""}">${s.emo} ${esc(s.name.replace(/ \(.*\)/, ""))}</span>`).join("");
   const mod = app.querySelector(".bm-modus");
-  if (mod) mod.textContent = sp ? (g.vorbei ? "⏹️ Spiel beendet" : "🎮 Spielansicht") : m.art === "fest" ? `📌 von Hand gewählt · Diashow ab ${new Date(m.bis - jetzt + Date.now()).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}` : m.art === "aus" ? "⏸️ Diashow aus" : "";
+  if (mod) mod.textContent = sp ? (g.vorbei ? "⏹️ Spiel beendet" : g.fokus ? "👁️ Zuschauen" : "🎮 Spielansicht") : m.art === "fest" ? `📌 von Hand gewählt · Diashow ab ${new Date(m.bis - jetzt + Date.now()).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}` : m.art === "aus" ? "⏸️ Diashow aus" : "";
   const balken = app.querySelector(".bm-fortschritt");
   if (balken && (neueSeite || sp)) {
     balken.style.animation = "none"; void balken.offsetWidth;

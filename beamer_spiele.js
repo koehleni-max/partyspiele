@@ -15,9 +15,13 @@ import { werbinich, figurVon, QUIZ_ALLE, QUIZ_ZEIT } from "./elternspiele.js";
 import * as WW from "./werwolf.js";
 import { esc, schlucke, ohneAlkohol } from "./hilfe.js";
 
-export const BEAMER_SPIELE = ["werwolf", "werbinich", "malen", "reaktion", "pferde", "schaetzen", "quiz"];
+// Zuschauen (Nico 31.10.2026): die fertigen Zweier-Spiele laufen auch an der Wand mit - auch gegen den Computer.
+// Geheimes bleibt geheim: bei Schiffe versenken nur die Schuesse (Treffer/Wasser), nie wo die Schiffe liegen.
+export const FREMD_ZUSCHAUEN = ["f-ttt", "f-vier", "f-dame", "f-schiffe", "f-wuerfel"];
+export const BEAMER_SPIELE = ["werwolf", "werbinich", "malen", "reaktion", "pferde", "schaetzen", "quiz", ...FREMD_ZUSCHAUEN];
 // so lange bleibt ein fertiges Ergebnis (Spielende bzw. Rundenergebnis ohne neue Runde) an der Wand
-export const ENDE_ZEIT = { werwolf: 30000, werbinich: 30000, pferde: 30000, reaktion: 120000, schaetzen: 120000, malen: 120000, quiz: 120000 };
+export const ENDE_ZEIT = { werwolf: 30000, werbinich: 30000, pferde: 30000, reaktion: 120000, schaetzen: 120000, malen: 120000, quiz: 120000,
+  ...Object.fromEntries(FREMD_ZUSCHAUEN.map((id) => [id, 30000])) };
 export const NACHLAUF = 10000;   // beendetes Spiel (Beenden-Knopf): Ergebnis noch so lange, dann Diashow
 export const REAKTION_PUFFER = 600;   // Beamer wird etwas NACH den Handys gruen - wer auf die Wand schaut, ist nie "zu frueh"
 const MED = { 1: "🥇", 2: "🥈", 3: "🥉" };
@@ -75,6 +79,44 @@ AUSZUG.quiz = (s) => {
     schnellste: auf ? (Object.entries(s.antworten).filter(([, x]) => x.w === 0).sort((x, y) => x[1].ms - y[1].ms)[0] || [null])[0] : null };
 };
 
+// Fertige Spiele: gemeinsamer Kopf (wer ist dran, wer hat gewonnen) und je Spiel nur das offene Spielfeld
+function fremdKopf(s) {
+  const st = s.st || {};
+  const w = st.winner;
+  const sieger = w === null || w === undefined ? [] : [w].flat().map(Number).filter((j) => Number.isInteger(j));
+  const vorbei = st.status === "finished" || st.phase === "finished" || !!st.gameOver || sieger.length > 0;
+  const ts = st.turnState || {};
+  return { nr: s.nr || 0, partie: s.partie || 0, dran: Number.isInteger(ts.currentPlayerIndex) ? ts.currentPlayerIndex : null, vorbei, sieger,
+    farben: (st.players || []).map((x) => x.colorHex || ""), zeichen: (st.players || []).map((x) => x.token || ""), n: (st.players || []).length };
+}
+const nr = (c) => (c === null || c === undefined ? null : Number(c));
+AUSZUG["f-ttt"] = (s) => ({ ...fremdKopf(s), brett: s.st.board.map((r) => r.map(nr)) });
+AUSZUG["f-vier"] = (s) => ({ ...fremdKopf(s), brett: s.st.board.map((r) => r.map(nr)) });
+AUSZUG["f-dame"] = (s) => {
+  const farbe = (s.st.players || []).map((x) => x.color);
+  return { ...fremdKopf(s), brett: s.st.board.map((r) => r.map((c) => (c ? { i: Math.max(0, farbe.indexOf(c.color)), k: !!c.king } : null))) };
+};
+AUSZUG["f-schiffe"] = (s) => {
+  const st = s.st, cfg = (st.config && st.config.settings) || {};
+  const pl = st.players || [];
+  // je Spieler: seine Schuesse auf den Gegner [x, y, 0 Wasser | 1 Treffer | 2 versenkt] - Schiffspositionen bleiben weg
+  return { ...fremdKopf(s), phase: (st.turnState && st.turnState.phase) || "", b: cfg.gridWidth || 10, h: cfg.gridHeight || 10, schiffe: (cfg.ships || []).length,
+    bereit: pl.map((x) => !!x.ready), schuesse: pl.map((x) => (x.shotsFired || []).map((z) => [z.cell.x, z.cell.y, z.result === "miss" ? 0 : z.result === "sunk" ? 2 : 1])),
+    versenkt: pl.map((x, j) => ((pl[1 - j] || {}).shipsSunk || []).length) };
+};
+const OBEN = ["ones", "twos", "threes", "fours", "fives", "sixes"];
+function wuerfelSumme(blatt) {
+  const v = Object.entries(blatt || {}).filter(([, x]) => typeof x === "number");
+  const oben = v.filter(([k]) => OBEN.includes(k)).reduce((n, [, x]) => n + x, 0);
+  return v.reduce((n, [, x]) => n + x, 0) + (oben >= 63 ? 35 : 0);
+}
+AUSZUG["f-wuerfel"] = (s) => {
+  const st = s.st, ts = st.turnState || {};
+  const pl = st.players || [];
+  return { ...fremdKopf(s), wuerfel: (ts.dice || []).slice(), halten: (ts.held || []).slice(), wurf: ts.rollsUsed || 0, wuerfe: (st.config && st.config.settings && st.config.settings.rollsPerTurn) || 3,
+    punkte: pl.map((x) => wuerfelSumme(x.scoreSheet)), felder: pl.map((x) => Object.values(x.scoreSheet || {}).filter((v) => v !== null).length), alle: pl.length ? Object.keys(pl[0].scoreSheet || {}).length : 13 };
+};
+
 export function auszug(raum) {
   const partien = {};
   Object.values((raum && raum.partien) || {}).forEach((p) => {
@@ -103,6 +145,7 @@ export function fertig(id, d) {
   if (id === "schaetzen") return d.phase === "aufloesung";
   if (id === "malen") return d.geloest !== null;
   if (id === "quiz") return d.phase === "aufloesung";
+  if (FREMD_ZUSCHAUEN.includes(id)) return !!d.vorbei;
   return true;
 }
 
@@ -162,6 +205,9 @@ export function vergleichen(id, alt, neu) {
     if (neu.nr !== alt.nr || neu.rest !== alt.rest) t("dran");
     else if (neu.abgegeben.length > alt.abgegeben.length) t("klick");
     if (neu.phase === "aufloesung" && alt.phase !== "aufloesung") { t("tada"); r.effekt = 100; }
+  } else if (FREMD_ZUSCHAUEN.includes(id)) {
+    if (neu.nr > alt.nr && !neu.vorbei) t(id === "f-schiffe" && treffer(neu) > treffer(alt) ? "aua" : id === "f-wuerfel" ? "wuerfel" : "klick");
+    if (neu.vorbei && !alt.vorbei) { t(neu.sieger.length ? "sieg" : "falsch"); r.effekt = neu.sieger.length ? 140 : 0; }
   }
   return r;
 }
@@ -337,7 +383,54 @@ function htmlQuiz(d, nm, sp) {
     <p class="bm-leise mitte">🏅 ${stand.map(([n, x]) => `${esc(n)} ${x}`).join(" · ")}</p></div>`;
 }
 
-const HTML = { quiz: htmlQuiz, werwolf: htmlWerwolf, werbinich: htmlWerbinich, malen: htmlMalen, reaktion: htmlReaktion, pferde: htmlPferde, schaetzen: htmlSchaetzen };
+// ---------------------------------------------------------------- Zuschauen: fertige Spiele (Spielfeld, wer dran ist, Stand)
+const treffer = (d) => (d && d.schuesse ? d.schuesse.flat().filter((z) => z[2] > 0).length : 0);
+function fremdSpieler(d, nm) {
+  return `<div class="bsf-spieler">${nm.slice(0, Math.max(d.n, 2)).map((n, j) => `<span class="bsf-sp ${d.dran === j && !d.vorbei ? "dran" : ""} ${d.sieger.includes(j) ? "sieger" : ""}" style="--f:${esc(d.farben[j] || "#888")}">
+      <i>${esc(d.zeichen[j] || "●")}</i><b>${esc(n)}</b>${d.dran === j && !d.vorbei ? "<small>ist dran</small>" : ""}${d.sieger.includes(j) ? "<small>🏆 gewinnt</small>" : ""}</span>`).join("")}</div>`;
+}
+function fremdZeile(d, nm) {
+  if (d.vorbei) return d.sieger.length ? `<div class="bs-sieg">🏆 ${d.sieger.map((j) => esc(nm[j] || "")).join(" & ")} ${d.sieger.length > 1 ? "gewinnen" : "gewinnt"}!</div>` : `<div class="bs-sieg">🤝 Unentschieden!</div>`;
+  return d.dran !== null && nm[d.dran] !== undefined ? `<p class="bm-zeile mitte">Am Zug: <b>${esc(nm[d.dran])}</b></p>` : "";
+}
+function htmlRaster(d, nm, sp, zelle, kl) {
+  const zeilen = d.brett.length, spalten = (d.brett[0] || []).length;
+  return `<div class="bsf">${kopf(sp, "Zuschauen")}${fremdZeile(d, nm)}
+      <div class="bsf-feld ${kl}" style="--sp:${spalten};--ze:${zeilen}">${d.brett.map((r, y) => r.map((c, x) => zelle(c, x, y)).join("")).join("")}</div>
+      ${fremdSpieler(d, nm)}</div>`;
+}
+const fremdHTML = {
+  "f-ttt": (d, nm, sp) => htmlRaster(d, nm, sp, (c) => `<span class="bsf-z">${c === null ? "" : `<b style="color:${esc(d.farben[c] || "#fff")}">${esc(d.zeichen[c] || "●")}</b>`}</span>`, "ttt"),
+  "f-vier": (d, nm, sp) => htmlRaster(d, nm, sp, (c) => `<span class="bsf-z"><i style="${c === null ? "" : `background:${esc(d.farben[c] || "#fff")}`}" class="${c === null ? "leer" : ""}"></i></span>`, "vier"),
+  "f-dame": (d, nm, sp) => htmlRaster(d, nm, sp, (c, x, y) => `<span class="bsf-z ${(x + y) % 2 ? "dunkel" : "hell"}">${c ? `<i class="stein s${c.i}">${c.k ? "♛" : ""}</i>` : ""}</span>`, "dame"),
+  "f-schiffe": (d, nm, sp) => {
+    if (d.phase === "setup") {
+      return `<div class="bsf">${kopf(sp, "Zuschauen")}<div class="bsw-mitte"><div class="bs-riesig">🚢</div><p class="bm-gross">Die Flotten werden heimlich aufgestellt …</p></div>
+        <div class="bsf-spieler">${nm.slice(0, 2).map((n, j) => `<span class="bsf-sp" style="--f:${esc(d.farben[j] || "#888")}"><i>${esc(d.zeichen[j] || "")}</i><b>${esc(n)}</b><small>${d.bereit[j] ? "✅ bereit" : "⏳ stellt auf"}</small></span>`).join("")}</div></div>`;
+    }
+    const meer = (j) => {
+      const zellen = Array.from({ length: d.h }, () => Array(d.b).fill(-1));
+      (d.schuesse[j] || []).forEach(([x, y, r]) => { if (zellen[y] && x >= 0 && x < d.b) zellen[y][x] = r; });
+      const gegner = nm[1 - j] || "";
+      return `<div class="bsf-meer ${d.dran === j && !d.vorbei ? "dran" : ""}"><h3>${esc(nm[j] || "")} schießt auf ${esc(gegner)}</h3>
+        <div class="bsf-feld schiffe" style="--sp:${d.b};--ze:${d.h}">${zellen.map((r) => r.map((z) => `<span class="bsf-z ${z === 0 ? "wasser" : z === 1 ? "treffer" : z === 2 ? "versenkt" : ""}">${z === 0 ? "•" : z > 0 ? "✕" : ""}</span>`).join("")).join("")}</div>
+        <p class="bm-leise mitte">${d.versenkt[j] || 0} von ${d.schiffe} Schiffen versenkt</p></div>`;
+    };
+    return `<div class="bsf">${kopf(sp, "Zuschauen – die Schiffe selbst bleiben geheim")}${fremdZeile(d, nm)}<div class="bsf-meere">${meer(0)}${meer(1)}</div></div>`;
+  },
+  "f-wuerfel": (d, nm, sp) => {
+    const AUGEN = ["", "⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
+    const rang = nm.slice(0, d.n).map((n, j) => [j, d.punkte[j] || 0]).sort((x, y) => y[1] - x[1]);
+    return `<div class="bsf">${kopf(sp, "Zuschauen")}${fremdZeile(d, nm)}
+      ${d.vorbei ? "" : `${d.wuerfel.length ? `<div class="bsf-wuerfel">${d.wuerfel.map((w, k) => `<span class="${d.halten[k] ? "halten" : ""}">${AUGEN[w] || w}</span>`).join("")}</div>` : `<p class="bm-zeile mitte">🎲 Gleich wird gewürfelt …</p>`}
+      <p class="bm-leise mitte">Wurf ${d.wurf} von ${d.wuerfe}${d.halten.some(Boolean) ? " · hell = behalten" : ""}</p>`}
+      <ol class="bm-rang bsf-rang">${rang.map(([j, x], k) => `<li class="${k === 0 ? "p1" : ""} ${d.dran === j && !d.vorbei ? "dran" : ""}"><span class="bm-platz">${MED[k + 1] || k + 1 + "."}</span>
+        <span class="bm-name">${esc(nm[j] || "")}${d.dran === j && !d.vorbei ? " 🎲" : ""}<small>${d.felder[j] || 0} von ${d.alle} Feldern</small></span><b class="bm-wert">${x}</b></li>`).join("")}</ol></div>`;
+  },
+};
+
+const HTML = { quiz: htmlQuiz, werwolf: htmlWerwolf, werbinich: htmlWerbinich, malen: htmlMalen, reaktion: htmlReaktion, pferde: htmlPferde, schaetzen: htmlSchaetzen, ...fremdHTML };
+export const HTML_DA = (id) => Object.prototype.hasOwnProperty.call(HTML, id);
 
 // raum (Beamer-Stand), p (Kurzfassung der Partie), d (Auszug), merk (was der Beamer sich je Partie merkt), vorbei = beendet
 export function html(raum, p, d, merk, vorbei = false) {
