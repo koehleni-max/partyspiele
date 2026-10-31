@@ -103,7 +103,10 @@ export const brett = {
     if (s.phase === "stern") steuer = istDran ? `<div class="raster2">${knopf(`⭐ Kaufen (${STERNPREIS})`, { typ: "kaufen" }, "gross gelb")}${knopf("Nein", { typ: "nein" }, "gross")}</div>` : `<p class="mitte leise">${esc(namen[s.dran])} überlegt …</p>`;
     if (s.phase === "duell") steuer = istDran ? `<p class="mitte">Wen forderst du heraus?</p><div class="raster">${namen.map((nm, j) => (j === ich ? "" : knopf(esc(nm), { typ: "duell", ziel: j }, "gross"))).join("")}</div>` : `<p class="mitte leise">${esc(namen[s.dran])} wählt einen Gegner …</p>`;
     if (s.phase === "weiter") steuer = knopf("Weiter", { typ: "weiter" }, "gross");
-    return `${tafel}${brettHtml}${meldung}${steuer}`;
+    // nach dem Wurf steht das Feld erst eine Weile: Weiter, Kaufen/Nein und die Duell-Wahl sind kurz gesperrt (app.js),
+    // damit ein zweiter Tipp auf "Wuerfeln" nicht gleich das Ergebnis wegtippt
+    const nachWurf = ["weiter", "stern", "duell"].includes(s.phase) ? `<i hidden data-ergebnis="bw-${s.runde}-${s.dran}-${s.phase}-${m.length}"></i>` : "";
+    return `${tafel}${brettHtml}${meldung}${nachWurf}${steuer}`;
   },
   musik(s) { return s.ende ? null : "brett"; },
   // Computer-Mitspieler: wuerfeln, kaufen, duellieren und spielen die Minispiele mit glaubwuerdigen Werten
@@ -204,9 +207,13 @@ function miniRender(s, ich, namen) {
   // ich < 0: dieses Geraet spielt nur mit Controllern mit (app.js zeigt deren Felder darunter, controller.js)
   if (ich < 0) inhalt = `${m.art === "schaetzen" ? `<div class="frage">${esc(T.SCHAETZ[m.frage][0])}</div>` : ""}<p class="mitte">${Object.keys(m.werte).length}/${namen.length} fertig</p>`;
   else if (fertig) inhalt = `<p class="mitte">Erledigt – warte auf die anderen (${Object.keys(m.werte).length}/${namen.length})</p>`;
-  else if (m.art === "schaetzen") inhalt = `<div class="frage">${esc(T.SCHAETZ[m.frage][0])}</div><input id="minitipp" type="number" inputmode="decimal" placeholder="Schätzung">${knopf("Abgeben", { typ: "mini" }, "gross", `data-feld="minitipp"`)}`;
+  else if (m.art === "schaetzen") inhalt = `<div class="frage">${esc(T.SCHAETZ[m.frage][0])}</div><input id="minitipp" data-rk="${m.runde}" type="number" inputmode="decimal" placeholder="Schätzung">${knopf("Abgeben", { typ: "mini" }, "gross", `data-feld="minitipp"`)}`;
   else if (m.art === "farbwort") inhalt = `<div id="farbwort" class="farbwort">Tippe zum Starten</div><div class="raster farbknoepfe">${FW.map(([n, c]) => `<button class="gross" style="background:${c};box-shadow:0 5px 0 #0008" data-fw="${n}">${n}</button>`).join("")}</div>`;
-  else if (m.art === "gedaechtnis") inhalt = `<div id="gedzahl" class="reaktion fertig" style="font-size:44px;letter-spacing:6px">${m.zahl}</div><input id="gedtipp" inputmode="numeric" placeholder="Zahl eintippen" style="display:none"><button id="gedknopf" class="gross" style="display:none">Abgeben</button>`;
+  else if (m.art === "gedaechtnis") {
+    // ist die Zahl schon verdeckt, gleich mit Feld zeichnen - sonst verschwindet das Feld beim Neuzeichnen kurz (Fokus weg)
+    const zu = gedLokal.schluessel === `ged-${m.runde}` && gedLokal.versteckt;
+    inhalt = `<div id="gedzahl" class="reaktion fertig" style="font-size:44px;letter-spacing:6px">${zu ? "? ? ? ?" : m.zahl}</div><input id="gedtipp" data-rk="${m.runde}" inputmode="numeric" placeholder="Zahl eintippen" style="display:${zu ? "block" : "none"}"><button id="gedknopf" class="gross" style="display:${zu ? "block" : "none"}">Abgeben</button>`;
+  }
   else inhalt = `<div id="minifeld" class="reaktion rot">${m.art === "tappen" ? "Tippen zum Starten!" : "Warte …"}</div>`;
   return `<div class="frage">Minispiel: ${titel}</div><p class="mitte leise">${text}</p>${inhalt}`;
 }

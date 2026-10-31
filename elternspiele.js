@@ -80,16 +80,55 @@ export const pantomime = erklaerSpiel("pantomime", "Pantomime", "🤹", "Vorspie
 // ================================================================ Wer bin ich?
 // Am Beamer (Schritt D): die Figur dessen, der fragt, steht gross an der Wand (er sitzt mit dem Ruecken dazu), dazu die
 // Zeit je Zug (zeit Sekunden ab seit, Uhr des Gastgebers) und wie viele Zuege jeder schon gebraucht hat (fragen).
+// Erraten heisst seit 31.10.2026 (Nico: "ein Druck auf 'Ich weiss, wer ich bin' zaehlt sofort als Gewinn"): Namen
+// eintippen, der Gastgeber prueft ihn tolerant (nameTreffer). Falsch = nicht erraten, kurze Meldung nur fuer den Ratenden.
+const FUELLWOERTER = new Set(["der", "die", "das", "den", "dem", "des", "aus", "von", "und", "mit", "the", "of", "sendung", "super", "captain", "queen", "kleine", "frau", "herr"]);
+const namensForm = (t) => String(t ?? "").toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss")
+  .normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+function abstand(x, y) {
+  if (x === y) return 0;
+  let vor = Array.from({ length: y.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= x.length; i++) {
+    const neu = [i];
+    for (let j = 1; j <= y.length; j++) neu[j] = Math.min(vor[j] + 1, neu[j - 1] + 1, vor[j - 1] + (x[i - 1] === y[j - 1] ? 0 : 1));
+    vor = neu;
+  }
+  return vor[y.length];
+}
+// erlaubte Tippfehler je Laenge: kurze Namen genau, laengere mit ein, zwei Fehlern
+const toleranz = (n) => (n <= 3 ? 0 : n <= 5 ? 1 : n <= 10 ? 2 : 3);
+// -> true, wenn die Eingabe die Figur meint: ganzer Name (auch ohne Klammerzusatz oder nur der Zusatz), ein Teilname
+// ab 4 Buchstaben (kein Fuellwort), Gross/klein und Umlaute egal, Leerzeichen/Bindestriche egal, wenige Tippfehler
+export function nameTreffer(eingabe, figur) {
+  const e = namensForm(eingabe), ek = e.replace(/ /g, "");
+  if (ek.length < 2) return false;
+  const ohne = String(figur).replace(/\(.*?\)/g, " "), zusatz = (String(figur).match(/\((.*?)\)/) || [])[1] || "";
+  const ganze = [figur, ohne, zusatz].map(namensForm).filter((x) => x.replace(/ /g, "").length >= 2);
+  const teile = namensForm(figur).split(" ").filter((w) => w.length >= 4 && !FUELLWOERTER.has(w));
+  const passt = (k) => { const kk = k.replace(/ /g, ""); return abstand(ek, kk) <= toleranz(kk.length); };
+  if (ganze.some(passt) || teile.some(passt)) return true;
+  // mehrere Woerter, jedes davon steckt im Namen ("Jack Sparrow" fuer "Captain Jack Sparrow")
+  const woerter = namensForm(figur).split(" ");
+  const ew = e.split(" ").filter((w) => w.length >= 3 && !FUELLWOERTER.has(w));
+  const nah = (w, t) => abstand(w, t) <= toleranz(t.length);
+  if (ew.length && ew.every((w) => woerter.some((t) => nah(w, t))) && ew.some((w) => teile.some((t) => nah(w, t)))) return true;
+  // ganzer Satz mit dem Namen darin ("ich bin Harry Potter")
+  return ganze.some((k) => k.replace(/ /g, "").length >= 4 && ek.includes(k.replace(/ /g, "")));
+}
 export const werbinich = {
   id: "werbinich", name: "Wer bin ich?", emoji: "🎭", kurz: "Alle sehen deine Figur – nur du nicht. Ja/Nein-Fragen stellen!", farben: ["#a29bfe", "#4834d4"],
   zeit: 180, // Nico 27.10.2026: 3 Minuten je Zug
-  start: (namen) => { const f = mischen(FIGUREN.map((_, i) => i)).slice(0, namen.length); return { figur: f, erraten: namen.map(() => 0), dran: 0, nr: 0, seit: Date.now(), fragen: namen.map(() => 0) }; },
+  start: (namen) => { const f = mischen(FIGUREN.map((_, i) => i)).slice(0, namen.length); return { figur: f, erraten: namen.map(() => 0), dran: 0, nr: 0, seit: Date.now(), fragen: namen.map(() => 0), falsch: {} }; },
   // Gesamtwertung (Nico 27.10.2026): JEDER, der seine Figur erraten hat, bekommt einen Punkt - gebucht, sobald alle
   // durch sind oder jemand "Spiel beenden" drueckt (wer bis dahin nicht erraten hat, geht leer aus).
   ergebnis: (s) => ((s.erraten.every((x) => x) || s.beendet) && s.erraten.some((x) => x)
     ? { nr: s.figur.join("-"), sieger: s.erraten.map((x, j) => (x ? j : -1)).filter((j) => j >= 0) } : null),
   aktion(s, i, a, namen) {
-    if (a.typ === "erraten" && !s.erraten[i]) { s.nr++; s.erraten[i] = s.nr; }
+    if (a.typ === "erraten" && !s.erraten[i] && String(a.wert ?? "").trim()) {
+      const t = String(a.wert).replace(/\s+/g, " ").trim().slice(0, 40);
+      if (nameTreffer(t, FIGUREN[s.figur[i]])) { s.nr++; s.erraten[i] = s.nr; if (s.falsch) delete s.falsch[i]; }
+      else { s.falsch = s.falsch || {}; s.falsch[i] = { t, n: ((s.falsch[i] && s.falsch[i].n) || 0) + 1 }; }
+    }
     if (a.typ === "naechster") {
       if (Array.isArray(s.fragen)) s.fragen[s.dran] = (s.fragen[s.dran] || 0) + 1;
       s.dran = (s.dran + 1) % namen.length; s.seit = Date.now();
@@ -99,10 +138,13 @@ export const werbinich = {
   },
   render(s, ich, namen) {
     const alle = s.erraten.every((x) => x) || s.beendet;
+    const falsch = !s.erraten[ich] && s.falsch && s.falsch[ich];
+    const raten = s.erraten[ich] || alle ? "" : `<div class="zeile-knoepfe wbi-raten"><input id="wbi-name" data-rk="${esc(s.figur.join("-"))}" maxlength="40" placeholder="Wer bist du?" autocomplete="off" autocapitalize="words" enterkeyhint="send">${knopf("✅ Raten", { typ: "erraten" }, "gruen", `data-feld="wbi-name" data-leeren`)}</div>
+      ${falsch ? `<div class="hinweisbox wbi-falsch" data-key="wbf-${falsch.n}">❌ „${esc(falsch.t)}“ ist es nicht – weiter fragen!</div>` : ""}`;
     return `<div class="frage">${name(namen, s.dran)} stellt eine Ja/Nein-Frage über sich</div>
       <div class="figurenliste">${namen.map((nm, j) => `<div class="figurkarte ${j === ich ? "ich" : ""} ${s.erraten[j] ? "geschafft" : ""}">
         <small>${esc(nm)}${j === ich ? " (du)" : ""}</small><b>${j === ich && !s.erraten[j] ? "❓ ??? ❓" : esc(FIGUREN[s.figur[j]])}</b>${s.erraten[j] ? `<em>#${s.erraten[j]} erraten</em>` : ""}</div>`).join("")}</div>
-      ${!s.erraten[ich] ? knopf("🎉 Ich weiß, wer ich bin!", { typ: "erraten" }, "gross gruen") : ""}
+      ${raten}
       ${knopf("➜ Nächster fragt", { typ: "naechster" }, "zweit")}
       ${!alle && s.erraten.some((x) => x) ? knopf("🏁 Spiel beenden", { typ: "beenden" }, "zweit") : ""}
       ${alle ? `<div class="urteil">🏆 ${s.erraten.every((x) => x) ? "Alle erraten!" : "Spiel beendet!"} Je einen Punkt: ${s.erraten.map((x, j) => (x ? name(namen, j) : "")).filter(Boolean).join(", ")}</div>${knopf("Neue Figuren", { typ: "neu" }, "gross")}` : ""}
@@ -193,14 +235,14 @@ export const slf = {
   render(s, ich, namen) {
     const tafel = punkteTafel(namen, s.punkte);
     if (s.phase === "bereit") return `${tafel}<p class="mitte">Gleich wird ein Buchstabe gezogen. Schreibt zu jeder Kategorie ein Wort mit diesem Anfangsbuchstaben.</p>${knopf("🎲 Buchstaben ziehen", { typ: "start" }, "gross")}`;
-    if (s.phase === "wertung") return `${tafel}<div class="frage">Buchstabe <span class="buchstabe">${s.buchstabe}</span></div>
+    if (s.phase === "wertung") return `${tafel}<i hidden data-ergebnis="slf${s.runde}"></i><div class="frage">Buchstabe <span class="buchstabe">${s.buchstabe}</span></div>
       <div class="slf-tabelle"><table><tr><th></th>${namen.map((n) => `<th>${esc(n)}</th>`).join("")}</tr>
       ${s.kats.map((k, ki) => `<tr><td><b>${esc(k)}</b></td>${namen.map((_, j) => `<td>${esc((s.antworten[j] || [])[ki] || "–")}<small>${s.wertung[`${j}-${ki}`]}</small></td>`).join("")}</tr>`).join("")}</table></div>
       <p class="mitte leise klein">10 Punkte = einzigartig, 5 = doppelt, 0 = leer oder falscher Buchstabe</p>${knopf("Nächste Runde ➜", { typ: "start" }, "gross")}`;
     const fertig = !!s.antworten[ich];
     return `${tafel}<div class="frage">Buchstabe <span class="buchstabe" data-key="b${s.runde}">${s.buchstabe}</span></div>
       ${s.phase === "stopp" ? `<div class="urteil">✋ STOPP! ${esc(namen[s.stopp])} ist fertig – Stifte weg!</div>` : ""}
-      ${fertig ? `<div class="hinweisbox warten">Abgegeben – warte auf die anderen</div>` : `<div class="slf-felder">${s.kats.map((k, ki) => `<label>${esc(k)}<input id="slf${ki}" autocomplete="off" placeholder="${s.buchstabe}…"></label>`).join("")}</div>
+      ${fertig ? `<div class="hinweisbox warten">Abgegeben – warte auf die anderen</div>` : `<div class="slf-felder">${s.kats.map((k, ki) => `<label>${esc(k)}<input id="slf${ki}" data-rk="${s.runde}" autocomplete="off" placeholder="${s.buchstabe}…"></label>`).join("")}</div>
       <button class="gross rot" id="slf-stopp">✋ Fertig – STOPP!</button>`}`;
   },
   nach(s, ich, senden) {
@@ -280,7 +322,7 @@ export const quiz = {
     return `${tafel}<div class="fragekarte" data-key="q${s.nr}" style="--k1:#0984e3;--k2:#2d1e8a"><span class="kat">Frage ${s.nr + 1}</span><div class="text" style="font-size:21px">${esc(q[0])}</div></div>
       ${s.phase === "frage" ? `<div class="uhr mitte" data-uhr="quiz-${s.nr}-${s.seit}">⏱️ ${QUIZ_ZEIT}</div>` : ""}
       <div class="quizraster">${knoepfe}</div>
-      ${s.phase === "aufloesung" ? `<i hidden data-key="qa${s.nr}" data-ton="${s.antworten[ich] && s.antworten[ich].w === 0 ? "richtig" : "falsch"}"></i>` : ""}
+      ${s.phase === "aufloesung" ? `<i hidden data-ergebnis="qa${s.nr}"></i><i hidden data-key="qa${s.nr}" data-ton="${s.antworten[ich] && s.antworten[ich].w === 0 ? "richtig" : "falsch"}"></i>` : ""}
       ${s.phase === "aufloesung" ? knopf("Nächste Frage ➜", { typ: "weiter" }, "gross") : `<p class="mitte leise">${Object.keys(s.antworten).length}/${namen.length} haben geantwortet</p>`}
       ${pakete}`;
   },

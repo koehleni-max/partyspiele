@@ -82,7 +82,7 @@ const schaetzen = {
   render(s, ich, namen) {
     const [frage, loesung] = T.SCHAETZ[s.nr];
     if (s.phase === "tippen") return `<div class="frage">${esc(frage)}</div>
-      ${s.tipps[ich] === undefined ? `<input id="tipp" type="number" inputmode="decimal" placeholder="Deine Schätzung">${knopf("Abgeben", { typ: "tipp" }, "gross", `data-feld="tipp"`)}`
+      ${s.tipps[ich] === undefined ? `<input id="tipp" data-rk="${s.nr}-${s.rest.length}" type="number" inputmode="decimal" placeholder="Deine Schätzung">${knopf("Abgeben", { typ: "tipp" }, "gross", `data-feld="tipp"`)}`
                                    : `<p class="mitte">Abgegeben: <b>${s.tipps[ich]}</b></p>`}
       <p class="mitte leise">${Object.keys(s.tipps).length}/${namen.length} abgegeben</p>`;
     const abst = namen.map((_, j) => [j, Math.abs(s.tipps[j] - loesung)]).filter(([j]) => s.tipps[j] !== undefined).sort((x, y) => x[1] - y[1]);
@@ -127,7 +127,7 @@ const malen = {
     if (s.geloest !== null) {
       unten = `<div class="urteil">${s.geloest >= 0 ? `${name(namen, s.geloest)} hat es: <b>${esc(s.wort)}</b>! Alle anderen trinken 1, ${esc(namen[s.maler])} verteilt 2.` : `Aufgegeben – es war <b>${esc(s.wort)}</b>. ${esc(namen[s.maler])} trinkt 2.`}</div>${knopf("Nächster Maler", { typ: "weiter" }, "gross")}`;
     } else if (istMaler) unten = `<div class="zeile-knoepfe">${knopf("Alles löschen", { typ: "loeschen" })}${knopf("Aufgeben", { typ: "aufgeben" }, "rot")}</div>`;
-    else unten = `<div class="zeile-knoepfe"><input id="raten" placeholder="Dein Tipp" autocomplete="off">${knopf("Raten", { typ: "rate" }, "", `data-feld="raten" data-leeren`)}</div>`;
+    else unten = `<div class="zeile-knoepfe"><input id="raten" data-rk="${s.runde}" placeholder="Dein Tipp" autocomplete="off" enterkeyhint="send">${knopf("Raten", { typ: "rate" }, "", `data-feld="raten" data-leeren`)}</div>`;
     return `${kopf}<canvas id="leinwand" class="leinwand ${istMaler && s.geloest === null ? "aktiv" : ""}" width="600" height="600"></canvas>${tipps}${unten}`;
   },
   nach(s, ich, senden) {

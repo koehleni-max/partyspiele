@@ -59,6 +59,17 @@ let radGesehen = -1, radGemeldet = -1, jokerGesehen = -1, meineJoker = -1;   // 
 let pads = {};             // gamepad.index -> {id, name, nr, art}
 let sendeAls = null;       // waehrend ein Controller etwas ausloest: in seinem Namen senden
 let anzeige = { pid: null, id: null };   // fuer wen das angezeigte Spiel gerade gezeichnet ist
+// Fehlerjagd nach dem ersten Spieleabend (Nico 31.10.2026):
+// - Ergebnis-Bildschirme stehen erst eine Weile: Weiter-Knoepfe sind die ersten Sekunden gesperrt ("die Rangliste wird
+//   durch Weitertippen sofort weggetippt"). Ein Ergebnis erkennt app.js an .urteil, .rangliste oder [data-ergebnis].
+// - "Weiter" zaehlt nur einmal: wer weiterblaettert, schickt mit, welchen Stand (p.v) er gesehen hat; hat seitdem schon
+//   jemand weitergeblaettert (p.wv), verfaellt der zweite Tipp (Doppeltipp, zwei Handys gleichzeitig).
+const ERGEBNIS_SPERRE = 2000;
+const WEITER_TYPEN = new Set(["weiter", "naechster", "miniweiter", "neu", "neustart", "los", "start", "aufloesen"]);
+const SPERR_TYPEN = new Set([...WEITER_TYPEN, "kaufen", "nein", "duell"]);
+let ergebnisSperre = { key: "", bis: 0, timer: null };
+// Zurueck-Knopf des Handys: aus Spiel, Tafel oder Steuerseite zur Uebersicht statt aus dem Raum
+let zurueckEintrag = !!(history.state && history.state.pa === "unter");
 
 // Fuer die automatischen Tests (liest nur)
 window.__partyspiele = { code: () => code, id: () => meineId, raum: () => raum, rolle: () => rolle, ansicht: () => ansicht, pads: () => pads };
@@ -323,7 +334,7 @@ async function gastgeberFortsetzen() {
 function gastgeberStart() {
   status = "";
   sitzungMerken();
-  history.replaceState(null, "", `${BASIS}#r=${code}`);
+  history.replaceState(history.state, "", `${BASIS}#r=${code}`);
   document.title = `${A.titel(raum.anlass)} – Partyspiele`;
   tafelAblage = browserAblage(schluesselFuer(code), { testFilter: () => K.testkontenAn(raum) });
   if (!raum.tafel || !Array.isArray(raum.tafel.stationen)) raum.tafel = tafelAblage.laden();
@@ -446,9 +457,15 @@ function partieWeg(pid) {
 
 // -> true, wenn dabei ein Sieg in die Gesamtwertung kam
 function spielAktion(p, sp, idx, a) {
+  const weiter = WEITER_TYPEN.has(a.typ);
+  // schon weitergeblaettert, seit dieses Handy den Stand gesehen hat: zweiter Tipp verfaellt
+  if (weiter && typeof a.pv === "number" && (p.wv || 0) > a.pv) return false;
+  const vorher = weiter ? JSON.stringify(p.s) : null;
   const nm = P.namen(raum, p);
   p.s.anzahl = p.mit.length;
   try { sp.aktion(p.s, idx, a, nm, raum); } catch (e) { console.error(e); }
+  p.v = (p.v || 0) + 1;
+  if (weiter && JSON.stringify(p.s) !== vorher) p.wv = p.v;
   return spielWerten(p, sp, nm);
 }
 
@@ -649,7 +666,7 @@ async function gastBeitreten() {
   meineId = netz.uid || meineId || zufallsText(16);
   sitzungMerken();
   localStorage.setItem("pa_name", meinName);
-  history.replaceState(null, "", `${BASIS}#r=${code}`);
+  history.replaceState(history.state, "", `${BASIS}#r=${code}`);
   ansicht = sessionStorage.getItem(`pa_ansicht_${code}`) || null;
   netz.beobachten("stand", standEmpfangen);
   netz.beobachten("da", (d) => {
@@ -974,6 +991,7 @@ function eingangEinmal() {
 export function senden(a) {
   if (!raum || !a) return;
   if (!RAUM_TYPEN.has(a.typ) && a.p == null && ansicht) a = { ...a, p: ansicht };
+  if (WEITER_TYPEN.has(a.typ) && a.p != null && raum.partien[a.p]) a = { ...a, pv: raum.partien[a.p].v || 0 };
   const von = absender(a);
   if (rolle === "gastgeber") return ausfuehren(von, a);
   if (netz) netz.aktionSenden(von, a).catch((e) => { console.warn(e); hinweis("Nicht gesendet – keine Verbindung?"); });
@@ -1049,6 +1067,114 @@ function stillHalten(aend) {
   return true;
 }
 
+// ---------------------------------------------------------------- Eingaben ueberstehen das Neuzeichnen
+// Nico 31.10.2026: "tippt einer etwas und ein anderer gibt ab, wird das Feld bei allen geleert". Jedes Feld mit id behaelt
+// seinen Wert (data-rk = zu welcher Runde/Frage es gehoert: wechselt sie, faengt das Feld leer an). Das Feld, in dem gerade
+// getippt wird, bleibt sogar dasselbe Element - so bleiben Fokus, Schreibmarke und die Handy-Tastatur offen.
+const FELDER = "input[id],textarea[id],select[id]";
+function felderMerken() {
+  const m = {};
+  document.querySelectorAll(FELDER).forEach((f) => { if (f.type !== "checkbox" && f.type !== "radio") m[f.id] = { wert: f.value, rk: f.dataset.rk || "" }; });
+  return m;
+}
+function felderZurueck(m) {
+  Object.entries(m).forEach(([id, x]) => {
+    const f = document.getElementById(id);
+    if (!f || (f.dataset.rk || "") !== x.rk || f.value === x.wert) return;
+    if (f.tagName === "SELECT" && ![...f.options].some((o) => o.value === x.wert)) return;
+    f.value = x.wert;
+  });
+}
+function fokusMerken() {
+  const f = document.activeElement;
+  if (!f || !f.id || !/^(INPUT|TEXTAREA)$/.test(f.tagName)) return null;
+  let start = null, ende = null;
+  try { start = f.selectionStart; ende = f.selectionEnd; } catch (e) { /* Zahlenfeld kennt keine Schreibmarke */ }
+  return { id: f.id, start, ende };
+}
+function fokusZurueck(x) {
+  if (!x) return;
+  const f = document.getElementById(x.id);
+  if (!f || f === document.activeElement || !/^(INPUT|TEXTAREA)$/.test(f.tagName)) return;
+  f.focus({ preventScroll: true });
+  try { if (x.start !== null) f.setSelectionRange(x.start, x.ende); } catch (e) { /* Zahlenfeld */ }
+}
+// Neues HTML ins App-Feld. Tippt gerade jemand in ein Feld, das es danach wieder gibt (gleiche id, Art und Runde), bleiben
+// dieses Element und seine Vorfahren stehen - nur alles drumherum wird ersetzt.
+function einsetzen(html) {
+  const halten = document.activeElement;
+  if (halten && halten.id && app.contains(halten) && /^(INPUT|TEXTAREA)$/.test(halten.tagName)) {
+    const neu = document.createElement("div");
+    neu.innerHTML = html;
+    const partner = neu.querySelector(`#${CSS.escape(halten.id)}`);
+    if (partner && partner.tagName === halten.tagName && partner.type === halten.type
+      && (partner.dataset.rk || "") === (halten.dataset.rk || "") && verpflanzen(neu, halten, partner)) return;
+  }
+  app.innerHTML = html;
+}
+function verpflanzen(neu, halten, partner) {
+  const pfad = (wurzel, ziel) => { const l = []; for (let k = ziel; k && k !== wurzel; k = k.parentNode) l.unshift(k); return l; };
+  const pa = pfad(app, halten), pn = pfad(neu, partner);
+  if (pa.length !== pn.length || pa.some((k, i) => k.nodeName !== pn[i].nodeName)) return false;
+  let alt = app, nw = neu;
+  pa.forEach((ak, i) => {
+    const nk = pn[i];
+    [...alt.childNodes].forEach((k) => { if (k !== ak) k.remove(); });
+    const kinder = [...nw.childNodes], stelle = kinder.indexOf(nk);
+    kinder.slice(0, stelle).forEach((k) => alt.insertBefore(k, ak));
+    kinder.slice(stelle + 1).forEach((k) => alt.appendChild(k));
+    attributeUebernehmen(ak, nk, ak === halten);
+    alt = ak; nw = nk;
+  });
+  return true;
+}
+function attributeUebernehmen(ziel, quelle, feld) {
+  [...ziel.attributes].forEach((x) => { if (!quelle.hasAttribute(x.name) && !(feld && x.name === "value")) ziel.removeAttribute(x.name); });
+  [...quelle.attributes].forEach((x) => { if (!(feld && x.name === "value") && ziel.getAttribute(x.name) !== x.value) ziel.setAttribute(x.name, x.value); });
+}
+
+// ---------------------------------------------------------------- Ergebnis steht erst eine Weile (kein Wegtippen)
+// Nico 31.10.2026 (Tipp-Marathon im Partybrett): wer nach dem Ende weitertippt, darf die Rangliste nicht wegtippen. Ein neues
+// Ergebnis sperrt die Weiter-Knoepfe (SPERR_TYPEN) im Spielfeld fuer ERGEBNIS_SPERRE ms - danach geht es nur bewusst weiter.
+function sperrKnoepfe() {
+  return [...app.querySelectorAll(".spielflaeche button[data-a]")].filter((k) => { try { return SPERR_TYPEN.has(JSON.parse(k.dataset.a).typ); } catch (e) { return false; } });
+}
+function ergebnisPruefen(p) {
+  if (!p) return;
+  const marken = [...app.querySelectorAll(".spielflaeche [data-ergebnis], .spielflaeche .urteil, .spielflaeche .rangliste")];
+  const key = marken.length ? `${p.pid}|${marken.map((el) => el.dataset.ergebnis || el.textContent.replace(/\s+/g, " ").trim().slice(0, 160)).join("|")}` : "";
+  if (key !== ergebnisSperre.key) {
+    ergebnisSperre.key = key;
+    clearTimeout(ergebnisSperre.timer);
+    ergebnisSperre.bis = key ? Date.now() + ERGEBNIS_SPERRE : 0;
+    if (key) ergebnisSperre.timer = setTimeout(sperreAufheben, ERGEBNIS_SPERRE + 20);
+  }
+  if (Date.now() < ergebnisSperre.bis) sperrKnoepfe().forEach((k) => { if (!k.disabled) { k.disabled = true; k.dataset.gesperrt = ""; } });
+}
+function sperreAufheben() {
+  ergebnisSperre.bis = 0;
+  app.querySelectorAll("button[data-gesperrt]").forEach((k) => { k.disabled = false; delete k.dataset.gesperrt; });
+  if (padIds().length) C.fokusWiederherstellen();
+}
+
+// ---------------------------------------------------------------- Zurueck-Knopf des Handys
+// Aus Spiel, Turniertafel oder Steuerseite fuehrt "Zurueck" in die Uebersicht (vorher verliess man den Raum). Dafuer liegt,
+// solange so eine Ansicht offen ist, ein eigener Eintrag im Verlauf.
+function zurueckMerken() {
+  if (zurueckEintrag || !code) return;
+  history.pushState({ pa: "unter" }, "", location.href);
+  zurueckEintrag = true;
+}
+window.addEventListener("popstate", (ev) => {
+  if (ev.state && ev.state.pa === "unter") { zurueckEintrag = true; return; }
+  zurueckEintrag = false;
+  if (!raum || status) return;
+  if (ansicht || tafelAuf || steuerAuf) {
+    ansicht = null; tafelAuf = false; steuerAuf = false; ansichtMerken();
+    vibriere(20); zeichnen(); window.scrollTo(0, 0);
+  } else hinweis("Noch einmal Zurück verlässt den Raum");
+});
+
 // ---------------------------------------------------------------- Zeichnen
 const gesehen = new Set();
 // Steuerseite: neu zeichnen, sobald der Beamer ein anderes Spiel zeigt (auch wenn sich nur ein Spiel geaendert hat)
@@ -1057,34 +1183,36 @@ function beamerSpielSig() { const g = raum && BS.gezeigt(raum, jetztGastgeber())
 function zeichnen() {
   document.body.classList.remove("nachtmodus");
   A.lookAnwenden(raum ? raum.look : null);
-  const fokus = document.activeElement && document.activeElement.id;
-  // halb getippte Eingaben der Tafel und des Raums ueberstehen das Neuzeichnen
-  const felder = {};
-  document.querySelectorAll("input[id^='tt-'],select[id^='tt-'],input[id^='rf-'],select[id^='rf-']").forEach((f) => { felder[f.id] = f.value; });
+  // halb getippte Eingaben (in allen Spielen, der Tafel und im Raum) ueberstehen das Neuzeichnen
+  const fokus = fokusMerken();
+  const felder = felderMerken();
   if (raum && !status) tafelPruefen();
   // Zeigt der Beamer gerade genau dieses Spiel, kommen Musik, Spielgeraeusche und Erzaehler von der Wand: Handy still
   const anDerWand = !!(raum && !status && ansicht && raum.partien[ansicht] && beamerZahl() > 0 && !tafelAuf && !(steuerAuf && zeigeSteuer())
     && (BS.gezeigt(raum, jetztGastgeber()) || {}).p === raum.partien[ansicht]);
   TON.still(anDerWand);
-  let musik = null;
+  let musik = null, partie = null;
   if (status || !raum) app.innerHTML = statusBild();
-  else if (steuerAuf && zeigeSteuer()) { app.innerHTML = steuerBild(); steuerSpiel = beamerSpielSig(); }
-  else if (tafelAuf) app.innerHTML = tafelBild();
+  else if (steuerAuf && zeigeSteuer()) { einsetzen(steuerBild()); steuerSpiel = beamerSpielSig(); }
+  else if (tafelAuf) einsetzen(tafelBild());
   else if (ansicht && raum.partien[ansicht]) {
-    const p = raum.partien[ansicht];
+    const p = partie = raum.partien[ansicht];
     const sp = spiel(p.spiel);
     const ich = anzeigeIch(p, sp);
     anzeige = { pid: p.pid, id: ich >= 0 ? p.mit[ich] : null };
-    app.innerHTML = partieBild(p, sp, ich);
+    einsetzen(partieBild(p, sp, ich));
     partieSig = sigFuer(p);
+    felderZurueck(felder);
     if (p.phase === "laeuft" && ich >= 0) {
       const nm = P.namen(raum, p);
       try { musik = sp.musik ? sp.musik(p.s, ich, raum) : null; } catch (e) { musik = null; }
       if (sp.nach) try { sp.nach(p.s, ich, sendenFuer(p.pid), nm, raum); } catch (e) { console.error(e); }
     }
-  } else { ansicht = null; app.innerHTML = raumBild(); }
+  } else { ansicht = null; einsetzen(raumBild()); }
   TON.musik(anDerWand ? null : musik);
-  Object.entries(felder).forEach(([id, wert]) => { const f = document.getElementById(id); if (f) f.value = wert; });
+  felderZurueck(felder);
+  ergebnisPruefen(partie);
+  if (raum && !status && (ansicht || tafelAuf || steuerAuf)) zurueckMerken();
   if (einladenOffen) qrZeigen(document.querySelector("[data-qr]"));
   if (steuerAuf && !zeigeSteuer()) steuerAuf = false;
   if (tafelAuf && tafelAnsicht.modus === "ehrung" && raum && raum.tafel && !gesehen.has("tt-ehrung-" + raum.tafel.ehrung)) {
@@ -1109,7 +1237,7 @@ function zeichnen() {
     else el.classList.add("still");
   });
   if (gesehen.size > 3000) gesehen.clear();
-  if (fokus && document.getElementById(fokus) && document.getElementById(fokus).tagName === "INPUT") document.getElementById(fokus).focus();
+  fokusZurueck(fokus);
   if (padIds().length) C.fokusWiederherstellen();
   radDrehen();
 }
@@ -1504,6 +1632,7 @@ document.addEventListener("click", async (ev) => {
   }
   const el = ev.target.closest("[data-anlass],[data-zurueck],#beitreten,#weitermachen,[data-ansicht],[data-a],[data-teilen],[data-ansage-mit],[data-ansage-weg],[data-steuern],[data-code],[data-raum-neu],[data-uebernehmen],[data-ende-frage],[data-neu-laden],[data-steuer-auf],[data-steuer-zu],[data-ohne-code],[data-rad-hin],[data-padname],[data-padweg]");
   if (!el) return;
+  if (el.dataset.gesperrt !== undefined) return;   // Ergebnis steht noch (ergebnisPruefen)
   // Controller umbenennen oder entfernen (nur dieses Geraet; der Spieler bleibt im Raum, wie ein Handy, das geht)
   if (el.dataset.padname !== undefined || el.dataset.padweg !== undefined) {
     const k = el.dataset.padname ?? el.dataset.padweg, pad = pads[k];
@@ -1627,6 +1756,15 @@ document.addEventListener("click", async (ev) => {
   TON.spiele(el.dataset.klang || "klick");
   senden(a);
   if (el.dataset.ansicht !== undefined) { zeichnen(); window.scrollTo(0, 0); }
+});
+
+// Enter im Feld = der eine Knopf, der dieses Feld abschickt (Raten, Abgeben, Regel festlegen ...)
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Enter" || ev.isComposing) return;
+  const f = ev.target;
+  if (!f || !f.id || f.tagName !== "INPUT") return;
+  const k = [...document.querySelectorAll("[data-feld]")].filter((x) => x.dataset.feld === f.id);
+  if (k.length === 1 && !k[0].disabled) { ev.preventDefault(); k[0].click(); }
 });
 
 document.body.insertAdjacentHTML("beforeend", TON.schalterHTML());

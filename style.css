@@ -446,6 +446,10 @@ details.einladen { text-align: left; background: #0f1022; border: 2px solid var(
 .adminschild { margin-left: 4px; font-size: 13px; }
 /* lange Namen in Punktetafeln umbrechen statt mit "..." kuerzen (Regel: am Handy nichts abgeschnitten) */
 .tafel > div b, .gegner b { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; min-width: 0; }
+/* Fehlerjagd 31.10.2026: im Partybrett brachen schon kurze Namen ("Saski|a") mitten im Wort - der Name bekommt Platz,
+   die Punkte ruecken bei Bedarf in die naechste Zeile */
+.tafel > div { flex-wrap: wrap; }
+.tafel > div b { flex: 1 1 auto; }
 .spielkachel .einstiegmarke { position: absolute; bottom: 8px; right: 10px; font-size: 13px; opacity: .8; }
 .looks button { padding: 12px 4px; font-size: 13px; }
 .steuerkarte .schalter { margin-top: 8px; }
@@ -825,3 +829,11 @@ kbd.taste-start, kbd.taste-select, kbd.taste-kreuz { background: #3b3f63; border
 .padkarte .padzeile input { flex: 1 1 120px; min-width: 0; width: auto; margin: 0; }
 .padkarte .padzeile button.klein2 { margin-left: 0; }
 .padkarte p { line-height: 1.9; }
+
+/* Fehlerjagd 31.10.2026: Wer bin ich - Namen eintippen; Ergebnis kurz gesperrt (kein Wegtippen) */
+.wbi-raten { flex-wrap: wrap; }
+.wbi-raten input { flex: 1 1 170px; min-width: 0; width: auto; }
+.wbi-raten button { flex: 0 0 auto; }
+.wbi-falsch { margin: 8px 0; overflow-wrap: anywhere; }
+button[data-gesperrt] { opacity: .55; filter: grayscale(.6); cursor: wait; }
+button[data-gesperrt]:active { transform: none; }

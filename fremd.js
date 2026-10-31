@@ -95,7 +95,7 @@ function fremdSpiel({ id, name, emoji, kurz, farben, M, regeln, gruppe, bot }) {
       return `${flotteKnopf}${zuschauer ? `<div class="hinweisbox warten">👀 Dieses Spiel ist für ${mitspieler} Spieler – du schaust zu.</div>` : ""}
         <div id="fremd-platz" class="fremd-platz"></div>
         ${s.fehler && s.fehler.i === ich ? `<div class="hinweisbox" data-key="f${s.fehler.n}">⚠️ ${esc(uebersetzt(s.fehler.text))}</div>` : ""}
-        ${vorbei ? knopf("🔄 Neue Partie", { typ: "neu" }, "gross") : ""}
+        ${vorbei ? `<i hidden data-ergebnis="f${s.partie}-${s.nr}"></i>${knopf("🔄 Neue Partie", { typ: "neu" }, "gross")}` : ""}
         <details class="grundregeln"><summary>📖 So geht's</summary>${regeln}</details>
         <p class="leise klein mitte">Fertiges Spiel aus „LAN Games“ von kbennett2000 (MIT-Lizenz), eingebunden von Jarvis.</p>`;
     },

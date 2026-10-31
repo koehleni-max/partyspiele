@@ -120,7 +120,8 @@ export const wop = {
     if (!s.karte) return `<div class="frage">${name(namen, s.dran)} ist dran</div>
       ${ich === s.dran ? `<div class="raster2">${knopf("🗣️ Wahrheit", { typ: "wahl", art: "w" }, "gross blau")}${knopf("🔥 Pflicht", { typ: "wahl", art: "p" }, "gross rot")}</div>`
                        : `<div class="hinweisbox warten">${esc(namen[s.dran])} wählt gerade …</div>`}${katKnopf(ich)}`;
-    return `${karte(s, s.karte[0], `${s.art === "w" ? "🗣️ WAHRHEIT" : "🔥 PFLICHT"} für ${esc(namen[s.dran])}`, s.karte[1])}
+    // data-ergebnis: die Karte steht erst eine Weile, bevor "Erledigt" geht (app.js, kein Wegtippen per Doppeltipp)
+    return `<i hidden data-ergebnis="wop${s.zaehler}"></i>${karte(s, s.karte[0], `${s.art === "w" ? "🗣️ WAHRHEIT" : "🔥 PFLICHT"} für ${esc(namen[s.dran])}`, s.karte[1])}
       <p class="mitte leise">Kneifen? Dann ${schlucke(2)}.</p>${knopf("Erledigt – nächster ➜", { typ: "weiter" }, "gross")}`;
   },
 };
@@ -166,9 +167,9 @@ export const paranoia = {
     const r = katAktion(s, i, a, raum.ab18);
     if (r === "start") { s.karte = ziehen(s, "wer"); s.antwort = null; s.aufgedeckt = null; return; }
     if (r) return;
-    if (a.typ === "nenne" && i === s.leser && s.antwort === null) s.antwort = a.ziel;
-    if (a.typ === "muenze" && s.antwort !== null && s.aufgedeckt === null) s.aufgedeckt = zufall(2) === 0;
-    if (a.typ === "weiter") { s.leser = (s.leser + 1) % namen.length; s.karte = ziehen(s, "wer"); s.antwort = null; s.aufgedeckt = null; }
+    // Kein Muenzwurf mehr (Nico 31.10.2026: "die Frage wurde eh immer erfragt") - nach dem Nennen sehen alle die Frage
+    if (a.typ === "nenne" && i === s.leser && s.antwort === null && a.ziel !== i && namen[a.ziel] !== undefined) { s.antwort = a.ziel; s.aufgedeckt = true; }
+    if (a.typ === "weiter" && s.antwort !== null) { s.leser = (s.leser + 1) % namen.length; s.karte = ziehen(s, "wer"); s.antwort = null; s.aufgedeckt = null; }
   },
   render(s, ich, namen, raum) {
     if (s.phase === "kats") return katWahl(s, ich, namen, "wer", raum.ab18);
@@ -180,10 +181,9 @@ export const paranoia = {
       return `<div class="frage">${name(namen, leser)} liest heimlich eine Frage …</div><div class="logo mitte" style="display:block">🤫</div>`;
     }
     const betroffen = s.antwort;
-    if (s.aufgedeckt === null) return `<div class="urteil">${name(namen, leser)} hat ${name(namen, betroffen)} genannt!</div>
-      <p class="mitte">${esc(namen[betroffen])} darf die Münze werfen: Bei Kopf wird die Frage verraten – dafür trinkt ${esc(namen[betroffen])} einen.</p>
-      ${ich === betroffen ? knopf("🪙 Münze werfen", { typ: "muenze" }, "gross gelb") : `<div class="hinweisbox warten">${esc(namen[betroffen])} wirft die Münze …</div>`}`;
-    return `${s.aufgedeckt ? karte(s, s.karte[0], "Die Frage war: Wer würde eher …", s.karte[1]) : `<div class="urteil">🪙 Zahl – die Frage bleibt geheim! 😈</div>`}
+    return `<div class="urteil" data-key="pa${s.zaehler}">${name(namen, leser)} hat ${name(namen, betroffen)} genannt!</div>
+      ${karte(s, s.karte[0], "Die Frage war: Wer würde eher …", s.karte[1])}
+      <p class="mitte">🍺 ${esc(namen[betroffen])} trinkt einen Schluck.</p>
       ${knopf("Nächste Runde ➜", { typ: "weiter" }, "gross")}${katKnopf(ich)}`;
   },
 };

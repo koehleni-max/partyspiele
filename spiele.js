@@ -129,8 +129,9 @@ const klatschen = {
       zusatz = `${r.includes(ich) ? `<p class="mitte">Du warst Nr. ${r.indexOf(ich) + 1}</p>` : knopf(s.karte.w === "4" ? "👇 BODEN!" : "☝️ HIMMEL!", { typ: "reaktion" }, "gross rot")}
         ${fertig ? `<div class="urteil">Zu langsam: ${name(namen, r[r.length - 1])} klatscht!</div>` : `<p class="leise mitte">${r.length}/${namen.length}</p>`}`;
     }
-    if (s.karte.w === "B" && ich === s.dran) zusatz = `<input id="regelfeld" maxlength="120" placeholder="Neue Regel eintippen">${knopf("Regel festlegen", { typ: "regel" }, "", `data-feld="regelfeld" data-leeren`)}`;
-    return `${grund}<div class="spielkarte ${K.rot(s.karte) ? "rotk" : ""}">${K.zeige(s.karte)}</div>
+    if (s.karte.w === "B" && ich === s.dran) zusatz = `<input id="regelfeld" data-rk="${s.gezogen}" maxlength="120" placeholder="Neue Regel eintippen">${knopf("Regel festlegen", { typ: "regel" }, "", `data-feld="regelfeld" data-leeren`)}`;
+    // data-ergebnis: die gezogene Karte steht erst eine Weile, bevor "Weiter" geht (app.js, kein Wegtippen per Doppeltipp)
+    return `${grund}<i hidden data-ergebnis="k${s.gezogen}"></i><div class="spielkarte ${K.rot(s.karte) ? "rotk" : ""}">${K.zeige(s.karte)}</div>
       <div class="karte-gross"><small>${esc(namen[s.dran])} zieht</small><div><b>${titel}</b><br>${text}</div></div>${zusatz}
       ${knopf("Weiter", { typ: "weiter" }, "zweit")}`;
   },
