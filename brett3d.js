@@ -29,8 +29,10 @@ function spielerFarbenLesen() {
     return css ? new THREE.Color(css).getHex() : ERSATZ_SP[j % 4];
   });
 }
-const FELDFARBE = { m: 0x2fbf62, v: 0xe0464e, t: 0xf39c2b, a: 0xf39c2b, e: 0x4a7dff, d: 0xa84bff, l: 0x18b6b0 };
-const SYMBOL = { m: "🪙", v: "💸", t: "🍺", a: "🎯", e: "❓", d: "⚔️", l: "🛒" };   // a = Aufgabenfeld (Trinkfeld ohne Trinken)
+// Teil 4b: s = Stachelfeld, h = Heilquelle, k = Truhe, p = Portal, g = Glutfeld
+const FELDFARBE = { m: 0x2fbf62, v: 0xe0464e, t: 0xf39c2b, a: 0xf39c2b, e: 0x4a7dff, d: 0xa84bff, l: 0x18b6b0, s: 0x8a2433, h: 0xff6fb8, k: 0xc8901e, p: 0x7b3bd1, g: 0xff4d00 };
+const SYMBOL = { m: "🪙", v: "💸", t: "🍺", a: "🎯", e: "❓", d: "⚔️", l: "🛒", s: "🌵", h: "💖", k: "🧰", p: "🌀", g: "🔥" };   // a = Aufgabenfeld (Trinkfeld ohne Trinken)
+const LP_MAX = 30;
 
 let g = null;   // die eine Szene (bleibt ueber Neuzeichnungen erhalten)
 
@@ -66,6 +68,9 @@ const LOOKS = {
     wasser: 0x10243a, weg: 0xd8c39a, krone: 0x2a7a46, nacht: false, belichtung: 1.0 },
   normal: { nebel: 0x0d0e1a, hemi: [0xbfd4ff, 0x2a1840, 1.1], licht: [0xfff1dd, 2.3], lichtPos: [8, 16, 6], gras: 0x3f9a4a, erde: 0x6b4426,
     wasser: 0x1b4f8a, weg: 0xe8d9b0, krone: 0x2f9e4f, nacht: false, belichtung: 1.0 },
+  // zweites Brett (Teil 4b): Vulkaninsel - Asche, Basalt, Lavameer, glimmende Steine; gilt unabhaengig vom Anlass
+  vulkan: { nebel: 0x1c0c08, hemi: [0xffc29a, 0x2a0a05, 0.85], licht: [0xffd2a8, 1.9], lichtPos: [-7, 16, 7], gras: 0x5a4a44, erde: 0x2b1d19,
+    wasser: 0x5a1600, weg: 0xb39472, krone: 0x3d5a2a, nacht: true, belichtung: 1.15, lava: true },
 };
 const lookVon = () => { const l = document.body && document.body.dataset.look; return LOOKS[l] ? l : "normal"; };
 
@@ -116,6 +121,16 @@ function zahlTextur(n) {
     x.lineWidth = 8; x.strokeStyle = "#ffffff"; x.stroke();
     x.font = "900 70px sans-serif"; x.textAlign = "center"; x.textBaseline = "middle"; x.fillStyle = "#ffffff";
     x.fillText(String(n), 64, 68);
+  });
+}
+// Lebenspunkte-Plakette: dunkle Pille mit rotem Balken und Zahl
+function lpTextur(n) {
+  return canvasTextur("lp-" + n, 160, 64, (x) => {
+    x.fillStyle = "#1b1c2ee6"; x.beginPath(); x.roundRect(4, 8, 152, 48, 24); x.fill();
+    x.fillStyle = "#3a1018"; x.beginPath(); x.roundRect(52, 20, 94, 24, 12); x.fill();
+    x.fillStyle = n <= 10 ? "#ff3b3b" : "#ff6b81"; x.beginPath(); x.roundRect(52, 20, Math.max(8, 94 * n / LP_MAX), 24, 12); x.fill();
+    x.font = "900 30px sans-serif"; x.textAlign = "center"; x.textBaseline = "middle"; x.fillStyle = "#ffffff";
+    x.fillText("❤", 28, 34); x.font = "900 22px sans-serif"; x.fillText(String(n), 99, 33);
   });
 }
 const weichTextur = () => canvasTextur("weich", 64, 64, (x) => {
@@ -226,7 +241,8 @@ function figurBauen(farbe, look) {
 
 // ---------------------------------------------------------------- Aufbau der Welt
 function aufbauen(muster, anzahlSpieler, brett) {
-  const look = lookVon(), L = LOOKS[look];
+  const look = lookVon(), vulkan = brett.welt === "vulkan", L = LOOKS[vulkan ? "vulkan" : look];
+  const nh = brett.nh || 36;   // Felder der Hauptrunde (danach Abkuerzung/Umweg)
   const st = startStufe(), Q = STUFE[st.stufe];
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "default" });
   renderer.setPixelRatio(Math.min(Q.pr, window.devicePixelRatio || 1));
@@ -265,14 +281,16 @@ function aufbauen(muster, anzahlSpieler, brett) {
   gras.position.y = -0.62; gras.receiveShadow = true; scene.add(gras);
   const erde = new THREE.Mesh(wellig(new THREE.CylinderGeometry(13.3, 8.6, 3.4, 40, 3), true), new THREE.MeshStandardMaterial({ color: L.erde, roughness: 1, flatShading: true }));
   erde.position.y = -2.82; scene.add(erde);
-  const wasser = new THREE.Mesh(new THREE.CircleGeometry(90, 64), new THREE.MeshStandardMaterial({ color: L.wasser, roughness: 0.18, metalness: 0.35, transparent: true, opacity: 0.9 }));
+  const wasser = new THREE.Mesh(new THREE.CircleGeometry(90, 64), L.lava
+    ? new THREE.MeshStandardMaterial({ color: L.wasser, roughness: 0.6, emissive: 0xff3a00, emissiveIntensity: 0.55 })
+    : new THREE.MeshStandardMaterial({ color: L.wasser, roughness: 0.18, metalness: 0.35, transparent: true, opacity: 0.9 }));
   wasser.rotation.x = -Math.PI / 2; wasser.position.y = -2.2; scene.add(wasser);
-  const brandung = new THREE.Mesh(new THREE.RingGeometry(11.7, 13.0, 96), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.16, depthWrite: false }));
+  const brandung = new THREE.Mesh(new THREE.RingGeometry(11.7, 13.0, 96), new THREE.MeshBasicMaterial({ color: L.lava ? 0xffb000 : 0xffffff, transparent: true, opacity: 0.16, depthWrite: false }));
   brandung.rotation.x = -Math.PI / 2; brandung.position.y = -2.17; scene.add(brandung);
 
   const lage = brett.lage.map((p) => V(p.x, 0, p.z));
   const kanten = [];
-  brett.next.forEach((nx, i) => nx.forEach((j) => kanten.push([i, j, nx.length > 1 || i >= 36])));
+  brett.next.forEach((nx, i) => nx.forEach((j) => kanten.push([i, j, nx.length > 1 || i >= nh])));
   const abstandWeg = (x, z) => {
     let d = Infinity;
     for (const [i, j] of kanten) {
@@ -357,24 +375,62 @@ function aufbauen(muster, anzahlSpieler, brett) {
     stand.add(t, dach, ...ps, korb); stand.traverse((o) => { o.castShadow = true; });
     scene.add(stand);
   });
+  // ---- Teil 4b: Beiwerk der neuen Felder - Truhe neben dem Truhenfeld, Leuchtring ums Portal, Kristall an der Heilquelle,
+  //      Stacheln am Stachelfeld, Glutschein am Glutfeld (alles neben bzw. um das Feld, nie darauf)
+  const aussenVon = (f) => { const q = V(f.p.x, 0, f.p.z); return q.lengthSq() > 0.01 ? q.normalize() : V(1, 0, 0); };
+  const truheHolz = new THREE.MeshStandardMaterial({ color: 0x8a5a2b, roughness: 0.7 });
+  const truheGold = new THREE.MeshStandardMaterial({ color: 0xffcf5a, roughness: 0.35, metalness: 0.6, emissive: 0x6b4a00, emissiveIntensity: 0.4 });
+  const portalMat = new THREE.MeshStandardMaterial({ color: 0xb98cff, emissive: 0x7b3bd1, emissiveIntensity: 1.3, transparent: true, opacity: 0.9 });
+  const kristallMat = new THREE.MeshStandardMaterial({ color: 0xff9fd6, emissive: 0xff4fa8, emissiveIntensity: 0.9, roughness: 0.2, transparent: true, opacity: 0.9 });
+  const stachelMat = new THREE.MeshStandardMaterial({ color: 0x9aa0ad, metalness: 0.6, roughness: 0.35 });
+  const portale = [], truhen = [];
+  felder.forEach((f) => {
+    const raus = aussenVon(f);
+    if (f.art === "k") {
+      const t = new THREE.Group(); t.position.copy(f.p).addScaledVector(raus, 1.15); t.lookAt(f.p.x, 0, f.p.z);
+      const kasten = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.36, 0.42), truheHolz); kasten.position.y = 0.18;
+      const deckel = new THREE.Group(); deckel.position.set(0, 0.36, -0.21);
+      const d = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.21, 0.62, 12, 1, false, 0, Math.PI), truheHolz); d.rotation.z = Math.PI / 2; d.position.z = 0.21; deckel.add(d);
+      const band = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.06, 0.44), truheGold); band.position.y = 0.3;
+      const schloss = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.12, 0.04), truheGold); schloss.position.set(0, 0.3, 0.22);
+      t.add(kasten, deckel, band, schloss); t.traverse((o) => { o.castShadow = true; });
+      scene.add(t); truhen.push({ t, deckel, feld: felder.indexOf(f), auf: 0 });
+    } else if (f.art === "p") {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.07, 10, 40), portalMat); ring.rotation.x = -Math.PI / 2; ring.position.set(f.p.x, FELD_OBEN + 0.06, f.p.z);
+      scene.add(ring); portale.push(ring);
+    } else if (f.art === "h") {
+      const k = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), kristallMat); k.scale.set(1, 1.7, 1); k.position.copy(f.p).addScaledVector(raus, 1.05).setY(0.45);
+      k.castShadow = true; scene.add(k); portale.push(k);
+    } else if (f.art === "s") {
+      for (let x = -1; x <= 1; x++) {
+        const st = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.42, 6), stachelMat);
+        const quer = V(-raus.z, 0, raus.x);
+        st.position.copy(f.p).addScaledVector(raus, 0.98).addScaledVector(quer, x * 0.28).setY(0.21); st.castShadow = true; scene.add(st);
+      }
+    } else if (f.art === "g" && Q.lichter > 0) {
+      const l = new THREE.PointLight(0xff5a00, 3.5, 3.2, 1.6); l.position.set(f.p.x, 0.5, f.p.z); scene.add(l);
+    }
+  });
 
   // ---- Deko (nie auf Feldern oder Wegen), je Aussehen
-  const halloween = look === "halloween";
-  const liste = { tanne: [], laub: [], kahl: [], grab: [], kuerbis: [], stein: [], busch: [], pilz: [], blume: [] };
+  const halloween = look === "halloween" && !vulkan;
+  const liste = { tanne: [], laub: [], kahl: [], grab: [], kuerbis: [], stein: [], busch: [], pilz: [], blume: [], glut: [] };
   for (let k = 0; k < 120; k++) {
     const a = k * 2.399, r = 2.2 + (k % 13) * 0.93;
     const x = Math.cos(a) * r * 1.05, z = Math.sin(a) * r * 0.86;
     if (Math.hypot(x / 13.4, z / 12.2) > 1 || !frei(x, z, 1.25)) continue;
     const rnd = zufallFest(k), s = 0.8 + rnd * 0.45, p = V(x, 0, z), ry = rnd * 6.28;
-    let typ = halloween ? ["grab", "kuerbis", "tanne", "grab", "kahl", "stein", "pilz"][k % 7] : ["tanne", "laub", "tanne", "stein", "busch", "laub", "blume"][k % 7];
+    let typ = vulkan ? ["stein", "kahl", "glut", "stein", "busch", "kahl", "glut"][k % 7]
+      : halloween ? ["grab", "kuerbis", "tanne", "grab", "kahl", "stein", "pilz"][k % 7] : ["tanne", "laub", "tanne", "stein", "busch", "laub", "blume"][k % 7];
     // hohe Baeume mit mehr Abstand zum Weg (sie verdecken sonst bei Nahaufnahmen die Figur) - dort lieber etwas Kleines
-    if (["tanne", "laub", "kahl"].includes(typ) && !frei(x, z, 2.0)) typ = halloween ? "grab" : "busch";
+    if (["tanne", "laub", "kahl"].includes(typ) && !frei(x, z, 2.0)) typ = halloween ? "grab" : vulkan ? "glut" : "busch";
+    if (vulkan && Math.hypot(x - BURG.x, z - BURG.z) < 3.4) continue;   // Vulkanfuss frei lassen
     liste[typ].push({ p, s, ry: typ === "kuerbis" ? (rnd - 0.5) * 0.9 : typ === "grab" ? (rnd - 0.5) * 0.6 : ry, rz: typ === "grab" ? (rnd - 0.5) * 0.18 : 0 });
   }
   // Kuerbislaternen (bzw. Blumen) am Wegrand, jedes fuenfte Feld
-  for (let i = 0; i < Math.min(n, 36); i += 5) {
+  for (let i = 0; i < Math.min(n, nh); i += 5) {
     const p = lage[i], aussen = V(p.x, 0, p.z).normalize(), q = p.clone().addScaledVector(aussen, 1.25);
-    if (abstandWeg(q.x, q.z) > 0.9) liste[halloween ? "kuerbis" : "blume"].push({ p: q, s: 1, ry: (zufallFest(i) - 0.5) * 0.6 });
+    if (abstandWeg(q.x, q.z) > 0.9) liste[vulkan ? "glut" : halloween ? "kuerbis" : "blume"].push({ p: q, s: 1, ry: (zufallFest(i) - 0.5) * 0.6 });
   }
   const krone = new THREE.MeshStandardMaterial({ color: L.krone, flatShading: true, roughness: 0.9 });
   const stamm = new THREE.MeshStandardMaterial({ color: halloween ? 0x2e2320 : 0x7a4b25, roughness: 1 });
@@ -407,6 +463,16 @@ function aufbauen(muster, anzahlSpieler, brett) {
       [mitY(new THREE.CylinderGeometry(0.05, 0.07, 0.3, 6), 0.15), new THREE.MeshStandardMaterial({ color: 0xe8e0d0 }), liste.pilz],
       [mitY(new THREE.SphereGeometry(0.2, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), 0.28), new THREE.MeshStandardMaterial({ color: 0x9b4dff, emissive: 0x9b4dff, emissiveIntensity: 0.9 }), liste.pilz],
     );
+  } else if (vulkan) {
+    // kahle, verkohlte Baeume und glimmende Lavabrocken
+    const ast = (len, rz, x, y) => { const g = new THREE.CylinderGeometry(0.025, 0.06, len, 5); g.translate(0, len / 2, 0); g.rotateZ(rz); g.translate(x, y, 0); return g; };
+    const kohle = new THREE.MeshStandardMaterial({ color: 0x1e1512, roughness: 1 });
+    teile.push(
+      [mitY(new THREE.CylinderGeometry(0.07, 0.16, 1.5, 6), 0.75), kohle, liste.kahl],
+      [ast(0.75, -0.85, 0.03, 1.0), kohle, liste.kahl],
+      [ast(0.6, 0.95, -0.03, 0.75), kohle, liste.kahl],
+      [mitY(new THREE.DodecahedronGeometry(0.3), 0.12), new THREE.MeshStandardMaterial({ color: 0x3a1a10, emissive: 0xff4a00, emissiveIntensity: 0.9, flatShading: true, roughness: 0.8 }), liste.glut],
+    );
   } else {
     const bluete = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x222222 });
     const bl = liste.blume.flatMap((b, i) => [0, 1, 2, 3].map((k) => ({ p: b.p.clone().add(V(Math.cos(k * 1.7 + i) * 0.28, 0, Math.sin(k * 1.7 + i) * 0.28)), s: 1, farbe: [0xff5fae, 0xffd23f, 0xffffff, 0xa84bff][(i + k) % 4] })));
@@ -422,8 +488,31 @@ function aufbauen(muster, anzahlSpieler, brett) {
   const mitte = new THREE.Group(); mitte.position.copy(BURG);
   const fensterMat = new THREE.MeshStandardMaterial({ color: 0xffb347, emissive: 0xff9a2a, emissiveIntensity: 1.6 });
   const fenster = (x, y, z, ry = 0, w = 0.3, h = 0.4) => { const f = new THREE.Mesh(new THREE.PlaneGeometry(w, h), fensterMat); f.position.set(x, y, z); f.rotation.y = ry; return f; };
-  let geist = null;
-  if (halloween) {
+  let geist = null, krater = null;
+  const rauch = [];
+  if (vulkan) {
+    // Vulkan: Felskegel mit glühendem Kratersee, drei Lavastroeme die Flanke hinunter, Rauch steigt auf (Schleife)
+    const fels = new THREE.MeshStandardMaterial({ color: 0x3b2a24, roughness: 1, flatShading: true });
+    const kegelGeo = new THREE.CylinderGeometry(0.85, 2.6, 3.0, 14, 4);
+    const kp = kegelGeo.attributes.position;
+    for (let i = 0; i < kp.count; i++) { const y = kp.getY(i); if (y > -1.49 && y < 1.49) { const f = 1 + 0.08 * Math.sin(i * 2.3) ; kp.setX(i, kp.getX(i) * f); kp.setZ(i, kp.getZ(i) * f); } }
+    kegelGeo.computeVertexNormals();
+    const kegel = new THREE.Mesh(kegelGeo, fels); kegel.position.y = 1.5;
+    const glutMat = new THREE.MeshStandardMaterial({ color: 0xff6a00, emissive: 0xff4a00, emissiveIntensity: 1.8, roughness: 0.6 });
+    const see = new THREE.Mesh(new THREE.CircleGeometry(0.74, 20), glutMat); see.rotation.x = -Math.PI / 2; see.position.y = 2.97;
+    mitte.add(kegel, see);
+    [0.3, 2.4, 4.4].forEach((a) => {
+      const arm = new THREE.Group(); arm.rotation.y = a;
+      const strom = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3.4, 0.05), glutMat); strom.position.set(0, 1.5, 1.76); strom.rotation.x = -0.53;
+      arm.add(strom); mitte.add(arm);
+    });
+    const licht = new THREE.PointLight(0xff5a00, 14, 10, 1.5); licht.position.y = 3.7; mitte.add(licht);
+    for (let k = 0; k < 6; k++) {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: weichTextur(), color: 0x6b5a55, transparent: true, opacity: 0.35, depthWrite: false }));
+      sp.position.set(BURG.x, 3.2, BURG.z); scene.add(sp); rauch.push({ sp, t: k / 6 });
+    }
+    krater = { see, licht, pos: BURG.clone().setY(3.1) };
+  } else if (halloween) {
     const wand = new THREE.MeshStandardMaterial({ color: 0x433a52, roughness: 0.9 });
     const dachM = new THREE.MeshStandardMaterial({ color: 0x1d1729, roughness: 0.8 });
     const unten = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.6, 2.0), wand); unten.position.y = 0.8;
@@ -485,7 +574,7 @@ function aufbauen(muster, anzahlSpieler, brett) {
     lichtBasis.push([Math.cos(a) * r, 0.5 + zufallFest(k + 500) * 2.2, Math.sin(a) * r * 0.86, zufallFest(k + 600) * 6.28]);
   }
   const irrlichter = new THREE.Points(new THREE.BufferGeometry().setAttribute("position", new THREE.BufferAttribute(lichtPos, 3)),
-    new THREE.PointsMaterial({ map: weichTextur(), size: halloween ? 0.42 : 0.3, color: halloween ? 0x9dffb0 : 0xfff08a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.85 }));
+    new THREE.PointsMaterial({ map: weichTextur(), size: halloween ? 0.42 : 0.3, color: halloween ? 0x9dffb0 : vulkan ? 0xff8a3a : 0xfff08a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.85 }));
   scene.add(irrlichter);
   const nebel = [];
   if (halloween) {
@@ -518,8 +607,15 @@ function aufbauen(muster, anzahlSpieler, brett) {
     f.obj.scale.setScalar(0.9);
     scene.add(f.obj);
     Object.assign(f, { anzeige: 0, pfad: [], huepfen: 0, blick: 0, startIn: 0, gefuehl: null, blinzel: 2 + j * 0.7, richtung: V(), boden: V() });
+    // Lebenspunkte-Plakette ueber dem Kopf (Teil 4b) - nur sichtbar, wenn jemand Schaden hat
+    f.lpSchild = new THREE.Sprite(new THREE.SpriteMaterial({ map: lpTextur(LP_MAX), transparent: true, depthWrite: false }));
+    f.lpSchild.scale.set(1.0, 0.44, 1); f.lpSchild.position.y = 2.0; f.lpSchild.visible = false; f.lpSchild.userData.n = LP_MAX;
+    f.obj.add(f.lpSchild);
     figuren.push(f);
   }
+  // Blitze (Gewitterwolke) und Geschosse (Pfeil, Boxhandschuh, Lavabrocken)
+  const blitzMat = new THREE.MeshBasicMaterial({ color: 0xfff4a0, transparent: true, opacity: 0.95 });
+  const blitze = [0, 1, 2, 3, 4, 5].map(() => { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.12, 12, 6), blitzMat); b.visible = false; scene.add(b); return { b, t: 9 }; });
 
   // ---- Wuerfelblock (bis zu drei) und Schrittzaehler
   const wuerfelMat = wuerfelMaterialien();
@@ -559,6 +655,7 @@ function aufbauen(muster, anzahlSpieler, brett) {
 
   g = { renderer, scene, camera, mess, sonne, lichter, felder, figuren, stern, sternLicht, saeule, ring, wuerfel, wuerfelMat, zaehler, funken, funkenNr: 0,
     muenzen, blase, rohre, podest, PODEST_STUFE, geist, flederm, irrlichter, lichtBasis, nebel, brandung, n, lage, look,
+    welt: vulkan ? "vulkan" : "insel", krater, rauch, portale, truhen, blitze, geschosse: [], marker: {}, wackelBis: 0, muenzGeo, muenzMat,
     stufe: st.stufe, stufeFest: st.fest, mess_dt: [], wurfSchluessel: null, wurf: null, uhr: new THREE.Clock(), container: null, aktiv: 0, laeuft: false,
     schweber: [], fallenObj: {}, schnapp: [], effektNr: null, nachLanden: [], fahrt: null, phase: "", sieger: null, hoehe: 0.82,
     folgen: lsLesen("pa_brett_kamera") !== "uebersicht" && !wenigBewegung(), sternFlug: null, sternPos: V(), wuerfelZahl: 1, wuerfelKlein: false,
@@ -654,7 +751,102 @@ function effektZeigen(e) {
     funkenAn(p, 0.3); gefuehl(e.j, "jubel", 1.2);
   } else if (e.art === "tausch") {
     funkenAn(p, 0.78); if (e.ziel !== undefined) funkenAn(figurPos(e.ziel), 0.78);
+  } else if (e.art === "schaden") {
+    const treffer = () => { funkenAn(figurPos(e.j), 0.0, 0.5); schweben(`−${Math.abs(e.wert)} ❤️`, "#ff5b5b", figurPos(e.j)); gefuehl(e.j, "trauer", 1.6); };
+    const q = e.quelle;
+    if (q && q.von !== undefined && g.figuren[q.von]) { gefuehl(q.von, "jubel", 1.2); geschoss(figurPos(q.von).setY(1.2), () => figurPos(e.j).setY(1.0), q.art === "faust" ? "🥊" : "🏹", treffer); }
+    else treffer();
+  } else if (e.art === "heilen") {
+    funkenAn(p, 0.92, 0.6); if (e.wert) schweben(`+${e.wert} ❤️`, "#ff8ad8", p); gefuehl(e.j, "jubel", 1.2);
+  } else if (e.art === "ko") {
+    // am Unglücksfeld: graue Wolke und "K.O."; die Figur fliegt zum Start (Sprung, siehe Uebernahme der Positionen)
+    const ort = e.feld !== undefined && g.lage[e.feld] ? g.lage[e.feld].clone() : p;
+    funkenAn(ort, 0.0, 0.8); funkenAn(ort, 0.6, 0.4); schweben("K.O. 💫", "#ffffff", ort); wackeln(0.35);
+    if (e.wert) schweben(`−${Math.abs(e.wert)} 🪙`, "#ff6b6b", ort.clone().setY(-0.8));
+    zoomFahrt(e.j, "ko");
+  } else if (e.art === "flaeche") {
+    // mehrere Getroffene auf einmal: Blitz, Bombe, Gift, Vulkanausbruch
+    const ziele = e.ziele || [];
+    if (e.quelle === "ausbruch" && g.krater) { funkenAn(g.krater.pos.clone().setY(2.2), 0.06, 2); funkenAn(g.krater.pos.clone().setY(2.2), 0.02, 1.5); g.krater.ausbruch = 1; wackeln(1.4); }
+    if (e.quelle === "bombe") wackeln(0.8);
+    ziele.forEach((z, k) => {
+      const zeig = () => {
+        const q = figurPos(z.j);
+        if (z.schild) { g.blase.userData = { j: z.j, t: 0 }; g.blase.visible = true; schweben("🛡️", "#7fe3ff", q); return; }
+        funkenAn(q, e.quelle === "gift" ? 0.33 : e.quelle === "blitz" ? 0.15 : 0.05, 0.6);
+        schweben(z.ko ? "K.O. 💫" : `−${Math.abs(z.wert)} ❤️`, z.ko ? "#ffffff" : "#ff5b5b", q); gefuehl(z.j, "trauer", 1.6);
+      };
+      if (e.quelle === "blitz") { blitz(figurPos(z.j)); setTimeout(zeig, 120 + k * 60); }
+      else if (e.quelle === "ausbruch" && g.krater) geschoss(g.krater.pos.clone(), () => figurPos(z.j).setY(0.8), "🔥", zeig, 1.1 + k * 0.12);
+      else setTimeout(zeig, k * 90);
+    });
+    if (!ziele.length && e.quelle === "blitz") blitz(p.clone().add(V(1.5, 0, 0)));
+  } else if (e.art === "rakete") {
+    funkenAn(p, 0.06, 0.8); gefuehl(e.j, "jubel", 1.4);
+    (e.ziele || []).forEach((z) => { const q = figurPos(z.j); funkenAn(q, 0.05, 0.5); schweben(z.ko ? "K.O. 💫" : `−${Math.abs(z.wert)} ❤️`, "#ff5b5b", q); gefuehl(z.j, "trauer", 1.4); });
+  } else if (e.art === "portal") {
+    funkenAn(p, 0.75, 0.9); schweben("🌀", "#c9a6ff", p);
+  } else if (e.art === "truhe") {
+    funkenAn(p, 0.13, 0.7); schweben(`${e.inhalt || "🧰"}${e.wert ? ` +${e.wert}` : ""}`, "#ffd23f", p); gefuehl(e.j, "jubel", 1.4);
+    const t = g.truhen.find((x) => x.feld === g.figuren[e.j].anzeige) || g.truhen.reduce((a, x) => (!a || g.lage[x.feld].distanceTo(p) < g.lage[a.feld].distanceTo(p) ? x : a), null);
+    if (t) t.auf = 1.8;
+  } else if (e.art === "gift" || e.art === "fluch") {
+    funkenAn(p, e.art === "gift" ? 0.33 : 0.5, 0.6); schweben(e.art === "gift" ? "🧪" : "🐌", e.art === "gift" ? "#7dff8a" : "#ffd27a", p); gefuehl(e.j, "trauer", 1.4);
+  } else if (e.art === "handschuh") {
+    if (e.von !== undefined && g.figuren[e.von]) geschoss(figurPos(e.von).setY(1.2), () => figurPos(e.j).setY(1.2), "🧤", () => { schweben("🧤", "#ffffff", p); gefuehl(e.j, "jubel", 1.2); gefuehl(e.von, "trauer", 1.2); });
+  } else if (e.art === "wunder") {
+    funkenAn(p); schweben("🎁", "#ffffff", p); gefuehl(e.j, "jubel", 1.4);
+  } else if (e.art === "bombe" || e.art === "sperre") {
+    funkenAn(p, e.art === "bombe" ? 0.02 : 0.1, 0.4); schweben(e.art === "bombe" ? "💣" : "🚧", "#ffffff", p);
   } else funkenAn(p, 0.8);
+}
+// Kamera wackelt (Explosion, Ausbruch, K.O.)
+function wackeln(dauer) { if (!wenigBewegung()) g.wackelBis = Math.max(g.wackelBis, g.uhr.elapsedTime + dauer); }
+// Blitz aus dem Himmel auf einen Punkt
+function blitz(ziel) {
+  const b = g.blitze.find((x) => x.t > 0.4) || g.blitze[0];
+  b.t = 0; b.b.position.set(ziel.x, 6.2, ziel.z); b.b.rotation.set((Math.random() - 0.5) * 0.18, 0, (Math.random() - 0.5) * 0.18); b.b.visible = true;
+  funkenAn(ziel, 0.15, 0.4);
+}
+// fliegendes Ding im Bogen (Pfeil, Boxhandschuh, Lavabrocken); nach() liefert das Ziel (Figur bewegt sich evtl. noch)
+function geschoss(von, nach, emo, dann, dauer = 0.6) {
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: emojiTextur(emo), transparent: true, depthWrite: false }));
+  sp.scale.set(0.9, 0.9, 1); sp.position.copy(von); g.scene.add(sp);
+  g.geschosse.push({ sp, von: von.clone(), nach, t: 0, dauer, dann });
+}
+// Bomben, Absperrungen und Muenzhaufen auf den Feldern (wie die Fallen)
+function markerBauen(art) {
+  const o = new THREE.Group();
+  if (art === "bombe") {
+    const kugel = new THREE.Mesh(new THREE.SphereGeometry(0.26, 16, 12), new THREE.MeshStandardMaterial({ color: 0x1b1b24, roughness: 0.4, metalness: 0.3 })); kugel.position.y = 0.26;
+    const lunte = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.22, 5), new THREE.MeshStandardMaterial({ color: 0xc8a060 })); lunte.position.set(0.08, 0.56, 0); lunte.rotation.z = -0.4;
+    const funke = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffd23f })); funke.position.set(0.14, 0.67, 0); funke.userData.funke = true;
+    o.add(kugel, lunte, funke);
+  } else if (art === "sperre") {
+    const holz = new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 0.9 });
+    [-0.42, 0.42].forEach((x) => { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.6, 6), holz); p.position.set(x, 0.3, 0); o.add(p); });
+    const balken = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.14, 0.06), new THREE.MeshStandardMaterial({ map: streifenTextur("#ffffff", "#e0464e"), roughness: 0.6 })); balken.position.y = 0.5;
+    o.add(balken);
+  } else {
+    for (let k = 0; k < 5; k++) { const m = new THREE.Mesh(g.muenzGeo, g.muenzMat); m.rotation.x = Math.PI / 2; m.position.set((k % 2) * 0.12 - 0.06, 0.03 + k * 0.055, (k % 3) * 0.05 - 0.05); o.add(m); }
+  }
+  o.traverse((x) => { if (x.isMesh) x.castShadow = true; });
+  return o;
+}
+function markerAbgleichen(s) {
+  const soll = {};
+  Object.keys(s.bomben || {}).forEach((f) => { soll[`bombe:${f}`] = Number(f); });
+  Object.keys(s.sperren || {}).forEach((f) => { soll[`sperre:${f}`] = Number(f); });
+  Object.keys(s.haufen || {}).forEach((f) => { soll[`haufen:${f}`] = Number(f); });
+  Object.keys(g.marker).forEach((k) => { if (!(k in soll)) { g.scene.remove(g.marker[k]); delete g.marker[k]; } });
+  Object.entries(soll).forEach(([k, f]) => {
+    if (g.marker[k] || !g.felder[f]) return;
+    const art = k.split(":")[0], o = markerBauen(art), p = g.felder[f].p;
+    const ver = { bombe: [-0.4, 0.3], sperre: [0, 0], haufen: [0.35, 0.35] }[art];
+    o.position.set(p.x + ver[0], FELD_OBEN, p.z + ver[1]);
+    if (art === "sperre") { const nx = g.lage[(g.next[f] || [f])[0]] || p; o.lookAt(nx.x, FELD_OBEN, nx.z); }   // Balken quer zum Weg
+    o.userData.art = art; g.scene.add(o); g.marker[k] = o;
+  });
 }
 
 // ---------------------------------------------------------------- Kamera-Regie
@@ -806,6 +998,8 @@ function schleife(gen) {
         if (f.huepfen >= 1) {
           f.huepfen = 0; f.anzeige = f.pfad.shift(); klang("schritt");
           a = g.lage[f.anzeige]; b = f.pfad.length ? g.lage[f.pfad[0]] : a;
+          // letzter Abschnitt ist ein Sprung (Portal, K.O. zurueck zum Start)
+          if (f.sprungZiel !== undefined && f.pfad.length === 1 && f.pfad[0] === f.sprungZiel) { f.sprung = true; f.sprungZiel = undefined; }
           if (!f.pfad.length && g.felder[f.anzeige]) g.felder[f.anzeige].plopp = 1;
         }
       }
@@ -1003,7 +1197,44 @@ function schleife(gen) {
     return true;
   });
 
+  // ---- Teil 4b: Geschosse, Blitze, Rauch, Portale, Truhen, Marker, Lebenspunkte
+  g.geschosse = g.geschosse.filter((x) => {
+    x.t += dt;
+    const u = Math.min(1, x.t / x.dauer), ziel = x.nach();
+    x.sp.position.lerpVectors(x.von, ziel, u); x.sp.position.y += Math.sin(u * Math.PI) * 2.2;
+    if (u < 1) return true;
+    g.scene.remove(x.sp); x.sp.material.dispose();
+    try { x.dann(); } catch (e) { console.error(e); }
+    return false;
+  });
+  g.blitze.forEach((b) => { if (!b.b.visible) return; b.t += dt; b.b.material.opacity = Math.max(0, 0.95 - b.t * 3); if (b.t > 0.35) b.b.visible = false; });
+  g.rauch.forEach((x) => {
+    x.t += dt * (g.krater && g.krater.ausbruch > 0 ? 0.5 : 0.12);
+    if (x.t > 1) x.t -= 1;
+    x.sp.position.set(BURG.x + Math.sin(x.t * 6 + x.sp.id) * 0.4 * x.t, 3.2 + x.t * 4.5, BURG.z + Math.cos(x.t * 5) * 0.3 * x.t);
+    const gr = 0.8 + x.t * 2.6; x.sp.scale.set(gr, gr, 1); x.sp.material.opacity = 0.38 * (1 - x.t);
+  });
+  if (g.krater) {
+    const a = g.krater.ausbruch || 0;
+    g.krater.licht.intensity = 14 + Math.sin(t * 3) * 2 + a * 40; g.krater.see.material.emissiveIntensity = 1.8 + a * 2;
+    if (a > 0) g.krater.ausbruch = Math.max(0, a - dt * 0.6);
+  }
+  g.portale.forEach((o, k) => { o.rotation.y += dt * 1.2; const s = 1 + Math.sin(t * 3 + k) * 0.06; o.scale.set(s, o.geometry.type === "OctahedronGeometry" ? s * 1.7 : s, s); });
+  g.truhen.forEach((x) => { if (x.auf > 0) x.auf = Math.max(0, x.auf - dt); x.deckel.rotation.x = -Math.min(1, x.auf) * 1.2; });
+  Object.values(g.marker).forEach((o, k) => {
+    if (o.userData.art === "bombe") { const s = 1 + Math.abs(Math.sin(t * 6 + k)) * 0.12; o.scale.setScalar(s); o.children.forEach((c) => { if (c.userData.funke) c.visible = Math.sin(t * 20 + k) > -0.3; }); }
+    if (o.userData.art === "haufen") o.rotation.y += dt * 0.8;
+  });
+  const dranLauf = g.figuren[g.aktiv];
+  g.figuren.forEach((f, j) => {
+    const n = g.lp ? g.lp[j] : LP_MAX;
+    if (f.lpSchild.userData.n !== n) { f.lpSchild.material.map = lpTextur(Math.max(0, Math.min(LP_MAX, n))); f.lpSchild.userData.n = n; }
+    const verdeckt = j === g.aktiv && (g.zaehler.visible || g.wuerfel.some((x) => x.visible));
+    f.lpSchild.visible = !g.sieger && n < LP_MAX && !verdeckt && !(f === dranLauf && f.pfad.length);
+  });
+
   kameraBewegen(dt);
+  if (g.wackelBis > t) { const st = Math.min(1, g.wackelBis - t) * 0.16; g.camera.position.add(V((Math.random() - 0.5) * st, (Math.random() - 0.5) * st, (Math.random() - 0.5) * st)); }
   g.renderer.render(g.scene, g.camera);
 }
 function versatz(j, n) {
@@ -1064,7 +1295,7 @@ function kameraSchalter(container) {
 // sieger (nur fuer die Siegerehrung): { plaetze: [[j, stufe 1-3 oder 0], ...], jubel: [j], trauer: [j] }
 export function brett3dZeigen(container, s, muster, brett, sieger = null) {
   // neu bauen, wenn sich Spielerzahl, Felder oder Aussehen aendern (ohne Trinken: Aufgabenfelder statt Trinkfelder)
-  if (g && (g.figuren.length !== s.pos.length || g.muster !== muster || g.look !== lookVon())) {
+  if (g && (g.figuren.length !== s.pos.length || g.muster !== muster || g.look !== lookVon() || g.welt !== (brett.welt === "vulkan" ? "vulkan" : "insel"))) {
     try { g.renderer.dispose(); } catch (e) { /* egal */ }
     g.laeuft = false; g = null;
   }
@@ -1122,6 +1353,8 @@ export function brett3dZeigen(container, s, muster, brett, sieger = null) {
         const k = weg.lastIndexOf(p);
         f.pfad = k >= 0 ? weg.slice(0, k + 1) : [...weg, p];
         if (f.pfad[f.pfad.length - 1] !== p) f.pfad.push(p);
+        if (k < 0) f.sprungZiel = p;   // Portal oder K.O.: erst den Weg laufen, dann springen
+        if (f.pfad.length === 1 && k < 0) f.sprung = true;
         if (neuerWurf && g.wurf.j === j) { f.startIn = WURF.los; f.huepfen = 0; }
       }
       f.ziel = p;
@@ -1160,6 +1393,9 @@ export function brett3dZeigen(container, s, muster, brett, sieger = null) {
   }
   g.rundeAlt = s.runde; g.sternAlt = s.stern; g.dranAlt = s.dran;
 
+  // Teil 4b: Lebenspunkte fuer die Plaketten, Bomben/Absperrungen/Muenzhaufen auf den Feldern
+  g.lp = Array.isArray(s.lp) ? s.lp.slice() : null;
+  markerAbgleichen(s);
   // Fallen: neue erscheinen, ausgeloeste schnappen zu
   const fallen = s.fallen || {};
   Object.keys(g.fallenObj).forEach((k) => {

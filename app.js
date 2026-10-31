@@ -18,6 +18,7 @@ import * as BS from "./beamer_spiele.js";
 import * as C from "./controller.js";
 import * as T from "./texte.js";
 import * as BE from "./brett_ereignisse.js";
+import * as BR from "./brett.js";
 
 const app = document.getElementById("app");
 const BASIS = location.href.split("#")[0];
@@ -1609,11 +1610,11 @@ function glueckListeBild() {
 
 // Partybrett auf der Steuerseite: Reiter mit allen Ereignissen des "?"-Felds (Nico 31.10.2026, Punkt 8)
 function steuerBrett() {
-  const weg = (raum.brettWeg || []).length;
+  const liste = raum.brettWeg || [], weg = liste.filter((k) => !String(k).startsWith("m:")).length, miniWeg = liste.length - weg;
   return `<div class="karte steuerseite steuer-brett">
       <h2>🎲 Partybrett</h2>
-      <p class="leise klein">Auf dem ❓-Feld wartet einer von ${BE.anzahl()} Zufällen. Trink-Ereignisse kommen nur, wenn das Brett mit Trinken gespielt wird.</p>
-      <button class="gross gl-reiter-knopf" data-br-reiter>📋 Alle ${BE.anzahl()} Ereignisse – ansehen und streichen${weg ? `<small>${weg} gestrichen</small>` : ""}</button>
+      <p class="leise klein">Auf dem ❓-Feld wartet einer von ${BE.anzahl()} Zufällen, nach jeder Runde eins von ${BE.MINI_KENNUNGEN.length} Minispielen. Trink-Ereignisse kommen nur, wenn das Brett mit Trinken gespielt wird.</p>
+      <button class="gross gl-reiter-knopf" data-br-reiter>📋 Alle ${BE.anzahl()} Ereignisse und ${BE.MINI_KENNUNGEN.length} Minispiele – ansehen und streichen${weg || miniWeg ? `<small>${[weg ? `${weg} Ereignisse` : "", miniWeg ? `${miniWeg} Minispiele` : ""].filter(Boolean).join(", ")} gestrichen</small>` : ""}</button>
     </div>`;
 }
 let brettReiter = false;
@@ -1630,7 +1631,17 @@ function brettListeBild() {
       ${BE.KATEGORIEN.map(([k, titel]) => { const l = BE.EREIGNISSE.filter((x) => x.kat === k); const alleWeg = l.every((x) => weg.has(x.id));
         return `<div class="gl-kopf"><h3>${titel} <small class="leise">(${l.filter((x) => !weg.has(x.id)).length}/${l.length})</small></h3>${knopf(alleWeg ? "alle wieder rein" : "alle streichen", br("kat", { kat: k }), "klein2 zweit")}</div>
         ${l.map(zeile).join("")}`; }).join("")}
+      ${brettMiniListe(weg, br)}
     </div>`;
+}
+// Teil 4b (Nico 31.10.2026): Minispiele streichen wie die Ereignisse - gleiche Liste ("m:<Kennung>"), gleiche Merk-Ablage
+function brettMiniListe(weg, br) {
+  const ids = BE.MINI_KENNUNGEN, aus = ids.filter((id) => weg.has(`m:${id}`)).length;
+  const zeile = (id) => { const info = BR.miniInfo(id) || { emo: "🎮", titel: id, typ: "" }, w = weg.has(`m:${id}`);
+    return `<div class="gl-eintrag br-mini ${w ? "gestrichen" : ""}" data-a='${JSON.stringify(br("mini", { id })).replace(/'/g, "&#39;")}'><input type="checkbox" ${w ? "" : "checked"} tabindex="-1"><span>${info.emo} ${esc(info.titel)} <small class="leise">${esc(info.typ)}</small></span></div>`; };
+  return `<div class="gl-kopf br-mini-kopf"><h3>🎮 Minispiele <small class="leise">(${ids.length - aus}/${ids.length})</small></h3>${aus ? knopf("alle wieder rein", br("minisauf"), "klein2 zweit") : ""}</div>
+    <p class="leise klein">Gestrichene Minispiele kommen nach den Runden nicht mehr dran. Sind alle gestrichen, kommen wieder alle.</p>
+    ${ids.map(zeile).join("")}`;
 }
 
 function endeKnopf() {

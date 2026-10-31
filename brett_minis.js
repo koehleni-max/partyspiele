@@ -9,6 +9,7 @@
 //        tick?(st, m, ms), bild(st, m, ms), knoepfe?(st, m, ms, ctrl) -> [[taste, text, klasse]], raster, ende(st, m), bot(m),
 //        punkte?(werte, j, teil) }   taste/tick -> undefined oder { wert } (= fertig)
 import { esc } from "./hilfe.js";
+import { DEFS2 } from "./brett_minis2.js";   // zweiter Satz (Teil 4b): Arenen, Rennen, Zielen, Wischen, Neigen, Team, Duelle
 
 const VORLAUF = 3000;   // "3 - 2 - 1" mit der Regel, bevor gemessen wird
 const r = (n) => Math.floor(Math.random() * n);
@@ -383,16 +384,20 @@ function pokerWert(w) {
   return sum * (gleich === 3 ? 3 : gleich === 2 ? 2 : 1);
 }
 
-export const NEU = Object.fromEntries(DEFS.map((d) => [d.id, d]));
-export const NEU_IDS = DEFS.map((d) => d.id);
+const ALLE = [...DEFS, ...DEFS2];
+export const NEU = Object.fromEntries(ALLE.map((d) => [d.id, d]));
+export const NEU_IDS = ALLE.map((d) => d.id);
+// die fuenf ersten Minispiele (eigener Code in brett.js/controller.js) - fuer die Streichliste
+export const ALT_IDS = ["tappen", "farbwort", "reaktion", "gedaechtnis", "schaetzen"];
 export const istNeu = (art) => Object.prototype.hasOwnProperty.call(NEU, art);
 export const daten = (art) => (NEU[art] && NEU[art].daten ? NEU[art].daten() : null);
-export function botWert(art, m) { try { return NEU[art].bot(m); } catch (e) { return 0; } }
-export const einheit = (art, w) => (w === null || w === undefined ? "—" : NEU[art].einheit(w));
-// Vergleichswert: hoeher = besser (tief: kleine Werte gut; fehlend = ganz hinten)
-export function punkte(art, werte, j, teil) {
+// i = Spielernummer (Team-Spiele), m mit Teams/Werten - beides darf fehlen
+export function botWert(art, m, i) { try { const w = NEU[art].bot(m, i); return typeof w === "number" && !isNaN(w) ? w : 0; } catch (e) { return 0; } }
+export const einheit = (art, w, m, j) => (w === null || w === undefined ? "—" : NEU[art].einheit(w, m, j));
+// Vergleichswert: hoeher = besser (tief: kleine Werte gut; fehlend = ganz hinten). m: Teams fuer Team-/Duellspiele
+export function punkte(art, werte, j, teil, m) {
   const d = NEU[art], w = werte[j];
-  if (d.punkte) return d.punkte(werte, j, teil);
+  if (d.punkte) return d.punkte(werte, j, teil, m);
   if (w === null || w === undefined) return -1e9;
   return d.gut === "tief" ? -w : w;
 }
@@ -400,11 +405,11 @@ export function punkte(art, werte, j, teil) {
 // ---------------------------------------------------------------- Ablauf am Geraet (Handy oder Controller)
 const lokal = new Map();   // key ("h<ich>" am Handy, Controller-Kennung) -> Eintrag
 const mk = (m) => `${m.runde}-${m.art}`;
-function eintrag(m, key) {
+function eintrag(m, key, j) {
   const k = mk(m);
   let e = lokal.get(key);
   if (!e || e.k !== k) {
-    e = { k, def: NEU[m.art], m, t0: performance.now(), st: NEU[m.art].neu(m), gesendet: false, wert: null, senden: null, zuletzt: "" };
+    e = { k, def: NEU[m.art], m, j, t0: performance.now(), st: NEU[m.art].neu(m, j), gesendet: false, wert: null, senden: null, zuletzt: "" };
     lokal.set(key, e);
     // Altes aufraeumen (andere Minispiele)
     for (const [k2, x] of lokal) if (x.k !== k && (x.gesendet || performance.now() - x.t0 > 60000)) lokal.delete(k2);
@@ -433,27 +438,53 @@ function bildHTML(e, ms, schild) {
   if (ms < 0) return `<div class="mn-regel">${esc(e.def.regel)}</div>`;
   return e.def.bild(e.st, e.m, ms, !!schild);
 }
-// HTML fuer eine Spielflaeche. schild = null (Handy) oder (taste) -> Tastenschild (Controller)
-export function html(m, key, schild = null) {
-  const e = eintrag(m, key);
+// HTML fuer eine Spielflaeche. schild = null (Handy) oder (taste) -> Tastenschild (Controller); j = Spielernummer
+export function html(m, key, schild = null, j) {
+  const e = eintrag(m, key, j);
   const ms = zeit(e);
+  const d = e.def, hinweis = !schild && (d.wisch || d.neigen) ? `<small class="mn-hinweis">${d.neigen ? "📱 Handy neigen oder Knöpfe" : "👆 Auf dem Bild wischen oder Knöpfe"}</small>` : "";
   return `<div class="mn ${schild ? "mn-pad" : ""}" data-mn="${esc(key)}"><div class="mn-uhr">${uhrText(e)}</div>
-    <div class="mn-bild">${bildHTML(e, ms, schild)}</div><div class="mn-unten">${knoepfeHTML(e, ms, schild)}</div></div>`;
+    <div class="mn-bild ${!schild && d.wisch ? "mn-wisch" : ""}">${bildHTML(e, ms, schild)}</div><div class="mn-unten">${knoepfeHTML(e, ms, schild)}</div>${hinweis}</div>`;
 }
-// wohin der Wert geht; am Handy zusaetzlich die Knoepfe anbinden
-export function anmelden(m, key, senden, schild = null) {
-  const e = eintrag(m, key);
+// wohin der Wert geht; am Handy zusaetzlich die Knoepfe anbinden (und Wischen/Neigen, wo das Spiel es kennt)
+export function anmelden(m, key, senden, schild = null, j) {
+  const e = eintrag(m, key, j);
   e.senden = senden; e.schild = schild;
   starteTakt();
   const box = finde(key);
   if (box && !schild) {
+    let wisch = null;
     box.onpointerdown = (ev) => {
       const k = ev.target.closest("[data-mt]");
-      if (!k || !box.contains(k)) return;
-      ev.preventDefault();
-      taste(key, k.dataset.mt);
+      if (k && box.contains(k)) { ev.preventDefault(); taste(key, k.dataset.mt); return; }
+      if (e.def.wisch && ev.target.closest(".mn-bild")) { ev.preventDefault(); wisch = { x: ev.clientX, y: ev.clientY }; }
     };
+    // Wischen: Richtung aus Start- und Endpunkt (ab 24 px), ergibt dieselben Tasten wie die Pfeile
+    box.onpointerup = box.onpointercancel = (ev) => {
+      if (!wisch) return;
+      const dx = ev.clientX - wisch.x, dy = ev.clientY - wisch.y;
+      wisch = null;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+      taste(key, Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "rechts" : "links") : dy > 0 ? "runter" : "hoch");
+    };
+    if (e.def.neigen) neigenAn(key);
   }
+}
+// Neigen: Seitenneigung (gamma, Grad) an das laufende Neige-Spiel dieses Handys, hoechstens alle 60 ms
+let neigKey = null, neigZuletzt = 0, neigHoerer = false;
+function neigenAn(key) {
+  neigKey = key;
+  if (neigHoerer || typeof window === "undefined" || !("DeviceOrientationEvent" in window)) return;
+  neigHoerer = true;
+  window.addEventListener("deviceorientation", (ev) => {
+    if (!neigKey || ev.gamma === null || ev.gamma === undefined) return;
+    const e = lokal.get(neigKey);
+    if (!e || e.gesendet || !e.def.neigen) return;
+    const jetzt = performance.now();
+    if (jetzt - neigZuletzt < 60) return;
+    neigZuletzt = jetzt;
+    taste(neigKey, `neig:${Math.round(ev.gamma)}`);
+  });
 }
 export const fertigBei = (key) => { const e = lokal.get(key); return !!(e && e.gesendet); };
 // -> true, wenn die Taste verbraucht wurde

@@ -135,7 +135,7 @@ export function miniHTML(m, pads, schaetz, senden) {
   aktiv = { m, pads, schaetz, senden };
   if (!pads.length) return "";
   // neue Minispiele (Ausbau 31.10.2026): gleiche Logik wie am Handy, Tasten kommen von miniTaste
-  if (R.istNeu(m.art)) pads.forEach(({ pad }) => R.anmelden(m, pad.id, (wert, mk) => aktiv && aktiv.senden(pad.id, wert, mk), (t) => taste(pad.art, t)));
+  if (R.istNeu(m.art)) pads.forEach(({ pad, j }) => R.anmelden(m, pad.id, (wert, mk) => aktiv && aktiv.senden(pad.id, wert, mk), (t) => taste(pad.art, t), j));
   if (m.art === "reaktion") planeGruen(m);
   if (m.art === "gedaechtnis") planeVerstecken(m);
   return `<div class="padminis ${offen.length ? "" : "alle-fertig"}">${pads.map(({ pad, j }) => `<div class="padbox" id="padbox-${pad.nr}" data-pad="${esc(pad.id)}">
@@ -164,7 +164,7 @@ function zifferHTML(s) {
 }
 function inhalt(pad, j, m) {
   const a = pad.art;
-  if (R.istNeu(m.art)) return m.werte[j] !== undefined ? `<div class="padfertig">✓ Erledigt</div>` : R.html(m, pad.id, (t) => taste(a, t));
+  if (R.istNeu(m.art)) return m.werte[j] !== undefined ? `<div class="padfertig">✓ Erledigt</div>` : R.html(m, pad.id, (t) => taste(a, t), j);
   const s = st(pad, m);
   if (m.werte[j] !== undefined || s.gesendet) return `<div class="padfertig">✓ Erledigt</div>`;
   if (m.art === "tappen") {

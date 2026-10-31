@@ -9,6 +9,8 @@
 // h = Helfer aus brett.js: n, nm, rnd(k), muenzen(j, d), sterne(j, d), vor(j, k), zurueck(j, k), tausch(j, k),
 //     gib(j, ware), stern(), erster(), letzter(), reichster(), aermster(), anderer(i), zuStern(j), extraWurf(j)
 
+import * as R from "./brett_minis.js";
+
 export const KATEGORIEN = [
   ["glueck", "🍀 Glück"], ["pech", "🌧️ Pech"], ["stern", "⭐ Sterne"], ["weg", "🌀 Bewegung"], ["tausch", "🔄 Tauschen & Klauen"],
   ["alle", "👥 Für alle"], ["ware", "🎒 Gegenstände"], ["spass", "🎭 Spaß-Aufgaben"], ["trink", "🍺 Trinken (nur mit Trinken)"],
@@ -140,10 +142,20 @@ e("trink", "Ex oder 5 Münzen: du entscheidest.", () => {}, { trink: true });
 e("trink", "Regel erfinden: bis zum Spielende trinkt, wer sie bricht.", () => {}, { trink: true });
 e("trink", "Spiegel: der Spieler rechts von dir trinkt so viel wie du – zwei Schlucke für euch beide.", () => {}, { trink: true });
 
+// ---------------------------------------------------------------- Lebenspunkte (Teil 4b, 31.10.2026 abends - neue Eintraege hinten)
+e("pech", "Stolperdraht! Du verlierst 6 Lebenspunkte.", (s, i, h) => h.schaden(i, 6), { boese: true });
+e("pech", "Wespennest: 4 Schaden für dich und jeden, der auf deinem Feld steht.", (s, i, h) => { const t = [h.schaden(i, 4)]; for (let j = 0; j < h.n; j++) if (j !== i && s.pos[j] === s.pos[i]) t.push(h.schaden(j, 4)); return t.join(" "); }, { boese: true });
+e("glueck", "Erste-Hilfe-Kasten: +12 Lebenspunkte.", (s, i, h) => { const d = h.heilen(i, 12); return d ? `+${d} ❤️.` : "Du bist schon kerngesund."; });
+e("glueck", "Picknick für alle: jeder bekommt 5 Lebenspunkte zurück.", (s, i, h) => { for (let j = 0; j < h.n; j++) h.heilen(j, 5); });
+e("alle", "Hagelschauer: alle verlieren 3 Lebenspunkte.", (s, i, h) => { const t = []; for (let j = 0; j < h.n; j++) t.push(h.schaden(j, 3)); return t.filter(Boolean).join(" "); });
+e("tausch", "Lebenstausch: du tauschst deine Lebenspunkte mit dem Spieler, der am meisten hat.", (s, i, h) => { let k = -1; for (let j = 0; j < h.n; j++) if (j !== i && (k < 0 || s.lp[j] > s.lp[k])) k = j; if (k < 0 || s.lp[k] <= s.lp[i]) return "Keiner hat mehr als du."; if (h.geschuetzt(k)) return `${h.nm[k]} hat einen Schild.`; [s.lp[i], s.lp[k]] = [s.lp[k], s.lp[i]]; return `Getauscht mit ${h.nm[k]}.`; });
+
 export const EREIGNISSE = L;
 export const anzahl = () => L.length;
 export const nachId = (id) => L.find((x) => x.id === id);
-const gueltig = new Set(L.map((x) => x.id));
+// gestrichene Minispiele stehen in derselben Liste als "m:<Kennung>"
+export const MINI_KENNUNGEN = [...R.ALT_IDS, ...R.NEU_IDS];
+const gueltig = new Set([...L.map((x) => x.id), ...MINI_KENNUNGEN.map((id) => `m:${id}`)]);
 
 // ziehbar: nicht gestrichen und - ohne Trinken - keine Trink-Ereignisse
 export function ziehbar(weg, ohne) {
@@ -156,14 +168,17 @@ export function streichAktion(raum, a) {
   const weg = new Set(Array.isArray(raum.brettWeg) ? raum.brettWeg.filter((id) => gueltig.has(id)) : []);
   const vorher = weg.size;
   if (a.was === "streichen" && gueltig.has(a.id)) { if (weg.has(a.id)) weg.delete(a.id); else weg.add(a.id); }
+  // Minispiele: einzeln oder alle wieder rein
+  else if (a.was === "mini" && gueltig.has(`m:${a.id}`)) { const k = `m:${a.id}`; if (weg.has(k)) weg.delete(k); else weg.add(k); }
+  else if (a.was === "minisauf") [...weg].forEach((k) => { if (k.startsWith("m:")) weg.delete(k); });
   else if (a.was === "kat" && KATEGORIEN.some(([k]) => k === a.kat)) {
     const ids = L.filter((x) => x.kat === a.kat).map((x) => x.id);
     const alleWeg = ids.every((id) => weg.has(id));
     ids.forEach((id) => (alleWeg ? weg.delete(id) : weg.add(id)));
-  } else if (a.was === "alleauf") weg.clear();
+  } else if (a.was === "alleauf") [...weg].forEach((k) => { if (!k.startsWith("m:")) weg.delete(k); });   // Ereignisse; Minispiele: "minisauf"
   else return false;
   const neu = [...weg];
-  const anders = neu.length !== vorher || a.was === "streichen" || a.was === "kat";
+  const anders = neu.length !== vorher || a.was === "streichen" || a.was === "kat" || a.was === "mini";
   raum.brettWeg = neu;
   return anders;
 }
