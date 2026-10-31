@@ -197,6 +197,12 @@ details.antwort { margin-top: 10px; color: var(--leise); }
 .brett3d { position: relative; border-radius: 22px; overflow: hidden; margin: 6px 0; background: radial-gradient(circle at 50% 30%, #23305e, #0d0e1a 75%); box-shadow: 0 8px 0 #0007, inset 0 0 40px #0008; min-height: 120px; }
 .brett3d canvas { display: block; width: 100%; }
 .brett3d-info { position: absolute; top: 10px; left: 12px; background: #000a; padding: 5px 11px; border-radius: 99px; font-weight: 900; font-size: 13px; }
+/* Kamera-Schalter (brett3d.js, 31.10.2026 abends): Kamera folgt der Figur / ganzes Brett; kein Knopf, damit der Controller ihn nicht anspringt */
+.brett3d-kamera { position: absolute; top: 10px; right: 12px; background: #000a; padding: 5px 10px; border-radius: 99px; font-weight: 900; font-size: 12px;
+  cursor: pointer; user-select: none; -webkit-user-select: none; white-space: nowrap; }
+.brett3d-kamera:focus-visible { outline: 2px solid #fff; }
+.brett3d.sieger { min-height: 0; margin: 4px 0 10px; }
+.brett3d.sieger:empty { min-height: 120px; }
 .farbwort { font-size: 48px; font-weight: 900; text-align: center; padding: 34px 10px; background: #f5f3ff; border-radius: 20px; margin: 10px 0; color: #222; box-shadow: 0 6px 0 #0007; user-select: none; }
 .farbknoepfe button { margin: 0; }
 /* Gemeinschaftsspiele */
@@ -874,6 +880,20 @@ button[data-gesperrt]:active { transform: none; }
 
 /* ---- Partybrett-Ausbau (Nico 31.10.2026, Punkt 8): Minispiele, Laden, Wege, Schlussrunden, Bonussterne, flaches Brett */
 .mini-modus { text-align: center; font-weight: 800; font-size: 14px; background: #0f1022; border: 2px solid var(--rand); border-radius: 14px; padding: 7px 10px; margin: 0 0 8px; overflow-wrap: anywhere; }
+/* Titelkarte des Minispiels im Partybrett (31.10.2026 abends): fliegt beim ersten Anblick einmal herein */
+.mini-titelkarte { display: flex; align-items: center; justify-content: center; gap: 12px; text-align: left; padding: 12px 14px; border-radius: 20px; color: #fff;
+  background: repeating-linear-gradient(-45deg, #ffffff14 0 14px, transparent 14px 28px), linear-gradient(135deg, #6d5dfc, #eb459e); box-shadow: 0 6px 0 #0007; overflow: hidden; }
+body[data-look="halloween"] .mini-titelkarte { background: repeating-linear-gradient(-45deg, #0000001a 0 14px, transparent 14px 28px), linear-gradient(135deg, #ff7518, #7b2cbf); }
+.mtk-emo { font-size: 44px; line-height: 1; filter: drop-shadow(0 4px 6px #0006); flex: none; }
+.mtk-text { display: flex; flex-direction: column; min-width: 0; }
+.mtk-text b { font-size: 22px; font-weight: 900; line-height: 1.1; overflow-wrap: anywhere; text-shadow: 0 2px 6px #0005; }
+.mtk-vor { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; opacity: .85; font-weight: 900; }
+.mini-titelkarte .mini-typ { color: #fff; opacity: .85; }
+.mini-titelkarte.ankunft { animation: mtk-rein .65s cubic-bezier(.2, 1.2, .4, 1) both; }
+.mini-titelkarte.ankunft .mtk-emo { animation: mtk-emo 1s ease-out both; }
+@keyframes mtk-rein { 0% { transform: scale(.4) rotate(-6deg); opacity: 0; } 70% { transform: scale(1) rotate(1deg); opacity: 1; } 100% { transform: none; } }
+@keyframes mtk-emo { 0% { transform: scale(0) rotate(-180deg); } 70% { transform: scale(1.25) rotate(10deg); } 100% { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .mini-titelkarte.ankunft, .mini-titelkarte.ankunft .mtk-emo { animation: none; } }
 .mini-kopf { text-align: center; font-weight: 900; color: var(--gelb); margin: 6px 0; overflow-wrap: anywhere; }
 .mini-typ { display: block; font-size: 12px; color: var(--leise); font-weight: 800; letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
 .mini-abbruch { margin-top: 14px; }

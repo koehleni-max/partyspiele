@@ -147,11 +147,12 @@ export const brett = {
       <span>⭐${s.sterne[j]}</span><span>🪙${s.muenzen[j]}</span>${s.waren[j].length ? `<span class="beutel" title="Gegenstände">${s.waren[j].map((w) => ware(w).emo).join("")}</span>` : ""}</div>`).join("")}</div>`;
     const m = s.meldung || "";
     const klang = /kauft einen Stern/.test(m) ? "stern" : /\+3 Münzen|\+6 Münzen/.test(m) ? "richtig" : /−3 Münzen|−6 Münzen/.test(m) ? "falsch" : /❓/.test(m) ? "magie" : /Duell/.test(m) ? "spannung" : /Trinkfeld|Aufgabenfeld|🛒/.test(m) ? "pop" : "";
-    const meldung = `<div class="meldung">${esc(m)}</div>${klang ? `<i hidden data-key="bt-${s.runde}-${s.dran}-${m.length}-${klang}" data-ton="${klang}" data-ton-nach="${s.wurf && klang !== "stern" ? 400 + Math.min(12, s.wurf) * 280 : 0}"></i>` : ""}`;
+    const meldung = `<div class="meldung">${esc(m)}</div>${klang ? `<i hidden data-key="bt-${s.runde}-${s.dran}-${m.length}-${klang}" data-ton="${klang}" data-ton-nach="${s.wurf && klang !== "stern" ? 1000 + Math.min(12, s.wurf) * 290 : 0}"></i>` : ""}`;   // 3D: erst Wuerfelblock anspringen (~1 s), dann ~0,3 s je Feld
     const schluss = s.schluss && !s.ende ? `<div class="schlussband">🔥 Schlussrunden: ${esc(SCHLUSS[s.schluss].text)}</div>` : "";
     if (s.ende) {
       const rang = rangfolge(s);
       return `${tafel}<div class="urteil">🏆 ${name(namen, rang[0])} gewinnt das Partybrett!</div>
+        <div id="brett3d" class="brett3d sieger"></div>
         <ol class="rangliste">${rang.map((j) => `<li>${name(namen, j)}: ⭐${s.sterne[j]} 🪙${s.muenzen[j]}</li>`).join("")}</ol>
         ${bonusListe(s, namen)}
         <p class="mitte">${s.ohne ? `🎯 Letzter Platz: ${esc(T.AUFGABEN[(s.pos.length * 7 + s.muenzen.reduce((x, y) => x + y, 0)) % T.AUFGABEN.length])}` : "Letzter Platz trinkt 3 Schlucke 🍺"}</p>${knopf("Neues Spiel", { typ: "neustart" }, "gross")}`;
@@ -225,8 +226,13 @@ export const brett = {
     return null;
   },
   nach(s, ich, senden) {
-    if (s.phase === "mini") return miniNach(s, ich, senden);
     const c = document.getElementById("brett3d");
+    // Siegerehrung in 3D: am Ende das Treppchen nach der Rangliste, nach einem Minispiel die Gewinner oben
+    if (c && c.classList.contains("sieger")) {
+      const sg = s.ende ? endSieger(s) : s.phase === "mini" && s.mini && s.mini.fertig ? miniSieger(s, s.mini) : null;
+      if (!sg || !brett3dZeigen(c, s, muster(s), { lage: LAGE, next: NEXT, waren: WAREN }, sg)) c.remove();
+    }
+    if (s.phase === "mini") return miniNach(s, ich, senden);
     if (c && !s.ende && s.phase !== "bonus") {
       const zweiD = c.querySelector(".brett2d");
       if (brett3dZeigen(c, s, muster(s), { lage: LAGE, next: NEXT, waren: WAREN }) && zweiD) zweiD.remove();
@@ -251,7 +257,8 @@ function geben(s, j, d) {
 }
 function rangfolge(s) { return s.pos.map((_, j) => j).sort((a, b) => s.sterne[b] - s.sterne[a] || s.muenzen[b] - s.muenzen[a]); }
 const sternPreis = (s, i) => (s.rabatt[i] || s.schluss === "rabatt" ? 5 : STERNPREIS);
-function effekt(s, art, j, wert = 0) { s.effekt = { nr: ((s.effekt && s.effekt.nr) || 0) + 1, art, j, wert }; }
+// fuer die 3D-Ansicht (brett3d.js): was gerade passiert ist; mehr = { von } beim Muenzmagnet, { ziel } beim Tausch
+function effekt(s, art, j, wert = 0, mehr = null) { s.effekt = { nr: ((s.effekt && s.effekt.nr) || 0) + 1, art, j, wert, ...(mehr || {}) }; }
 // Felder bis zum Stern (Breitensuche ueber die Wege)
 function sternAbstand(s, von) {
   const weit = new Map([[von, 0]]), q = [von];
@@ -309,13 +316,14 @@ function wareEinsetzen(s, i, id, namen) {
 function zielWirkung(s, i, j, namen) {
   const id = s.zielWare; s.zielWare = null; s.phase = "wuerfeln";
   if (schildFaengt(s, j)) { s.meldung = `🛡️ ${namen[j]} hält den Schild hoch – nichts passiert.`; return; }
-  if (id === "tausch") { [s.pos[i], s.pos[j]] = [s.pos[j], s.pos[i]]; s.spur = { j: i, nr: ++s.spurNr, felder: [s.pos[i]], sprung: true }; s.meldung = `🔄 ${namen[i]} und ${namen[j]} tauschen die Plätze!`; effekt(s, "tausch", i); }
-  else if (id === "dieb") { const d = -geben(s, j, -5); geben(s, i, d); s.meldung = `🧲 ${namen[i]} zieht ${d} Münzen von ${namen[j]} ab!`; effekt(s, "muenzen", i, d); }
+  if (id === "tausch") { [s.pos[i], s.pos[j]] = [s.pos[j], s.pos[i]]; s.spur = { j: i, nr: ++s.spurNr, felder: [s.pos[i]], sprung: true }; s.meldung = `🔄 ${namen[i]} und ${namen[j]} tauschen die Plätze!`; effekt(s, "tausch", i, 0, { ziel: j }); }
+  else if (id === "dieb") { const d = -geben(s, j, -5); geben(s, i, d); s.meldung = `🧲 ${namen[i]} zieht ${d} Münzen von ${namen[j]} ab!`; effekt(s, "muenzen", i, d, { von: j }); }
 }
 function schildFaengt(s, j) {
   const k = s.waren[j].indexOf("schild");
   if (k < 0) return false;
   s.waren[j].splice(k, 1);
+  effekt(s, "schild", j);
   return true;
 }
 
@@ -551,13 +559,15 @@ function miniRender(s, ich, namen) {
     const verl = m.verlierer || [];
     return `<div class="frage">${info.emo} ${esc(info.titel)} – Ergebnis${m.art === "schaetzen" ? `<br><small>${esc(T.SCHAETZ[m.frage][0])} → <b>${T.SCHAETZ[m.frage][1]}</b></small>` : ""}</div>${modus}
       ${m.kopf ? `<div class="mini-kopf">🏅 ${esc(m.kopf)}</div>` : ""}
+      <div id="brett3d" class="brett3d sieger"></div>
       <ol class="rangliste">${m.rang.map((j) => `<li>${name(namen, j)}: ${fmt(j)} → +${(m.preise || {})[j] || 0} 🪙</li>`).join("")}</ol>
       ${verl.length ? `<div class="urteil">${verl.map((j) => name(namen, j)).join(" & ")} ${verl.length > 1 ? "trinken" : "trinkt"} ${schlucke(m.modus === "alle" || m.modus === "duell" ? 2 : 1)}</div>` : ""}
       ${knopf("Weiter zur nächsten Runde", { typ: "miniweiter" }, "gross")}`;
   }
   const zaehler = `${teil.filter((j) => m.werte[j] !== undefined).length}/${teil.length} fertig`;
   const abbruch = `<div class="mini-abbruch" hidden data-mini-abbruch="${m.runde}-${m.art}"><p class="leise klein mitte">Jemand hängt fest? Nach einer Weile geht es auch ohne ihn weiter.</p>${knopf("⏭️ Nicht mehr warten", { typ: "miniabbruch" }, "zweit")}</div>`;
-  const kopf = `<div class="frage">Minispiel: ${info.emo} ${esc(info.titel)}<small class="mini-typ">${esc(info.typ)}</small></div>${modus}`;
+  // Titelkarte (brett3d-Umbau 31.10.2026 abends): grosses Symbol, Name, Spielart - fliegt beim ersten Anblick herein
+  const kopf = `<div class="frage mini-titelkarte"><span class="mtk-emo" aria-hidden="true">${info.emo}</span><span class="mtk-text"><small class="mtk-vor">Minispiel</small><b>${esc(info.titel)}</b><small class="mini-typ">${esc(info.typ)}</small></span></div>${modus}`;
   let inhalt = "";
   // ich < 0: dieses Geraet spielt nur mit Controllern mit (app.js zeigt deren Felder darunter, controller.js)
   if (ich < 0) inhalt = `<p class="mitte leise">${esc(info.regel)}</p>${m.art === "schaetzen" ? `<div class="frage">${esc(T.SCHAETZ[m.frage][0])}</div>` : ""}<p class="mitte">${zaehler}</p>`;
@@ -590,9 +600,31 @@ function abbruchZeigen(m) {
 
 let miniLokal = { schluessel: null };
 const FW = [["Rot", "#e11d48"], ["Blau", "#2563eb"], ["Grün", "#16a34a"], ["Gelb", "#ca8a04"]];
+// Titelkarte des Minispiels: beim ersten Anblick einmal hereinfliegen lassen (spaetere Neuzeichnungen stehen still)
+const titelGesehen = new Set();
+function miniTitelkarte(m) {
+  const el = document.querySelector(".mini-titelkarte");
+  const k = `${m.runde}-${m.art}-${m.t0 || 0}`;
+  if (!el || titelGesehen.has(k)) return;
+  titelGesehen.add(k);
+  el.classList.add("ankunft");
+}
+// nach dem Minispiel: wer oben aufs Treppchen kommt
+function miniSieger(s, m) {
+  const teil = teilVon(s, m), sieger = m.sieger || [], verl = m.verlierer || [];
+  let plaetze;
+  if (m.modus === "team" || m.modus === "eins" || sieger.length > 1) plaetze = teil.map((j) => [j, sieger.includes(j) ? 1 : 0]);
+  else plaetze = (m.rang || teil).map((j, r) => [j, r < 3 ? r + 1 : 0]);
+  return { plaetze, jubel: sieger, trauer: verl };
+}
+function endSieger(s) {
+  const rang = rangfolge(s);
+  return { plaetze: rang.map((j, r) => [j, r < 3 ? r + 1 : 0]), jubel: [rang[0]], trauer: rang.length > 1 ? [rang[rang.length - 1]] : [] };
+}
 function miniNach(s, ich, senden) {
   const m = s.mini;
   if (!m || m.fertig) return;
+  miniTitelkarte(m);
   abbruchZeigen(m);
   if (ich < 0 || m.werte[ich] !== undefined || !teilVon(s, m).includes(ich)) return;
   if (R.istNeu(m.art)) return R.anmelden(m, `h${ich}`, (wert, mk) => senden({ typ: "mini", wert, mk }));
