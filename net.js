@@ -29,6 +29,15 @@ export const KONFIG = {
 // Anonyme Anmeldung: erst einschalten, wenn sie in der Firebase-Konsole aktiviert ist UND die Regeln aus
 // firebase-regeln-vorschlag.json gesetzt sind (beides zusammen, sonst sperrt sich die App aus).
 export const ANMELDUNG = false;
+// Nur fuer die Tests (Fund 130): der Test-Webserver (testserver.py) setzt window.__partyEmulator = {host, port}, dann geht
+// die App an den lokalen Datenbank-Emulator. Greift ausschliesslich unter localhost/127.0.0.1 - die veroeffentlichte Seite
+// nutzt immer die echte Datenbank, auch wenn jemand den Schalter von Hand setzt. Das SDK kommt dann ebenfalls vom Testserver,
+// damit die Tests nicht am Netz haengen.
+const EMULATOR_SDK = "/__sdk/";
+export function emulatorZiel(hostname, schalter) {
+  if (!["localhost", "127.0.0.1"].includes(hostname) || !schalter) return null;
+  return ["localhost", "127.0.0.1"].includes(schalter.host) && Number.isInteger(schalter.port) ? { host: schalter.host, port: schalter.port } : null;
+}
 
 const ZEICHEN = "abcdefghjkmnpqrstuvwxyz23456789";
 export function zufallsText(n) {
@@ -43,7 +52,9 @@ let sdkLaden = null;
 function sdk() {
   if (!sdkLaden) {
     sdkLaden = (async () => {
-      const [a, d] = await Promise.all([import(SDK + "firebase-app.js"), import(SDK + "firebase-database.js")]);
+      const emu = emulatorZiel(location.hostname, window.__partyEmulator);
+      const quelle = emu ? EMULATOR_SDK : SDK;
+      const [a, d] = await Promise.all([import(quelle + "firebase-app.js"), import(quelle + "firebase-database.js")]);
       const app = a.initializeApp(KONFIG);
       let uid = null;
       if (ANMELDUNG) {
@@ -53,7 +64,9 @@ function sdk() {
           uid = auth.currentUser ? auth.currentUser.uid : (await au.signInAnonymously(auth)).user.uid;
         } catch (e) { console.warn("Anonyme Anmeldung fehlgeschlagen:", e && e.code); }
       }
-      return { d, db: d.getDatabase(app), uid };
+      const db = d.getDatabase(app);
+      if (emu) d.connectDatabaseEmulator(db, emu.host, emu.port);
+      return { d, db, uid };
     })().catch((e) => { sdkLaden = null; throw e; });
   }
   return sdkLaden;

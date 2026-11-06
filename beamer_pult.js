@@ -12,6 +12,7 @@ import * as P from "./partien.js";
 import * as G from "./gluecksrad.js";
 import * as BS from "./beamer_spiele.js";
 import * as TON from "./ton.js";
+import * as KOPPLUNG from "./kopplung.js";
 import { esc } from "./hilfe.js";
 
 export const istPult = (id) => /^beamer-[a-z0-9]{6,20}$/.test(String(id || ""));
@@ -51,7 +52,7 @@ export function start(c) {
     else if (e.key === "Backspace") { taste("weg"); e.preventDefault(); }
     else if (e.key === "Enter") { taste("ok"); e.preventDefault(); }
   });
-  window.__pult = { offen: () => offen, reiter: () => reiter, admin: () => istAdmin(), meldung: () => meldung };
+  window.__pult = { offen: () => offen, reiter: () => reiter, admin: () => istAdmin(), meldung: () => meldung, zahl: () => kopplungsZahl() };
 }
 
 const istAdmin = () => { const r = ctx && ctx.raum(); return !!(r && K.istAdmin(r, ctx.id)); };
@@ -65,6 +66,13 @@ export function neu() {
   if (!ctx) return;
   if (K.meinSchluessel() && !istAdmin() && Date.now() - zuletztBeweis > 8000) beweisSenden();
   if (knopfEl) knopfEl.classList.toggle("frei", istAdmin());
+  if (istAdmin()) {
+    // freigeschaltet: Kopplungszahl wird nicht mehr gebraucht; kam der Beamer gerade per Kopplung, Pult einmal aufklappen
+    if (kopplung && kopplung.ende) { kopplung.ende(); kopplung = null; }
+    let frisch = false;
+    try { frisch = sessionStorage.getItem("pa_pult_nach_kopplung") === "1"; sessionStorage.removeItem("pa_pult_nach_kopplung"); } catch (e) { frisch = false; }
+    if (frisch && !offen) { meldung = ""; auf(); }
+  }
   if (offen) zeichnen();
 }
 
@@ -108,6 +116,7 @@ function klick(e) {
   const t = e.target.closest("button, [data-pa]");
   if (!t || !el.contains(t)) return;
   if (t.dataset.pz !== undefined) return taste(t.dataset.pz);
+  if (t.hasAttribute("data-p-ersatz")) { ersatz = true; return zeichnen(); }
   if (t.dataset.pr) { reiter = t.dataset.pr; endeFrage = null; return zeichnen(); }
   if (t.dataset.pk !== undefined) { kat = Number(t.dataset.pk) || 0; return zeichnen(); }
   if (t.hasAttribute("data-p-zu")) return zu();
@@ -140,15 +149,37 @@ function zeichnen() {
   el.innerHTML = `${kopf}${tabs}<div class="bp-inhalt" data-reiter="${reiter}">${html}</div>`;
 }
 
+// Gesperrt (Runde 3, Plan 3.16): vorn steht die Kopplungszahl - die Spielleitung koppelt vom Handy, am Beamer wird nichts
+// getippt. Das Ziffernfeld gibt es nur noch als Ersatzweg hinter einem Knopf.
+let kopplung = null, ersatz = false;
+function kopplungStarten() {
+  if (kopplung) return;
+  kopplung = { zahl: null };
+  KOPPLUNG.anbieten(ctx.id, (code) => {
+    // gekoppelt: in diesem Raum kommen die Rechte vom Gastgeber; anderer Raum -> dorthin wechseln (gleiche Kennung)
+    if (code === ctx.code) { meldung = "✓ Gekoppelt – die Rechte kommen gleich …"; kopplung = null; return zeichnen(); }
+    try { sessionStorage.setItem(`pa_beamer_${code}`, ctx.id); sessionStorage.setItem("pa_pult_nach_kopplung", "1"); } catch (e) { /* privater Modus */ }
+    location.hash = `#r=${code}&beamer`;
+    location.reload();
+  }).then((k) => { kopplung = k; zeichnen(); }).catch((e) => { console.warn(e); kopplung = { fehler: true }; zeichnen(); });
+}
+export const kopplungsZahl = () => (kopplung && kopplung.zahl) || null;
 function sperre() {
+  kopplungStarten();
   const k = K.meinSchluessel();
   const punkte = eingabe ? "●".repeat(eingabe.length) : "<span class=\"bp-leise\">Code</span>";
+  const zahl = kopplung && kopplung.zahl;
   return `<div class="bp-sperre">
-      <p>Nur für die Spielleitung: Freischaltcode eintippen. Das Beamer-Gerät wird dadurch <b>kein</b> Spieler – dein Handy spielt normal mit.</p>
+      <div class="bp-koppeln"><p>Zum Steuern: am Handy der Spielleitung <b>🛠️ Steuerseite → 🔗 Beamer koppeln</b> und diese Zahl eintippen</p>
+        <div class="bp-zahl" data-p-kopplung>${zahl ? esc(zahl) : kopplung && kopplung.fehler ? "–" : "····"}</div>
+        <p class="bp-leise">Das Beamer-Gerät wird dadurch <b>kein</b> Spieler – dein Handy spielt normal mit.</p></div>
       ${k ? `<p class="bp-ok">✓ Code ist eingegeben – das Gastgeber-Gerät schaltet das Pult frei, sobald es selbst freigeschaltet ist.</p>` : ""}
+      ${ersatz || eingabe ? `<p class="bp-leise">Ersatzweg: Freischaltcode eintippen (auch mit der Tastatur)</p>
       <div class="bp-anzeige" data-p-anzeige>${punkte}</div>
       <div class="bp-pad">${["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((z) => `<button data-pz="${z}">${z}</button>`).join("")}
         <button data-pz="weg" aria-label="Löschen">⌫</button><button data-pz="0">0</button><button data-pz="ok" class="gruen" ${pruefe ? "disabled" : ""}>✓</button></div>
+      <div class="bp-abc">${[..."abcdefghijklmnopqrstuvwxyz-"].map((z) => `<button data-pz="${z}">${z}</button>`).join("")}</div>`
+        : `<button class="zweit bp-ersatz" data-p-ersatz>⌨️ Ersatzweg: Code eintippen</button>`}
       ${meldung ? `<p class="bp-meldung" role="status">${esc(meldung)}</p>` : ""}
     </div>`;
 }

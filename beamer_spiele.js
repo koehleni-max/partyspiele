@@ -14,14 +14,21 @@ import * as T from "./texte.js";
 import { werbinich, figurVon, QUIZ_ALLE, QUIZ_ZEIT } from "./elternspiele.js";
 import * as WW from "./werwolf.js";
 import { esc, schlucke, ohneAlkohol } from "./hilfe.js";
+import * as DU from "./duell.js";
+import * as BR from "./brett.js";
+import { brett3dZeigen } from "./brett3d.js";
 
 // Zuschauen (Nico 31.10.2026): die fertigen Zweier-Spiele laufen auch an der Wand mit - auch gegen den Computer.
 // Geheimes bleibt geheim: bei Schiffe versenken nur die Schuesse (Treffer/Wasser), nie wo die Schiffe liegen.
 export const FREMD_ZUSCHAUEN = ["f-ttt", "f-vier", "f-dame", "f-schiffe", "f-wuerfel"];
-export const BEAMER_SPIELE = ["werwolf", "werbinich", "malen", "reaktion", "pferde", "schaetzen", "quiz", ...FREMD_ZUSCHAUEN];
+// Duelle (Grossumbau Runde 1): das Glücksrad-Duell und das Duell am Partybrett. Seit Runde 3 (Plan 3.1 G) steht das ganze
+// Partybrett an der Wand: grosses 3D-Bild (Stufe "beamer"), Spielerliste, Ereignisse, Minispiel-Ergebnisse; die Handys
+// zeigen dann nur Wuerfel, Gegenstaende, Kamera-Flaeche und eine kleine Karte (brett.js). Alles am Brett ist oeffentlich.
+export const DUELL_ZUSCHAUEN = ["gduell", "brett"];
+export const BEAMER_SPIELE = ["werwolf", "werbinich", "malen", "reaktion", "pferde", "schaetzen", "quiz", ...FREMD_ZUSCHAUEN, ...DUELL_ZUSCHAUEN];
 // so lange bleibt ein fertiges Ergebnis (Spielende bzw. Rundenergebnis ohne neue Runde) an der Wand
 export const ENDE_ZEIT = { werwolf: 30000, werbinich: 30000, pferde: 30000, reaktion: 120000, schaetzen: 120000, malen: 120000, quiz: 120000,
-  ...Object.fromEntries(FREMD_ZUSCHAUEN.map((id) => [id, 30000])) };
+  ...Object.fromEntries(FREMD_ZUSCHAUEN.map((id) => [id, 30000])), gduell: 20000, brett: 20000 };
 export const NACHLAUF = 10000;   // beendetes Spiel (Beenden-Knopf): Ergebnis noch so lange, dann Diashow
 export const REAKTION_PUFFER = 600;   // Beamer wird etwas NACH den Handys gruen - wer auf die Wand schaut, ist nie "zu frueh"
 const MED = { 1: "🥇", 2: "🥈", 3: "🥉" };
@@ -117,6 +124,10 @@ AUSZUG["f-wuerfel"] = (s) => {
     punkte: pl.map((x) => wuerfelSumme(x.scoreSheet)), felder: pl.map((x) => Object.values(x.scoreSheet || {}).filter((v) => v !== null).length), alle: pl.length ? Object.keys(pl[0].scoreSheet || {}).length : 13 };
 };
 
+AUSZUG.gduell = (s, namen, p) => DU.auszug(s.duell, p && p.pid);
+AUSZUG.brett = (s, namen, p) => (s.phase === "dkampf" && s.duell ? DU.auszug(s.duell, p && p.pid)
+  : { art: "brett", pid: (p && p.pid) || "", s: JSON.parse(JSON.stringify(s)) });
+
 export function auszug(raum) {
   const partien = {};
   Object.values((raum && raum.partien) || {}).forEach((p) => {
@@ -146,6 +157,8 @@ export function fertig(id, d) {
   if (id === "malen") return d.geloest !== null;
   if (id === "quiz") return d.phase === "aufloesung";
   if (FREMD_ZUSCHAUEN.includes(id)) return !!d.vorbei;
+  if (id === "brett" && d.art === "brett") return !!(d.s && d.s.ende);
+  if (DUELL_ZUSCHAUEN.includes(id)) return DU.fertigAmBeamer(d);
   return true;
 }
 
@@ -175,7 +188,7 @@ export function vergleichen(id, alt, neu) {
     if (neu.phase === "nacht" && (alt.phase !== "nacht" || alt.zug !== neu.zug)) t("gong");
     if (neu.phase === "nacht" && neu.wach && neu.wach !== alt.wach) t(neu.wach === "wolf" ? "heulen" : neu.wach === "amor" ? "herz" : "magie");
     if (neu.phase === "morgen" && alt.phase !== "morgen") t(neu.tode.length ? "tod" : "morgen");
-    if (neu.phase === "hinrichtung" && alt.phase !== "hinrichtung") t(neu.unentschieden ? "falsch" : "tod");
+    if (neu.phase === "hinrichtung" && alt.phase !== "hinrichtung") t(neu.unentschieden ? "falsch" : "hammer");   // Richterhammer (ton.js)
     if (neu.phase === alt.phase && (neu.tode || []).length > (alt.tode || []).length && alt.schuss) t("schuss");
     if (neu.phase === "tag" && neu.abgestimmt > (alt.abgestimmt || 0)) t("klick");
     if (neu.gewinner && !alt.gewinner) { t("sieg"); r.effekt = 160; }
@@ -205,6 +218,17 @@ export function vergleichen(id, alt, neu) {
     if (neu.nr !== alt.nr || neu.rest !== alt.rest) t("dran");
     else if (neu.abgegeben.length > alt.abgegeben.length) t("klick");
     if (neu.phase === "aufloesung" && alt.phase !== "aufloesung") { t("tada"); r.effekt = 100; }
+  } else if (id === "brett" && neu.art === "brett") {
+    // Wuerfel, Schritte, Muenzen und Sterne klingen im 3D-Bild selbst (brett3d.js) - hier nur die grossen Wechsel
+    const a = alt.art === "brett" ? alt.s : {}, n = neu.s;
+    if (n.phase === "mini" && a.phase !== "mini") t("los");
+    if (n.mini && n.mini.fertig && !(a.mini && a.mini.fertig)) { t("fanfare"); r.effekt = 90; }
+    if (n.phase === "bonus" && a.phase !== "bonus") t("stern");
+    if (n.ende && !a.ende) { t("sieg"); r.effekt = 180; }
+    if (n.phase === "wuerfeln" && (a.dran !== n.dran || a.phase === "mini")) t("dran");
+  } else if (DUELL_ZUSCHAUEN.includes(id)) {
+    if (neu.phase === "spiel" && (alt.phase !== "spiel" || alt.runde !== neu.runde)) t(neu.stechen ? "spannung" : "los");
+    if (neu.phase === "ende" && alt.phase !== "ende") { t("sieg"); r.effekt = 140; }
   } else if (FREMD_ZUSCHAUEN.includes(id)) {
     if (neu.nr > alt.nr && !neu.vorbei) t(id === "f-schiffe" && treffer(neu) > treffer(alt) ? "aua" : id === "f-wuerfel" ? "wuerfel" : "klick");
     if (neu.vorbei && !alt.vorbei) { t(neu.sieger.length ? "sieg" : "falsch"); r.effekt = neu.sieger.length ? 140 : 0; }
@@ -216,6 +240,7 @@ export function musik(id, d) {
   if (id === "werwolf") return d.phase === "nacht" ? "nacht" : ["morgen", "tag", "hinrichtung"].includes(d.phase) && !d.gewinner ? "dorf" : null;
   if (id === "pferde") return d.phase === "rennen" ? "spannung" : null;
   if (id === "quiz") return d.phase === "frage" ? "spannung" : null;
+  if (id === "brett" && d.art === "brett") return d.s && !d.s.ende && d.s.phase !== "mini" ? "brett" : null;
   return null;
 }
 
@@ -429,7 +454,69 @@ const fremdHTML = {
   },
 };
 
-const HTML = { quiz: htmlQuiz, werwolf: htmlWerwolf, werbinich: htmlWerbinich, malen: htmlMalen, reaktion: htmlReaktion, pferde: htmlPferde, schaetzen: htmlSchaetzen, ...fremdHTML };
+const htmlDuell = (titel) => (d, nm, sp) => `${kopf(sp, titel)}${DU.beamerHTML(d, nm)}`;
+
+// ---------------------------------------------------------------- Partybrett an der Wand (Runde 3)
+// Links das grosse 3D-Bild (brett3d.js, Stufe "beamer"; die Ereigniskarte erscheint darin), rechts die Spielerliste,
+// darunter die Meldung. Minispiel: Titel, Spielart, Fortschritt bzw. Siegerpodest; Ende: Treppchen und Rangliste.
+const brettNamen = {};
+function brettTafel(s, nm) {
+  return `<div class="bsb3-tafel ${nm.length > 14 ? "sehr-eng" : nm.length > 5 ? "eng" : ""}">${nm.map((n, j) => `<div class="bsb3-sp ${j === s.dran && s.phase !== "mini" && !s.ende ? "dran" : ""}">
+      <span class="farbe f${j % 20}"></span><b>${esc(n)}</b>
+      <span class="bsb3-werte"><span>⭐${s.sterne[j]}</span><span>🪙${s.muenzen[j]}</span><span class="${(s.lp || [])[j] <= 10 ? "niedrig" : ""}">❤️${(s.lp || [])[j] ?? ""}</span></span>
+      ${(s.waren || [])[j] && s.waren[j].length ? `<span class="bsb3-beutel">${s.waren[j].map((w) => (BR.WAREN.find((x) => x.id === w) || {}).emo || "").join("")}</span>` : ""}</div>`).join("")}</div>`;
+}
+function htmlBrett(d, nm, sp) {
+  if (d.art !== "brett") return htmlDuell("Duell am Partybrett")(d, nm, sp);
+  const s = d.s, bb = BR.brettVon(s);
+  brettNamen[d.pid] = nm;
+  const runde = `${bb.emo} ${esc(bb.name)} · Runde ${Math.min(s.runde, s.runden)}/${s.runden}`;
+  if (s.ende) {
+    const rang = s.pos.map((_, j) => j).sort((a, b) => s.sterne[b] - s.sterne[a] || s.muenzen[b] - s.muenzen[a]);
+    return `<div class="bsb3 ende">${kopf(sp, runde)}<div class="bs-sieg">🏆 ${esc(nm[rang[0]] || "")} gewinnt das Partybrett!</div>
+      <div class="bsb3-reihe"><div id="brett3d" class="brett3d bs-brett3d sieger"></div>
+      <ol class="bm-rang bsb3-rang">${rang.map((j, k) => `<li class="${k === 0 ? "p1" : ""}"><span class="bm-platz">${MED[k + 1] || k + 1 + "."}</span><span class="bm-name">${esc(nm[j] || "")}</span><b class="bm-wert">⭐${s.sterne[j]} 🪙${s.muenzen[j]}</b></li>`).join("")}</ol></div></div>`;
+  }
+  if (s.phase === "bonus") {
+    return `<div class="bsb3">${kopf(sp, runde)}<div class="bsw-mitte"><div class="bs-riesig">🌟</div><p class="bm-gross">Bonussterne!</p>
+      ${(s.bonus || []).map((b) => `<p class="bm-zeile">${b.emo} <b>${esc(b.titel)}</b>: ${b.wer.length ? `${b.wer.map((j) => esc(nm[j] || "")).join(" & ")} · +1 ⭐` : "keiner"}</p>`).join("")}</div></div>`;
+  }
+  if (s.phase === "mini" && s.mini) {
+    const m = s.mini, info = BR.miniInfo(m.art) || { emo: "🎮", titel: "Minispiel", typ: "", regel: "" };
+    const teil = Array.isArray(m.teil) ? m.teil : s.pos.map((_, j) => j);
+    if (m.fertig) {
+      return `<div class="bsb3 mini">${kopf(sp, runde)}<div class="mini-titelkarte"><span class="mtk-emo">${info.emo}</span><span class="mtk-text"><small class="mtk-vor">Minispiel</small><b>${esc(info.titel)}</b></span></div>
+        ${m.kopf ? `<p class="bm-gross mitte">🏅 ${esc(m.kopf)}</p>` : ""}
+        <div class="bsb3-reihe"><div id="brett3d" class="brett3d bs-brett3d sieger"></div>
+        <ol class="bm-rang bsb3-rang">${(m.rang || []).map((j, k) => `<li class="${(m.sieger || []).includes(j) ? "p1" : ""}"><span class="bm-platz">${MED[k + 1] || k + 1 + "."}</span><span class="bm-name">${esc(nm[j] || "")}</span><b class="bm-wert">+${(m.preise || {})[j] || 0} 🪙</b></li>`).join("")}</ol></div></div>`;
+    }
+    const fertig = teil.filter((j) => m.werte[j] !== undefined).length;
+    return `<div class="bsb3 mini">${kopf(sp, runde)}<div class="mini-titelkarte bsb3-titel"><span class="mtk-emo">${info.emo}</span><span class="mtk-text"><small class="mtk-vor">Minispiel</small><b>${esc(info.titel)}</b><small class="mini-typ">${esc(info.typ)}</small></span></div>
+      <p class="bm-zeile mitte">${esc(info.regel)}</p><p class="bm-gross mitte">📲 Am Handy spielen – ${fertig} von ${teil.length} fertig</p>
+      <div class="bm-pillen mitte">${teil.map((j) => `<span class="bm-pille ${m.werte[j] !== undefined ? "da" : "leise"}">${m.werte[j] !== undefined ? "✅" : "⏳"} ${esc(nm[j] || "")}</span>`).join("")}</div></div>`;
+  }
+  const wer = esc(nm[s.dran] || "");
+  const was = { wuerfeln: `🎲 ${wer} würfelt`, weg: `🔀 ${wer} wählt einen Weg`, laden: `🛒 ${wer} ist im Laden`, stern: `⭐ ${wer} überlegt, ob er den Stern kauft`,
+    duell: `⚔️ ${wer} wählt einen Gegner`, ziel: `🎯 ${wer} setzt einen Gegenstand ein`, aufgabe: `🎯 ${wer} erledigt eine Aufgabe`, weiter: `▶️ ${wer} ist am Zug` }[s.phase] || "";
+  return `<div class="bsb3 welt-${bb.welt}">${kopf(sp, runde)}
+    <div class="bsb3-reihe"><div id="brett3d" class="brett3d bs-brett3d welt-${bb.welt}"></div>${brettTafel(s, nm)}</div>
+    <p class="bsb3-meldung"><b>${was}</b>${s.meldung ? ` · ${esc(s.meldung)}` : ""}</p></div>`;
+}
+// nach dem Einsetzen: 3D-Bild in den Kasten (gleiche Szene wie am Handy, nur gross; Maus fuehrt die Kamera hier)
+function brettNach(el, d) {
+  const c = el.querySelector("#brett3d");
+  if (!c || !d || d.art !== "brett") return;
+  const s = d.s, bb = BR.brettVon(s);
+  const sieger = s.ende ? BR.brettEndSieger(s) : s.phase === "mini" && s.mini && s.mini.fertig ? BR.brettMiniSieger(s, s.mini) : null;
+  if (c.classList.contains("sieger") && !sieger) return;
+  const kam = { ...BR.brettKamera(s, -1, null, d.pid), darf: !sieger, sendet: false };
+  try {
+    brett3dZeigen(c, s, BR.brettMuster(s), { lage: bb.lage, next: bb.next, waren: BR.WAREN, nh: bb.nh, welt: bb.welt, beamer: true, namen: brettNamen[d.pid] || [], kamera: kam }, sieger);
+  } catch (e) { console.error(e); }
+}
+
+const HTML = { quiz: htmlQuiz, werwolf: htmlWerwolf, werbinich: htmlWerbinich, malen: htmlMalen, reaktion: htmlReaktion, pferde: htmlPferde, schaetzen: htmlSchaetzen, ...fremdHTML,
+  gduell: htmlDuell("Duell vom Glücksrad"), brett: htmlBrett };
 export const HTML_DA = (id) => Object.prototype.hasOwnProperty.call(HTML, id);
 
 // raum (Beamer-Stand), p (Kurzfassung der Partie), d (Auszug), merk (was der Beamer sich je Partie merkt), vorbei = beendet
@@ -445,6 +532,7 @@ export function html(raum, p, d, merk, vorbei = false) {
 
 // Nach dem Einsetzen: Leinwand zeichnen, Reaktions-Flaeche schalten. lokal = {gruen: {key: Zeitpunkt}} des Beamers
 export function nach(el, p, d, lokal, beiGruen) {
+  if (p && p.spiel === "brett") brettNach(el, d);
   const c = el.querySelector("[data-bs-leinwand]");
   if (c && d.striche) {
     const g = c.getContext("2d");

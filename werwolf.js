@@ -2,7 +2,9 @@
 // Nachts wird jeder Bildschirm dunkel; jeder bekommt eine Aufgabe (auch Dorfbewohner tippen Sterne), damit niemand
 // am Handy des Nachbarn erkennt, wer gerade wirklich handelt. Erzaehler-Stimme optional auf dem Gastgeber-Handy.
 import { esc, knopf, zufall, mischen, name } from "./hilfe.js";
-import { still } from "./ton.js";
+import { still, nachtLeise } from "./ton.js";
+
+const nachtMerk = {};   // dieses Geraet: fuer welchen Nachtschritt schon vibriert wurde
 
 const ROLLEN = {
   wolf: { name: "Werwolf", emoji: "🐺", team: "wolf", text: "Nachts sucht ihr Wölfe gemeinsam ein Opfer aus. Tagsüber tut ihr unschuldig." },
@@ -231,7 +233,7 @@ export const werwolf = {
     }
 
     const himmel = (art) => `<i hidden data-key="wwton-${art}${s.zug}-${s.tode.length}-${s.gewinner || ""}" data-ton="${
-      art === "morgen" ? (s.tode.length ? "tod" : "morgen") : art === "hinrichtung" ? (s.unentschieden ? "falsch" : "tod") : "tack"}"></i>${
+      art === "morgen" ? (s.tode.length ? "tod" : "morgen") : art === "hinrichtung" ? (s.unentschieden ? "falsch" : "hammer") : "tack"}"></i>${
       s.jaegerOffen === null && s.tode.some((d) => /erschossen|Jäger/i.test(d.grund)) ? `<i hidden data-key="wwschuss${s.zug}-${s.tode.length}" data-ton="schuss"></i>` : ""}<div class="ww-himmel tag ${s.uebergang === "sonnenaufgang" && art === "morgen" ? "anim-auf" : ""}" data-key="${art}${s.zug}"><div class="sonne"></div><div class="ww-dorf"></div>
       <div class="ww-titel">${art === "morgen" ? `☀️ Tag ${s.nacht}` : art === "tag" ? "⚖️ Abstimmung" : "🪢 Urteil"}</div></div>`;
     const todesliste = s.tode.length ? s.tode.map((d) => `<div class="todeskarte">✝ <b>${esc(namen[d.j])}</b> ${d.grund}.<br><small>Rolle: ${ROLLEN[s.rolle[d.j]].emoji} ${ROLLEN[s.rolle[d.j]].name}</small></div>`).join("") : "";
@@ -290,10 +292,18 @@ export const werwolf = {
       const andere = lebende(s).filter((j) => j !== i);
       const bekannteWoelfe = Object.entries(wissen.gesehen || {}).filter(([j, r]) => r === "wolf" && lebt(s, Number(j))).map(([j]) => Number(j));
       if (bekannteWoelfe.length && !istWolf) return { typ: "stimme", ziel: bekannteWoelfe[0] };
-      // sonst der Mehrheit folgen, wenn es eine gibt - Woelfe schuetzen ihresgleichen
-      const z = {}; Object.values(s.stimmen).forEach((v) => (z[v] = (z[v] || 0) + 1));
-      const fuehrend = Object.keys(z).map(Number).filter((j) => j !== i && !(istWolf && s.rolle[j] === "wolf")).sort((a, b) => z[b] - z[a])[0];
-      const ziel = fuehrend !== undefined && Math.random() < 0.6 ? fuehrend : zufaellig(andere.filter((j) => !(istWolf && s.rolle[j] === "wolf")));
+      // Sonst ein gemeinsamer Tagesverdacht, einmal je Tag gleichverteilt unter ALLEN Lebenden gezogen (Woelfe schuetzen
+      // ihresgleichen). Frueher folgten die Bots der fuehrenden Stimme (Nico 01.11.2026: "immer als Erster raus"),
+      // gemessen in test_werwolf_fair.py, zwei Ursachen:
+      //  1. Gleichstand an der Spitze -> kleinste Platznummer (Zahlen-Schluessel stehen in JS aufsteigend, sort ist stabil);
+      //     Platz 0 ist der Gastgeber, also meist der Mensch.
+      //  2. Bots stimmen schneller ab als Menschen; die erste Stimme kam so immer von einem Bot, der sich selbst nie waehlen
+      //     kann - der Mensch war darum oefter der Anker, dem alle folgten (1/7 statt 6/49 bei 8 Spielern).
+      // Der Tagesverdacht haengt weder an der Reihenfolge noch an der Platznummer.
+      const tag = s.nacht || 0;
+      if (!s.botVerdacht || s.botVerdacht.tag !== tag) s.botVerdacht = { tag, ziele: mischen(lebende(s)) };
+      const verdacht = s.botVerdacht.ziele.find((j) => j !== i && lebt(s, j) && !(istWolf && s.rolle[j] === "wolf"));
+      const ziel = verdacht !== undefined && Math.random() < 0.6 ? verdacht : zufaellig(andere.filter((j) => !(istWolf && s.rolle[j] === "wolf")));
       return ziel === null ? null : { typ: "stimme", ziel };
     }
     return null;
@@ -302,7 +312,22 @@ export const werwolf = {
   musik(s) { return s.phase === "nacht" ? "nacht" : ["morgen", "tag", "hinrichtung"].includes(s.phase) ? "dorf" : null; },
 
   nach(s, ich, senden, namen) {
-    document.body.classList.toggle("nachtmodus", s.phase === "nacht");
+    const nacht = s.phase === "nacht";
+    document.body.classList.toggle("nachtmodus", nacht);
+    // Huette (Nico 01.11.2026): nachts Licht aus, Augen zu. Jedes Handy ist dunkel und still - nur das Erzaehler-Geraet
+    // (Gastgeber-Handy mit Erzaehler, solange kein Beamer das Spiel zeigt) klingt; seine Klaenge folgen nur der
+    // oeffentlichen Phase. Statt Ton vibrieren ALLE Handys gleichzeitig mit demselben Muster, sobald die Nacht beginnt
+    // und sobald der Erzaehler die naechste Rolle weckt - so verraet das Brummen niemanden.
+    const erzaehler = ich === 0 && s.stimme && !still();
+    nachtLeise(nacht && !erzaehler);
+    if (nacht) {
+      const k = `${s.zug}-${s.nachtSchritt}`;
+      if (nachtMerk.vibriert !== k) {
+        const neueNacht = nachtMerk.nacht !== s.zug;
+        nachtMerk.vibriert = k; nachtMerk.nacht = s.zug;
+        try { navigator.vibrate && navigator.vibrate(neueNacht ? [500] : [140, 90, 140]); } catch (e) { /* kein Vibrieren */ }
+      }
+    }
     // Amor: zwei auswaehlen
     const amor = document.querySelectorAll("[data-amor]");
     if (amor.length) {

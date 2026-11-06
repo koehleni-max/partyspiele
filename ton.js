@@ -1,7 +1,11 @@
-// Klang fuer die Partyspiele: alle Geraeusche und die Hintergrundmusik werden live im Browser erzeugt (WebAudio),
-// keine Tondateien, nichts aus dem Netz. Schalter unten links: alles an -> nur Effekte -> stumm (je Handy gemerkt).
+// Klang fuer die Partyspiele. Seit 01.11.2026 (Nico: "8-Bit-Kacke ... ich moechte echte Toene") spielen echte Aufnahmen
+// aus web/ton/ (Kenney CC0 und gepruefte CC0-Downloads, Herkunft in ton/quellen.json und ton/LIZENZEN.md): einmal
+// geladen und zwischengespeichert, 2-3 Varianten je Ereignis, leicht gestreute Tonhoehe, eigener Pegel je Ereignis.
+// Der Synthesizer unten (EFFEKTE, STUECKE) springt nur ein, wenn fuer ein Ereignis keine Datei da ist.
+// Welche Dateien es gibt, steht in ton/vorhanden.json (schreibt ton_kopieren.py) - so fragt kein Handy nach Dateien,
+// die fehlen. Schalter unten links: alles an -> nur Effekte -> stumm (je Handy gemerkt).
 
-let ctx = null, haupt = null, hall = null, musikBus = null;
+let ctx = null, haupt = null, hall = null, musikBus = null, dateiBus = null;
 let modus = localStorage.getItem("pa_ton") || "an"; // "an" | "effekte" | "aus"
 let musikName = null, musikLauf = null;
 
@@ -21,12 +25,139 @@ function bereit() {
   const tp = ctx.createBiquadFilter(); tp.type = "lowpass"; tp.frequency.value = 2400;
   hall.connect(v).connect(tp).connect(fb).connect(v); tp.connect(haupt);
   musikBus = ctx.createGain(); musikBus.gain.value = 0.0; musikBus.connect(haupt);
+  // Aufnahmen sind fertig abgemischt: ohne Kunsthall, aber durch denselben Begrenzer
+  dateiBus = ctx.createGain(); dateiBus.gain.value = 1.4; dateiBus.connect(haupt);
+  if (modus !== "aus") vorladen();
   return ctx.state === "running";
 }
 // Browser erlauben Ton erst nach dem ersten Antippen
 ["pointerdown", "keydown", "touchstart"].forEach((e) => document.addEventListener(e, () => {
   bereit(); if (ctx && ctx.state !== "running") ctx.resume().then(() => musikNeu());
 }, { passive: true }));
+
+// ---------------------------------------------------------------- echte Aufnahmen
+// Je Ereignis: laut = Pegel in der Mischung, streu = Tonhoehen-Streuung (+-, 0.05 = 5 %; Musik-Jingles 0, sonst
+// klingen sie verstimmt), gruppen = Varianten nach Vorrang: die erste Gruppe, von der mindestens eine Datei da ist,
+// klingt (z. B. erst das echte Hahnkraehen aus der Download-Liste, bis dahin ein Kenney-Jingle).
+// Namen: if_ Interface, ui_ UI, cas_ Casino, im_ Impact, rpg_ RPG, sf_ Sci-Fi, jin_ Jingles (alle Kenney),
+// dl_/musik_ = Downloads (Liste in ton/quellen.json).
+export const KLAENGE = {
+  klick: { laut: 0.45, streu: 0.06, gruppen: [["if_click_001", "if_click_002", "if_click_003"]] },
+  pop: { laut: 0.55, streu: 0.08, gruppen: [["if_pluck_001", "if_pluck_002", "if_drop_002"]] },
+  karte: { laut: 0.8, streu: 0.06, gruppen: [["cas_card-place-1", "cas_card-place-2", "cas_card-place-3"]] },
+  dran: { laut: 0.6, streu: 0.03, gruppen: [["if_glass_001", "if_glass_002", "if_glass_003"]] },
+  richtig: { laut: 0.65, streu: 0.03, gruppen: [["if_confirmation_001", "if_confirmation_002", "if_confirmation_004"]] },
+  falsch: { laut: 0.55, streu: 0.04, gruppen: [["if_error_004", "if_error_005", "if_error_006"]] },
+  sieg: { laut: 0.75, streu: 0, gruppen: [["jin_SAX00", "jin_SAX03", "jin_STEEL00"]] },
+  fanfare: { laut: 0.8, streu: 0, gruppen: [["jin_HIT00", "jin_HIT03"]] },
+  wuerfel: { laut: 0.9, streu: 0.06, gruppen: [["cas_dice-throw-1", "cas_dice-throw-2", "cas_dice-throw-3"]] },
+  schritt: { laut: 0.55, streu: 0.08, gruppen: [["im_footstep_grass_000", "im_footstep_grass_001", "im_footstep_grass_002"]] },
+  stern: { laut: 0.75, streu: 0, gruppen: [["jin_PIZZI01", "jin_PIZZI04"]] },
+  muenzen: { laut: 0.8, streu: 0.05, gruppen: [["rpg_handleCoins", "rpg_handleCoins2"]] },
+  tick: { laut: 0.55, streu: 0.03, gruppen: [["if_tick_001", "if_tick_002", "if_tick_004"]] },
+  tack: { laut: 0.5, streu: 0.08, gruppen: [["ui_mouseclick1", "ui_mouserelease1"]] },
+  los: { laut: 0.65, streu: 0.03, gruppen: [["im_impactBell_heavy_000", "im_impactBell_heavy_001"]] },
+  sprung: { laut: 0.65, streu: 0.08, gruppen: [["rpg_cloth1", "rpg_cloth2", "rpg_cloth3"]] },
+  aua: { laut: 0.75, streu: 0.06, gruppen: [["im_impactPunch_medium_000", "im_impactPunch_medium_001", "im_impactPunch_medium_002"]] },
+  ziel: { laut: 0.75, streu: 0, gruppen: [["jin_PIZZI02"]] },
+  gong: { laut: 0.75, streu: 0.02, gruppen: [["dl_glocke"], ["im_impactBell_heavy_002", "im_impactBell_heavy_003"]] },
+  heulen: { laut: 0.8, streu: 0.04, gruppen: [["dl_wolf_1", "dl_wolf_2"]] },
+  morgen: { laut: 0.75, streu: 0.02, gruppen: [["dl_hahn"], ["jin_STEEL02"]] },
+  tod: { laut: 0.9, streu: 0.04, gruppen: [["im_impactSoft_heavy_000", "im_impactSoft_heavy_001", "im_impactSoft_heavy_002"]] },
+  hammer: { laut: 0.85, streu: 0.04, gruppen: [["dl_hammer"], ["im_impactWood_heavy_000", "im_impactWood_heavy_001"]] },
+  spannung: { laut: 0.75, streu: 0.03, gruppen: [["dl_trommelwirbel"], ["rpg_drawKnife1", "rpg_drawKnife2"]] },
+  magie: { laut: 0.65, streu: 0.06, gruppen: [["im_impactGlass_light_000", "im_impactGlass_light_001", "im_impactGlass_light_002"]] },
+  herz: { laut: 0.9, streu: 0.03, gruppen: [["dl_herz"], ["im_impactSoft_medium_000", "im_impactSoft_medium_001"]] },
+  schuss: { laut: 0.85, streu: 0.04, gruppen: [["sf_lowFrequency_explosion_000"]] },
+  geist: { laut: 0.65, streu: 0.05, gruppen: [["rpg_doorOpen_1", "rpg_doorOpen_2"]] },
+  knarzen: { laut: 0.75, streu: 0.06, gruppen: [["rpg_creak1", "rpg_creak2", "rpg_creak3"]] },
+  kichern: { laut: 0.75, streu: 0.03, gruppen: [["dl_kichern"], ["jin_PIZZI05"]] },
+  grusel: { laut: 0.75, streu: 0.02, gruppen: [["im_impactBell_heavy_003"]] },
+  techno: { laut: 0.75, streu: 0, gruppen: [["jin_HIT01"]] },
+  troete: { laut: 0.75, streu: 0, gruppen: [["jin_SAX01"]] },
+  boing: { laut: 0.75, streu: 0, gruppen: [["jin_PIZZI06"]] },
+  wirbel: { laut: 0.75, streu: 0, gruppen: [["dl_trommelwirbel"], ["jin_HIT02"]] },
+  wobble: { laut: 0.75, streu: 0, gruppen: [["jin_SAX04"]] },
+  tada: { laut: 0.75, streu: 0, gruppen: [["jin_STEEL01"]] },
+  schrei: { laut: 0.65, streu: 0.02, gruppen: [["dl_schrei"], ["sf_lowFrequency_explosion_001"]] },
+  // fuer den Werwolf-Ablauf (Plan Runde 8) schon eingetragen; ohne Datei bleiben sie still (kein Ersatzklang)
+  eule: { laut: 0.55, streu: 0.03, gruppen: [["dl_eule"]] },
+  grillen: { laut: 0.45, streu: 0, gruppen: [["dl_grillen"]] },
+  volk: { laut: 0.45, streu: 0, gruppen: [["dl_volk"]] },
+};
+// Hintergrundmusik als Schleife (Downloads); fehlt die Datei, spielt der Sequenzer unten
+export const MUSIK_DATEIEN = { brett: "musik_brett", fiesbau: "musik_fiesbau", nacht: "musik_nacht", dorf: "musik_dorf", spannung: "musik_spannung" };
+
+// Ogg, wo der Browser es kann (Chrome, Firefox, Android, neuere iPhones); sonst MP3 (ton_kopieren.py legt beides an)
+const ENDUNG = (() => { try { return new Audio().canPlayType('audio/ogg; codecs="vorbis"') ? "ogg" : "mp3"; } catch (e) { return "ogg"; } })();
+let vorhanden = null;           // Set der Namen mit Datei - null = Liste noch nicht geladen
+let vorhandenLaden = null;
+const puffer = {};              // Name -> AudioBuffer | "fehlt" | Promise (laedt)
+const zuletzt = {};             // Ereignis -> zuletzt gespielte Variante (nicht zweimal hintereinander)
+const angleich = {};            // Name -> Verstaerkung auf gleichen Spitzenpegel
+
+// Tondateien liegen neben diesem Modul (web/ton/) - unabhaengig davon, von welcher Seite aus es geladen wird
+const TON_ORT = (datei) => new URL(`ton/${datei}`, import.meta.url).href;
+function listeLaden() {
+  if (!vorhandenLaden) {
+    vorhandenLaden = fetch(TON_ORT("vorhanden.json"), { cache: "no-cache" }).then((r) => (r.ok ? r.json() : {})).catch(() => ({}))
+      .then((j) => { vorhanden = new Set(Array.isArray(j[ENDUNG]) ? j[ENDUNG] : []); return vorhanden; });
+  }
+  return vorhandenLaden;
+}
+function datei(name) {
+  if (puffer[name]) return puffer[name] instanceof Promise ? puffer[name] : Promise.resolve(puffer[name]);
+  if (vorhanden && !vorhanden.has(name)) { puffer[name] = "fehlt"; return Promise.resolve("fehlt"); }
+  const p = listeLaden().then((v) => {
+    if (!v.has(name) || !ctx) return "fehlt";
+    return fetch(TON_ORT(`${name}.${ENDUNG}`)).then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.arrayBuffer(); })
+      .then((b) => new Promise((ok, nein) => ctx.decodeAudioData(b, ok, nein)));
+  }).then((buf) => {
+    if (buf && typeof buf === "object") {
+      // Spitzenpegel angleichen: Kenney-Pakete sind verschieden laut abgemischt (gemessen 0,06 bis 1,1)
+      const c = buf.getChannelData(0); let p = 0;
+      for (let i = 0; i < c.length; i += 4) { const v = Math.abs(c[i]); if (v > p) p = v; }
+      angleich[name] = p > 0.001 ? Math.min(8, 0.9 / p) : 1;
+    }
+    return (puffer[name] = buf || "fehlt");
+  }, () => (puffer[name] = "fehlt"));
+  puffer[name] = p;
+  return p;
+}
+// Alle Geraeusche einmal holen (zusammen unter 1 MB), Musik erst, wenn sie gebraucht wird
+function vorladen() {
+  listeLaden().then(() => Object.values(KLAENGE).forEach((k) => k.gruppen.flat().forEach((n) => datei(n))));
+}
+// -> {art: "datei", liste} | {art: "laedt"} | {art: "synth"}
+function stand(name) {
+  const k = KLAENGE[name];
+  if (!k || vorhanden === null) return k ? { art: "laedt" } : { art: "synth" };
+  for (const g of k.gruppen) {
+    const da = g.filter((n) => puffer[n] && typeof puffer[n] === "object" && !(puffer[n] instanceof Promise));
+    if (da.length) return { art: "datei", liste: da };
+    if (g.some((n) => vorhanden.has(n) && (!puffer[n] || puffer[n] instanceof Promise))) return { art: "laedt" };
+  }
+  return { art: "synth" };
+}
+function abspielen(name, liste, ziel) {
+  const k = KLAENGE[name];
+  let n = liste[Math.floor(Math.random() * liste.length)];
+  if (liste.length > 1 && n === zuletzt[name]) n = liste[(liste.indexOf(n) + 1) % liste.length];
+  zuletzt[name] = n;
+  const q = ctx.createBufferSource(), g = ctx.createGain();
+  q.buffer = puffer[n];
+  q.playbackRate.value = 1 + (Math.random() * 2 - 1) * (k.streu || 0);
+  g.gain.value = k.laut * (angleich[n] || 1);
+  q.connect(g).connect(ziel || dateiBus);
+  q.start();
+  return q;
+}
+// Fuer Tests und Fehlersuche: wie klingt ein Ereignis gerade? "datei:<name>" | "laedt" | "synth" | "still"
+export function tonStand(name) {
+  const s = stand(name);
+  return s.art === "datei" ? `datei:${s.liste.join(",")}` : s.art === "synth" && !EFFEKTE[name] ? "still" : s.art;
+}
+export const tonBereit = () => listeLaden().then(() => Promise.all(Object.values(KLAENGE).flatMap((k) => k.gruppen.flat().map((n) => datei(n)))));
 
 // ---------------------------------------------------------------- Bausteine
 function ton(freq, dauer, { typ = "sine", laut = 0.3, ab = null, start = 0, angriff = 0.005, hallAnteil = 0.4, ziel = null, filter = null } = {}) {
@@ -103,6 +234,8 @@ const EFFEKTE = {
   herz: () => { ton(70, 0.12, { laut: 0.5, hallAnteil: 0 }); ton(65, 0.14, { laut: 0.4, start: 0.18, hallAnteil: 0 }); },
   schuss: () => { rauschen(0.5, { laut: 0.7, f: 2500, ab: 150, typ: "lowpass" }); ton(120, 0.4, { typ: "sine", laut: 0.5, ab: 40, hallAnteil: 0.6 }); },
   fanfare: () => EFFEKTE.sieg(),
+  hammer: () => EFFEKTE.tod(),
+  muenzen: () => EFFEKTE.richtig(),
   // Gruselklaenge fuer das Halloween-Aussehen (26.10.2026): Geist, knarzende Tuer, Hexenkichern, schiefer Akkord
   geist: () => {
     const t = ctx.currentTime, o = ctx.createOscillator(), g = ctx.createGain(), vib = ctx.createOscillator(), vg = ctx.createGain();
@@ -162,9 +295,30 @@ const EFFEKTE = {
 export const GRUSS_KLAENGE = ["techno", "troete", "boing", "wirbel", "wobble", "tada"];
 
 export function spiele(name) {
-  if (modus === "aus" || !bereit() || !EFFEKTE[name]) return;
-  try { EFFEKTE[name](); } catch (e) { /* Ton ist Beiwerk */ }
+  if (modus === "aus" || nachtRuhe || !bereit()) return;
+  try {
+    const s = stand(name);
+    if (s.art === "datei") { abspielen(name, s.liste); return; }
+    if (s.art === "laedt") {
+      // Datei kommt gleich (erster Tipp nach dem Laden der Seite): nachholen, wenn es schnell geht - sonst lieber nichts
+      const t0 = Date.now();
+      Promise.all(KLAENGE[name].gruppen.flat().map((n) => datei(n))).then(() => {
+        if (Date.now() - t0 > 900 || nachtRuhe || modus === "aus") return;
+        const s2 = stand(name);
+        if (s2.art === "datei") abspielen(name, s2.liste); else if (EFFEKTE[name]) EFFEKTE[name]();
+      }).catch(() => {});
+      return;
+    }
+    if (EFFEKTE[name]) EFFEKTE[name]();   // Notloesung: keine Datei fuer dieses Ereignis
+  } catch (e) { /* Ton ist Beiwerk */ }
 }
+
+// ---------------------------------------------------------------- Werwolf-Nacht (Nico 01.11.2026, Huette)
+// Licht aus, alle Augen zu: Handys sind nachts still - kein Tippgeraeusch, keine Musik, kein Klang, der verraet, wer gerade
+// handelt. Nur das Erzaehler-Geraet (Beamer oder Gastgeber-Handy mit Erzaehler) bleibt hoerbar; dessen Klaenge haengen
+// nur an der oeffentlichen Phase. werwolf.js schaltet es je Zeichnen, app.js setzt es vor jedem Zeichnen zurueck.
+let nachtRuhe = false, nachtAngewandt = false;
+export function nachtLeise(an) { if (an !== undefined) nachtRuhe = !!an; return nachtRuhe; }
 
 // ---------------------------------------------------------------- Hintergrundmusik
 // Kleine Sequenzer-Stuecke; jede Takt-Achtel wird kurz vor der Zeit eingeplant.
@@ -207,10 +361,30 @@ const STUECKE = {
   } },
 };
 
+let musikQuelle = null;   // laufende Musik-Datei (Schleife)
 function musikNeu() {
   if (musikLauf) { clearInterval(musikLauf.timer); musikLauf = null; }
+  if (musikQuelle) { const q = musikQuelle; musikQuelle = null; try { q.g.gain.setTargetAtTime(0, ctx.currentTime, 0.4); q.q.stop(ctx.currentTime + 2); } catch (e) { /* schon aus */ } }
+  nachtAngewandt = nachtRuhe;
   if (!ctx || ctx.state !== "running") return;
-  const st = musikName && modus === "an" ? STUECKE[musikName] : null;
+  const name = musikName && modus === "an" && !nachtRuhe ? musikName : null;
+  // erst die echte Aufnahme; fehlt sie, der Sequenzer
+  const dateiName = name && MUSIK_DATEIEN[name];
+  if (dateiName && vorhanden === null) { listeLaden().then(() => { if (musikName === name) musikNeu(); }); return; }
+  if (dateiName && vorhanden.has(dateiName)) {
+    musikBus.gain.cancelScheduledValues(ctx.currentTime);
+    musikBus.gain.setValueAtTime(1, ctx.currentTime);
+    datei(dateiName).then((buf) => {
+      if (musikName !== name || musikQuelle || modus !== "an" || nachtRuhe || typeof buf !== "object") return;
+      const q = ctx.createBufferSource(), g = ctx.createGain();
+      q.buffer = buf; q.loop = true;
+      g.gain.setValueAtTime(0.0001, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + 1.2);
+      q.connect(g).connect(musikBus); q.start();
+      musikQuelle = { q, g };
+    });
+    return;
+  }
+  const st = name ? STUECKE[name] : null;
   musikBus.gain.cancelScheduledValues(ctx.currentTime);
   musikBus.gain.setTargetAtTime(st ? st.laut * 1.3 : 0, ctx.currentTime, 0.6);
   if (!st) return;
@@ -227,7 +401,7 @@ function musikNeu() {
 }
 export function musik(name) {
   name = name || null;
-  if (name === musikName) return;
+  if (name === musikName && nachtRuhe === nachtAngewandt) return;
   musikName = name;
   if (bereit() || ctx) musikNeu();
 }
@@ -243,6 +417,7 @@ export function umschalten() {
   modus = modus === "an" ? "effekte" : modus === "effekte" ? "aus" : "an";
   localStorage.setItem("pa_ton", modus);
   bereit(); if (ctx && ctx.state !== "running") ctx.resume();
+  if (modus !== "aus") vorladen();
   musikNeu();
   if (modus !== "aus") spiele("pop");
   return TEXT[modus];

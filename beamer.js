@@ -28,6 +28,7 @@ import * as A from "./anlass.js";
 import * as G from "./gluecksrad.js";
 import { esc } from "./hilfe.js";
 import * as PULT from "./beamer_pult.js";
+import * as DU from "./duell.js";
 // Steuerpult am Beamer (Nico 31.10.2026): app.js fragt hier, welche Kennung ein Pult ist und was es darf
 export { istPult, pultErlaubt } from "./beamer_pult.js";
 
@@ -377,6 +378,9 @@ export async function start(code, wurzel) {
     <aside class="bm-pult" hidden></aside>
     <button class="bm-start" data-bm-start><span>▶️ Vollbild und Ton an</span><small>einmal klicken – danach läuft alles von selbst</small></button>`;
   document.querySelector("[data-bm-start]").addEventListener("click", vollbild);
+  // Runde 3: nach der Kopplung klickt die Spielleitung gleich im Pult - dieser erste Klick zaehlt genauso, sonst bliebe der
+  // Knopf ueber dem Bild stehen (nach dem Klick, damit das Vollbild den Knopf nicht unter der Maus verschiebt)
+  document.addEventListener("click", () => { if (document.querySelector("[data-bm-start]")) vollbild(); }, { once: true });
   // aendert sich der Platz (Vollbild, Fuss bricht um, QR-Code geladen), passt der Inhalt sich neu ein
   if (window.ResizeObserver) {
     const ro = new ResizeObserver(() => einpassen(app.querySelector(".bm-inhalt"), app.querySelector(".bm-buehne"), 1));
@@ -403,6 +407,10 @@ export async function start(code, wurzel) {
     gelesen.add(`stand/${k}`);
     netz.beobachten(`stand/${k}`, (v) => { teile[k] = v; teile.da = { ...(teile.da || {}), [k]: true }; if (teile.da.lobby && teile.da.tafel && teile.da.beamer) empfangen(); });
   });
+  // Duelle: Fortschritt der beiden Duellanten live (duell.js zieht die Anzeige selbst nach, ohne Neuzeichnen)
+  DU.leitung({ jetzt: () => jetztG() });
+  gelesen.add("stand/live");
+  netz.beobachten("stand/live", DU.liveEmpfangen);
   setInterval(takt, 500);
 }
 

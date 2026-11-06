@@ -256,7 +256,9 @@ import { FRAGESPIELE } from "./fragespiele.js";
 import { ELTERNSPIELE } from "./elternspiele.js";
 import { werwolf } from "./werwolf.js";
 import { FREMDSPIELE } from "./fremd.js";
-export const SPIELE = [brett, hindernis, werwolf, ...FRAGESPIELE, ...ELTERNSPIELE, farbchaos, klatschen, busfahrer, pferderennen, ...MINISPIELE, ...FREMDSPIELE];
+import { gduell } from "./duell.js";
+// gduell (Gluecksrad-Duell) steht in keiner Gruppe: es startet nur vom Gluecksrad aus (app.js)
+export const SPIELE = [brett, hindernis, werwolf, ...FRAGESPIELE, ...ELTERNSPIELE, farbchaos, klatschen, busfahrer, pferderennen, ...MINISPIELE, ...FREMDSPIELE, gduell];
 export const GRUPPEN = [
   { titel: "🎲 Große Partyspiele", ids: ["brett", "fiesbau", "werwolf"] },
   { titel: "🧩 Gemeinsam spielen – ohne Alkohol", ids: ["begriffe", "pantomime", "quiz", "werbinich", "spion", "slf", "malen", "schaetzen", "reaktion"] },

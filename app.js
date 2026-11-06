@@ -19,6 +19,8 @@ import * as C from "./controller.js";
 import * as T from "./texte.js";
 import * as BE from "./brett_ereignisse.js";
 import * as BR from "./brett.js";
+import * as DU from "./duell.js";
+import * as KOPPLUNG from "./kopplung.js";
 
 const app = document.getElementById("app");
 const BASIS = location.href.split("#")[0];
@@ -92,7 +94,8 @@ function hinweis(text, art = "") {
   document.body.appendChild(d);
   setTimeout(() => d.remove(), 2600);
 }
-function vibriere(ms = 60) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} }
+// Werwolf-Nacht: kein Brummen beim Tippen - im dunklen, stillen Raum hoert man sonst, wer gerade handelt
+function vibriere(ms = 60) { if (TON.nachtLeise()) return; try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} }
 function zeitVor(t) {
   const m = Math.round((Date.now() - t) / 60000);
   return m < 2 ? "gerade eben" : m < 60 ? `vor ${m} Min.` : m < 1440 ? `vor ${Math.round(m / 60)} Std.` : `vor ${Math.round(m / 1440)} Tagen`;
@@ -131,7 +134,12 @@ function eigeneVergessen(c) { localStorage.setItem(EIGENE, JSON.stringify(eigene
 function ansichtMerken() { if (code) sessionStorage.setItem(`pa_ansicht_${code}`, ansicht || ""); }
 
 // ---------------------------------------------------------------- Startseite und Raum-Link
+// Lesezeichen #beamer im selben Tab (z. B. noch der alte Raum offen): nur der Teil hinter # aendert sich, der Browser laedt
+// dann nichts neu - ohne das hier bliebe das Lesezeichen wirkungslos
+window.addEventListener("hashchange", () => { if (location.hash === "#beamer") location.reload(); });
 function startBild() {
+  // Lesezeichen am Ally: #beamer zeigt eine Kopplungszahl, die Spielleitung koppelt vom Handy (kopplung.js, Runde 3)
+  if (location.hash === "#beamer") return KOPPLUNG.beamerSeite(app, (c) => { history.replaceState(null, "", `${BASIS}#r=${c}&beamer`); B.start(c, app); });
   const m = location.hash.match(/^#r=([a-z0-9]{12,32})(&beamer)?$/);
   if (m && m[2]) return B.start(m[1], app);   // Beamer: kein Spieler, zeigt nur (beamer.js)
   if (m) return raumLink(m[1]);
@@ -366,6 +374,7 @@ function gastgeberStart() {
   netz.beiVerbindung = netzAnzeige;
   netz.beobachten("da", (d) => { const b = beamerZahl(); anwesend = d || {}; anwesenheitUebernehmen(); beamerGeaendert(b); });
   netz.beobachten("gastgeber", (gg) => { if (rolle === "gastgeber" && gg && gg.uid && gg.uid !== meineId) abgeloest(); });
+  netz.beobachten("stand/live", DU.liveEmpfangen);   // Duelle: Fortschritt der Duellanten (Gaeste lesen ihn mit "stand")
   netz.anwesend(meineId, meinName);
   netz.aktionenEmpfangen((von, a) => { if (rolle === "gastgeber") ausfuehren(von, a); });
   ansicht = sessionStorage.getItem(`pa_ansicht_${code}`) || null;
@@ -404,7 +413,7 @@ function anwesenheitUebernehmen() {
   if (neu) { const aend = neueAenderung(); aend.lobby = true; verteilen(aend); }
 }
 
-const RAUM_TYPEN = new Set(["_hallo", "_spielwahl", "_ab18", "_trink", "_look", "_testkonten", "_tafel", "_admin", "_adminweg", "_raumende", "_beamer", "_alle", "_glueck", "_brettweg"]);
+const RAUM_TYPEN = new Set(["_hallo", "_spielwahl", "_ab18", "_trink", "_look", "_testkonten", "_tafel", "_admin", "_adminweg", "_raumende", "_beamer", "_alle", "_glueck", "_brettweg", "_koppeln"]);
 
 function ausfuehren(von, a) {
   if (!raum || !a || typeof a !== "object" || typeof a.typ !== "string") return;
@@ -425,7 +434,7 @@ function ausfuehren(von, a) {
   if (RAUM_TYPEN.has(a.typ)) {
     if (a.typ === "_spielwahl") {
       const sp = spiel(a.id);
-      if (!sp || Object.keys(raum.partien).length >= MAX_PARTIEN) return;
+      if (!sp || sp.versteckt || Object.keys(raum.partien).length >= MAX_PARTIEN) return;
       const pid = `p${raum.pNr++}`;
       raum.partien[pid] = P.neu(pid, sp.id, von, Date.now(), raum.ohneAlkohol);
       raum.meldung = { nr: (raum.meldung ? raum.meldung.nr : 0) + 1, pid, von };
@@ -435,11 +444,26 @@ function ausfuehren(von, a) {
     else if (a.typ === "_look" && admin && A.lookGueltig(a.look)) { raum.look = a.look; aend.lobby = true; }
     else if (a.typ === "_testkonten" && admin) { raum.testkonten = !K.testkontenAn(raum); aend.lobby = true; }
     else if (a.typ === "_beamer" && admin) { if (!B.steuerAktion(raum, a, Date.now())) return; aend.lobby = true; }
+    // Beamer koppeln (Runde 3, Plan 3.16): die Spielleitung hat am Handy die Zahl vom Beamer eingetippt - dessen Kennung
+    // bekommt sofort Steuerrechte (am Ally kein Code mehr)
+    else if (a.typ === "_koppeln" && admin && !pult) {
+      if (!B.istPult(a.beamer)) return;
+      if (!raum.admins.includes(a.beamer)) raum.admins.push(a.beamer);
+      aend.lobby = true;
+    }
     // Gluecksrad: das Ergebnis entscheidet nur der Gastgeber (Rechte fuer Steuer-Aktionen prueft gluecksrad.js)
     else if (a.typ === "_glueck") {
+      if (a.was === "duell" && a.art === "app" && Object.keys(raum.partien).length >= MAX_PARTIEN) return;
       if (!G.aktion(raum, von, a, Date.now(), admin)) return;
       aend.lobby = true;
       if (admin && GLUECK_MERKEN.has(a.was)) glueckMerkenSchreiben();
+      if (a.was === "duell") glueckDuellStarten(aend);
+      // Duell in echt (Daumencatchen ...): ueber den Bestaetigungsweg der Gesamtwertung - meldet der Verlierer, zaehlt es sofort
+      if (a.was === "duellerg") {
+        const e = raum.glueck.lauf.duell.erg;
+        tafelAusfuehren({ typ: "_tafel", was: "w_duell", werte: ["duell", e.sieger, e.verlierer] }, { gastgeber: false, wer: e.wer });
+        aend.tafel = true;
+      }
     }
     // Partybrett-Ereignisse streichen: nur die Spielleitung; gilt fuer alle Partybretter im Raum ab dem naechsten "?"-Feld
     else if (a.typ === "_brettweg") {
@@ -450,7 +474,7 @@ function ausfuehren(von, a) {
     else if (a.typ === "_alle" && admin) {
       // Spiel fuer alle: jeder, der gerade verbunden ist, ist gleich dabei; die Spielleitung startet mit "Los"
       const sp = spiel(a.wert || a.id);
-      if (!sp || Object.keys(raum.partien).length >= MAX_PARTIEN) return;
+      if (!sp || sp.versteckt || Object.keys(raum.partien).length >= MAX_PARTIEN) return;
       const pid = `p${raum.pNr++}`;
       const p = P.neu(pid, sp.id, von, Date.now(), raum.ohneAlkohol);
       raum.spieler.filter((x) => x.online && x.id !== von).forEach((x) => { if (p.mit.length < P.MAX_MIT) p.mit.push(x.id); });
@@ -490,6 +514,7 @@ function ausfuehren(von, a) {
     const idx = p.mit.indexOf(von);
     if (idx < 0) return;
     if (spielAktion(p, sp, idx, a)) aend.tafel = true;
+    if (p.s && p.s.weg) partieWeg(p.pid);   // Gluecksrad-Duell: "Fertig" raeumt es weg
   }
   if (raum.partien[p.pid]) p.t = Date.now();   // zuletzt geaendert (Beamer: Ergebnis steht eine Weile, dann Diashow)
   verteilen(aend);
@@ -498,6 +523,23 @@ function ausfuehren(von, a) {
 function partieWeg(pid) {
   delete raum.partien[pid];
   clearTimeout(botTimer[pid]); delete botTimer[pid];
+  if (netz) netz.schreiben(`stand/live/${pid}`, null).catch(() => {});   // Live-Stand eines Duells mit wegraeumen
+  if (netz) netz.schreiben(`stand/live/${pid}kam`, null).catch(() => {});   // Kamera des Partybretts (Runde 3)
+}
+
+// Gluecksrad "Duell" am Handy: eigenes Spiel nur fuer die zwei, beide werden hingeschaltet (ansichtPruefen)
+function glueckDuellStarten(aend) {
+  const l = raum.glueck && raum.glueck.lauf, d = l && l.duell;
+  if (!d || d.art !== "app" || d.pid) return;
+  const sp = spiel("gduell"), pid = `p${raum.pNr++}`;
+  const p = P.neu(pid, sp.id, d.von, Date.now(), raum.ohneAlkohol);
+  p.mit = [d.von, d.an];
+  P.starten(p, sp, raum);
+  p.s.duell.kanal = pid;
+  raum.partien[pid] = p;
+  d.pid = pid;
+  raum.meldung = { nr: (raum.meldung ? raum.meldung.nr : 0) + 1, pid, von: d.von };
+  aend.partien.add(pid);
 }
 
 // -> true, wenn dabei ein Sieg in die Gesamtwertung kam
@@ -509,6 +551,7 @@ function spielAktion(p, sp, idx, a) {
   const nm = P.namen(raum, p);
   p.s.anzahl = p.mit.length;
   try { sp.aktion(p.s, idx, a, nm, raum); } catch (e) { console.error(e); }
+  if (p.s && p.s.duell && !p.s.duell.kanal) p.s.duell.kanal = p.pid;   // Live-Leitung des Duells: stand/live/<pid>
   p.v = (p.v || 0) + 1;
   if (weiter && JSON.stringify(p.s) !== vorher) p.wv = p.v;
   return spielWerten(p, sp, nm);
@@ -638,6 +681,8 @@ function schreiben() {
 // Countdown der Runde: jede Sekunde nur die Zahlen tauschen (kein Neuzeichnen); beim Gastgeber loest das Ende die
 // Pokal-Uebergabe aus. Gaeste rechnen mit der Uhr des Gastgebers (ueber die Serverzeit abgeglichen).
 const jetztGastgeber = () => (rolle === "gastgeber" || !netz || !raum ? Date.now() : Date.now() + netz.versatz - (raum.uhr || 0));
+// Duelle (duell.js): Start nach der Gastgeber-Uhr, Fortschritt der Duellanten nach stand/live/<pid>/<spieler>
+DU.leitung({ jetzt: jetztGastgeber, schreiben: (pfad, wert) => { if (netz) netz.schreiben(`stand/live/${pfad}`, wert).catch((e) => console.warn("Live:", e && e.code)); } });
 setInterval(() => {
   const jetzt = jetztGastgeber();
   document.querySelectorAll("[data-countdown]").forEach((el) => {
@@ -679,7 +724,10 @@ function botPlanen() {
     const sp = spiel(p.spiel);
     if (!sp || !sp.bot) return;
     const pause = sp.botPause ? sp.botPause(p.s) : 900;
-    botTimer[p.pid] = setTimeout(() => botZug(p.pid), pause * (0.7 + Math.random() * 0.6));
+    // botMindest: so lange fuehrt das Spiel noch vor (Partybrett: Wurf, Laufen, Auftritt) - vorher zieht kein Computer
+    let mindest = 0;
+    try { mindest = sp.botMindest ? sp.botMindest(p.s) : 0; } catch (e) { mindest = 0; }
+    botTimer[p.pid] = setTimeout(() => botZug(p.pid), Math.max(mindest, pause * (0.7 + Math.random() * 0.6)));
   });
 }
 function botZug(pid) {
@@ -775,7 +823,7 @@ function padTaste(g, t) {
       if (t === "b" && j > 0) return sendenAls(pad.id, { typ: "_raus", p: p.pid });
       if (t === "start") return sendenAls(pad.id, { typ: "_los", p: p.pid });
       if (t === "a" && !String((C.fokus() || {}).dataset?.a || "").includes('"_los"')) return;
-    } else if (p.phase === "laeuft" && j >= 0 && C.miniTaste(pad.id, t)) return;
+    } else if (p.phase === "laeuft" && j >= 0 && (DU.taste(pad.id, t) || C.miniTaste(pad.id, t))) return;
   }
   if (["hoch", "runter", "links", "rechts"].includes(t)) return C.fokusBewegen(t);
   if (t === "a") {
@@ -786,6 +834,8 @@ function padTaste(g, t) {
   }
 }
 C.starten(padTaste);
+// Partybrett (Runde 3): nach der Vorfuehrung werden Weiter & Co. wieder frei - Controller-Fokus neu setzen
+document.addEventListener("pa-entsperrt", () => { if (padIds().length) C.fokusWiederherstellen(); });
 
 // fuer wen ein laufendes Spiel auf diesem Geraet gezeichnet wird: eigener Spieler, beim Partybrett wer von hier dran
 // ist; im Minispiel nur der eigene (Controller spielen in eigenen Feldern) - -1 = Geraet spielt nur mit Controllern mit
@@ -794,8 +844,9 @@ function anzeigeIch(p, sp) {
   if (p.phase !== "laeuft" || !padIds().length) return eigen;
   const lokal = p.mit.map((id, j) => (istLokal(id) ? j : -1)).filter((j) => j >= 0);
   if (!lokal.length) return -1;
+  if (sp.id === "gduell") return eigen;   // Controller spielen das Duell in ihrem eigenen Feld (padDuell)
   if (sp.id === "brett" && p.s) {
-    if (p.s.phase === "mini" && !p.s.ende) return eigen;
+    if ((p.s.phase === "mini" || p.s.phase === "dkampf") && !p.s.ende) return eigen;
     if (lokal.includes(p.s.dran)) return p.s.dran;
   }
   return eigen >= 0 ? eigen : lokal[0];
@@ -808,6 +859,16 @@ function padMinis(p, sp, nm) {
   const zuschauer = Object.values(pads).filter((pad) => { const j = p.mit.indexOf(pad.id); return j >= 0 && Array.isArray(m.teil) && !m.teil.includes(j); });
   const zusch = zuschauer.length ? `<p class="mitte leise klein">👀 ${zuschauer.map((x) => esc(x.name)).join(", ")} ${zuschauer.length > 1 ? "schauen" : "schaut"} diesmal zu</p>` : "";
   return C.miniHTML(m, hier, m.art === "schaetzen" ? T.SCHAETZ[m.frage] : null, (id, wert, mk) => sendenAls(id, mk ? { typ: "mini", wert, mk, p: p.pid } : { typ: "mini", wert, p: p.pid })) + zusch;
+}
+// Duell (Partybrett-Duellfeld, Gluecksrad-Duell): jeder Controller, der duelliert, bekommt sein eigenes Feld
+function padDuell(p, sp, nm) {
+  const du = p.phase === "laeuft" && p.s && ((sp.id === "brett" && p.s.phase === "dkampf") || sp.id === "gduell") ? p.s.duell : null;
+  if (!du || !padIds().length) return "";
+  const boxen = Object.values(pads).map((pad) => ({ pad, j: p.mit.indexOf(pad.id) })).filter(({ j }) => j >= 0 && (j === du.a || j === du.b)).map(({ pad, j }) => {
+    const h = DU.padHTML(du, pad.id, j, nm, (t) => C.taste(pad.art, t), (a) => sendenAls(pad.id, { ...a, p: p.pid }));
+    return h ? `<div class="padbox" data-pad="${esc(pad.id)}"><div class="padkopf"><span class="farbe f${j % 20}"></span><b>${esc(pad.name)}</b><small>🎮</small></div><div class="padinhalt">${h}</div></div>` : "";
+  }).join("");
+  return boxen ? `<div class="padminis">${boxen}</div>` : "";
 }
 // Leiste unter dem Spiel: welche Controller hier dabei sind und was ihre Tasten gerade tun
 function padLeiste(p, sp) {
@@ -840,6 +901,7 @@ function padKarte() {
 }
 const gastgeberDa = () => !!(raum && (rolle === "gastgeber" || anwesend[raum.gastgeber]));
 
+let letzteLive = "null";   // stand/live zuletzt (Duelle): aendert sich nur er, wird nicht neu gezeichnet
 function standEmpfangen(stand) {
   if (rolle !== "gast") return;
   if (!stand) {
@@ -853,6 +915,11 @@ function standEmpfangen(stand) {
   }
   const l = standLesen(stand, merker);
   if (!l) return;
+  // nur die Live-Leitung eines Duells hat sich bewegt: nichts neu zeichnen (duell.js zieht die Anzeige selbst nach)
+  const liveText = JSON.stringify(stand.live || null), nurLive = liveText !== letzteLive && !l.aend.lobby && !l.aend.tafel && !l.aend.partien.size;
+  letzteLive = liveText;
+  DU.liveEmpfangen(stand.live);
+  if (nurLive && raum && status === "") return;
   merker = l.merker;
   raum = l.raum;
   document.title = `${A.titel(raum.anlass)} – Partyspiele`;
@@ -892,6 +959,14 @@ function ansichtPruefen() {
   Object.values(raum.partien).forEach((p) => {
     const alt = phasen[p.pid];
     phasen[p.pid] = p.phase;
+    // Gluecksrad-Duell: startet sofort - beide Duellanten werden hingeschaltet (oder bekommen die Meldung)
+    if (alt === undefined && p.spiel === "gduell" && p.phase === "laeuft" && p.mit.some(istLokal)) {
+      if (ansicht === p.pid) return;
+      if (!ansicht && !tafelAuf && !steuerAuf) { ansicht = p.pid; window.scrollTo(0, 0); } else losAnsage(p);
+      TON.spiele("spannung");
+      vibriere([120, 60, 120]);
+      return;
+    }
     if (alt !== "sammeln" || p.phase !== "laeuft" || !p.mit.some(istLokal)) return;
     if (!ansicht && !tafelAuf && !steuerAuf) { ansicht = p.pid; window.scrollTo(0, 0); }
     else if (ansicht !== p.pid) losAnsage(p);
@@ -941,15 +1016,17 @@ function radAnsage(nachrang = false) {
   const istRad = el && el.dataset.art === "rad";
   if (!l || l.nr <= radGesehen) { if (istRad) ansageWeg(); return false; }
   const jetzt = jetztGastgeber(), ph = G.phase(l, jetzt);
-  if (ph === "fertig" && jetzt > Math.max(l.ende, l.zu || 0) + 12000) { radGesehen = l.nr; if (istRad) ansageWeg(); return false; }
+  // Feld "Duell": wer betroffen ist, sieht die Meldung, bis das Duell gewaehlt bzw. eingetragen ist (hoechstens 5 Minuten)
+  const d = l.duell, duellIch = G.duellOffen(l) && (d ? [d.von, d.an].includes(meineId) : l.getroffen === meineId) && jetzt < Math.max(l.ende, l.zu || 0) + 300000;
+  if (ph === "fertig" && !duellIch && jetzt > Math.max(l.ende, l.zu || 0) + 12000) { radGesehen = l.nr; if (istRad) ansageWeg(); return false; }
   if (l.nr > radGemeldet) {
     radGemeldet = l.nr;
     TON.spiele(A.klang(raum.look, "meldung"));
     vibriere([60, 40, 60]);
   }
   const wahl = ph === "joker" && l.getroffen === meineId && !l.schub && G.jokerVon(raum, meineId) > 0;
-  if (nachrang && (ph === "fertig" || ph === "warten")) { radGesehen = l.nr; return false; }
-  const sig = `${l.nr}|${ph === "warten" ? "fertig" : ph}|${l.schub ? 1 : 0}|${wahl ? 1 : 0}|${beamerZahl() ? 1 : 0}`;
+  if (nachrang && (ph === "fertig" || ph === "warten") && !duellIch) { radGesehen = l.nr; return false; }
+  const sig = `${l.nr}|${ph === "warten" ? "fertig" : ph}|${l.schub ? 1 : 0}|${wahl ? 1 : 0}|${beamerZahl() ? 1 : 0}|${d ? `${d.art}${d.erg ? "e" : ""}` : ""}|${duellIch ? 1 : 0}`;
   if (istRad && el.dataset.sig === sig) return true;
   const a = ansageEl();
   a.dataset.art = "rad"; a.dataset.nr = String(l.nr); a.dataset.sig = sig;
@@ -971,9 +1048,27 @@ function radAnsage(nachrang = false) {
       <span class="ansage-knoepfe rad-wahl">${knopf("🃏 Weiterschieben", { typ: "_glueck", was: "schieben" }, "gelb", `data-feld="rf-schub" data-klang="tada"`)}${knopf("Nehm ich", { typ: "_glueck", was: "behalten" }, "klein2")}</span>`;
     TON.spiele("dran");
     vibriere([120, 60, 120]);
-  } else a.innerHTML = `<span class="ansage-text">${text}</span><span class="ansage-knoepfe">${hin}${weg}</span>`;
+  } else if (duellIch && (ph === "fertig" || ph === "warten")) a.innerHTML = radDuellHTML(l, text);
+  else {
+    if (d && (ph === "fertig" || ph === "warten")) text += `<small>⚔️ ${esc(d.vonName)} fordert ${esc(d.anName)} heraus${d.art === "echt" ? " – in echt" : " – am Handy"}</small>`;
+    a.innerHTML = `<span class="ansage-text">${text}</span><span class="ansage-knoepfe">${hin}${weg}</span>`;
+  }
   ansagePlatz();
   return true;
+}
+// Gluecksrad "Duell": Gegner waehlen (am Handy oder in echt), beim echten Duell danach das Ergebnis melden
+function radDuellHTML(l, text) {
+  const d = l.duell;
+  if (!d) {
+    const andere = raum.spieler.filter((x) => x.id !== meineId);
+    TON.spiele("dran");
+    return `<span class="ansage-text">${text}<small>⚔️ Wen forderst du heraus?</small>
+        <select id="rf-duellgegner" class="rad-schubwahl">${andere.map((x) => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("")}</select></span>
+      <span class="ansage-knoepfe rad-wahl rad-duellwahl">${knopf("🎮 Duell am Handy", { typ: "_glueck", was: "duell", art: "app" }, "gelb", `data-feld="rf-duellgegner" data-klang="los"`)}${knopf("🤼 In echt", { typ: "_glueck", was: "duell", art: "echt" }, "klein2", `data-feld="rf-duellgegner"`)}</span>`;
+  }
+  const gegner = meineId === d.von ? d.anName : d.vonName;
+  return `<span class="ansage-text"><b>🤼 ${esc(l.zusatz || "Duell in echt")}</b><small>Gegen ${esc(gegner)} – wer hat gewonnen? Meldet der Sieger, bestätigt der Verlierer an der Turniertafel.</small></span>
+    <span class="ansage-knoepfe rad-wahl">${knopf("🏆 Ich hab gewonnen", { typ: "_glueck", was: "duellerg", gewonnen: true }, "gruen")}${knopf("😅 Ich hab verloren", { typ: "_glueck", was: "duellerg", gewonnen: false }, "klein2")}</span>`;
 }
 
 // "Neues Spiel: Quiz-Duell - mitmachen?" oben bei allen, die noch nicht dabei sind
@@ -1236,6 +1331,7 @@ let steuerSpiel = "";
 function beamerSpielSig() { const g = raum && BS.gezeigt(raum, jetztGastgeber()); return g ? g.p.pid : ""; }
 function zeichnen() {
   document.body.classList.remove("nachtmodus");
+  TON.nachtLeise(false);   // Werwolf-Nacht: werwolf.js schaltet es beim Zeichnen wieder ein (ton.js, nachtLeise)
   A.lookAnwenden(raum ? raum.look : null);
   // halb getippte Eingaben (in allen Spielen, der Tafel und im Raum) ueberstehen das Neuzeichnen
   const fokus = fokusMerken();
@@ -1430,7 +1526,7 @@ function partieBild(p, sp, ich) {
   if (p.phase === "sammeln") inhalt = sammelBild(p, sp, nm, ich, leitet);
   else if (ich < 0 && !p.mit.some(istLokal)) inhalt = zuschauBild(p, sp, nm);
   else {
-    try { inhalt = sp.render(p.s, ich, nm, raum) + padMinis(p, sp, nm); if (P.ohneTrinken(raum, p)) inhalt = ohneAlkohol(inhalt); }
+    try { inhalt = sp.render(p.s, ich, nm, raum) + padMinis(p, sp, nm) + padDuell(p, sp, nm); if (P.ohneTrinken(raum, p)) inhalt = ohneAlkohol(inhalt); }
     catch (e) { console.error(e); inhalt = `<p class="fehler">Anzeigefehler: ${esc(e.message)}</p>`; }
     if (leitet && p.wartend.length) inhalt = `<div class="hinweisbox vorgemerkt">📌 ${p.wartend.length === 1 ? "1 wartet" : `${p.wartend.length} warten`} auf die nächste Runde: ${p.wartend.map((id) => esc(P.nameVon(raum, p, id))).join(", ")}
       ${knopf("🔄 Neue Runde mit allen", { typ: "_neuauf" }, "gelb")}</div>${inhalt}`;
@@ -1491,6 +1587,26 @@ function steuerKarte() {
 }
 const beamerZahl = () => Object.keys(anwesend || {}).filter((k) => k.startsWith("beamer-")).length;
 const beamerLink = () => `${BASIS}#r=${code}&beamer`;
+// Beamer koppeln (Runde 3): Zahl vom Beamer -> dessen Kennung lesen -> Gastgeber gibt Steuerrechte -> Beamer springt in den Raum
+let koppeltGerade = false;
+async function beamerKoppeln(knopfEl) {
+  if (koppeltGerade || !raum || !binAdmin()) return;
+  const f = document.getElementById("rf-kopplung");
+  const zahl = f ? f.value.replace(/\D/g, "") : "";
+  if (!KOPPLUNG.zahlGueltig(zahl)) { hinweis("Bitte die vierstellige Zahl vom Beamer eintippen"); return; }
+  koppeltGerade = true;
+  if (knopfEl) knopfEl.disabled = true;
+  try {
+    const id = await KOPPLUNG.beamerVon(zahl);
+    if (!id) { TON.spiele("falsch"); hinweis("Kein Beamer mit dieser Zahl – bitte die Zahl am Beamer prüfen"); return; }
+    senden({ typ: "_koppeln", beamer: id });
+    await KOPPLUNG.zuweisen(zahl, code);
+    if (f) f.value = "";
+    vibriere(40); TON.spiele("richtig");
+    hinweis("✓ Beamer gekoppelt – er kommt gleich in diesen Raum");
+  } catch (e) { console.warn(e); hinweis("Koppeln hat nicht geklappt – Internet prüfen und noch einmal"); }
+  finally { koppeltGerade = false; if (knopfEl && knopfEl.isConnected) knopfEl.disabled = false; }
+}
 
 // Die Steuerseite der Spielleitung (Nico 26.10.2026): alles, was den Raum und den Beamer betrifft, am Handy bedienbar
 function steuerBild() {
@@ -1508,7 +1624,12 @@ function steuerBild() {
     <div class="karte steuerseite">
       <h2>📽️ Beamer</h2>
       <p class="${n ? "ok" : "leise"}">${n ? `✓ ${n === 1 ? "Ein Beamer ist" : `${n} Beamer sind`} verbunden` : "Noch kein Beamer verbunden."}</p>
-      <p class="leise klein">Diesen Link am Gerät am Beamer öffnen (Browser, Vollbild). Der Beamer ist kein Spieler und zählt nicht als Gast.</p>
+      <div class="koppeln">
+        <h3 class="tt-unter">🔗 Beamer koppeln</h3>
+        <p class="leise klein">Am Gerät am Beamer das Lesezeichen <b>…/partyspiele/#beamer</b> öffnen. Dort steht eine große vierstellige Zahl – hier eintippen. Der Beamer kommt in diesen Raum und darf sofort steuern (mit der Maus).</p>
+        <div class="koppeln-zeile"><input id="rf-kopplung" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="z. B. 4821" aria-label="Zahl vom Beamer"><button class="gruen" data-koppeln>Koppeln</button></div>
+      </div>
+      <p class="leise klein">Oder diesen Link am Gerät am Beamer öffnen (Browser, Vollbild). Der Beamer ist kein Spieler und zählt nicht als Gast.</p>
       <div class="linkzeile" data-beamer-link="${esc(link)}">${esc(link)}</div>
       <div class="raster2"><button data-teilen="${esc(link)}">🔗 Link teilen</button><a class="knopf-link" href="${esc(link)}" target="_blank" rel="noopener">📽️ Hier öffnen</a></div>
     </div>
@@ -1757,9 +1878,10 @@ document.addEventListener("click", async (ev) => {
     zeichnen(); window.scrollTo(0, 0);
     return;
   }
-  const el = ev.target.closest("[data-anlass],[data-zurueck],#beitreten,#weitermachen,[data-ansicht],[data-a],[data-teilen],[data-ansage-mit],[data-ansage-weg],[data-steuern],[data-code],[data-raum-neu],[data-uebernehmen],[data-ende-frage],[data-neu-laden],[data-steuer-auf],[data-steuer-zu],[data-gl-reiter],[data-gl-zu],[data-br-reiter],[data-br-zu],[data-ohne-code],[data-rad-hin],[data-padname],[data-padweg]");
+  const el = ev.target.closest("[data-anlass],[data-zurueck],#beitreten,#weitermachen,[data-ansicht],[data-a],[data-teilen],[data-ansage-mit],[data-ansage-weg],[data-steuern],[data-code],[data-raum-neu],[data-uebernehmen],[data-ende-frage],[data-neu-laden],[data-steuer-auf],[data-steuer-zu],[data-gl-reiter],[data-gl-zu],[data-br-reiter],[data-br-zu],[data-ohne-code],[data-rad-hin],[data-padname],[data-padweg],[data-koppeln]");
   if (!el) return;
   if (el.dataset.gesperrt !== undefined) return;   // Ergebnis steht noch (ergebnisPruefen)
+  if (el.dataset.koppeln !== undefined) return beamerKoppeln(el);
   // Controller umbenennen oder entfernen (nur dieses Geraet; der Spieler bleibt im Raum, wie ein Handy, das geht)
   if (el.dataset.padname !== undefined || el.dataset.padweg !== undefined) {
     const k = el.dataset.padname ?? el.dataset.padweg, pad = pads[k];

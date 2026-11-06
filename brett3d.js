@@ -16,8 +16,16 @@
 //   zuschnappende Falle; Siegerpodest nach Minispielen und am Ende.
 // - Handy: automatische Qualitaetsstufen (Pixeldichte, Schatten, Lichter, Partikel). Faellt die Bildrate, geht es eine Stufe
 //   herunter. Fest einstellbar fuer Tests ueber window.__brettQualitaet = "hoch" | "mittel" | "niedrig".
+// Grossumbau Runde 3 (Nico 01.11.2026, Vorbild Pummel Party: "Pace runterfahren ... deutlich leichter sichtbar, wer was
+// bekommen hat ... Kamera faehrt an den Spieler ran, Coins fliegen rein, oben drueber plus 3 oder minus 5"):
+// - ruhigeres Tempo: Wuerfelzahl steht laenger, Figuren laufen langsamer, Pause nach der Landung
+// - Auftritt je Gewinn/Verlust (s.bilanz aus brett.js): Kamera faehrt heran, Muenzen/Herzen/Sterne fliegen sichtbar in die
+//   Figur hinein oder heraus, grosse Zahl "+3 🪙" ueber dem Kopf, echter Ton, Ereigniskarte mit Symbol im Bild, dann zurueck
+// - freie Kamera fuer den Spieler am Zug (kamera_frei.js), am Beamer die Stufe "beamer" und die Maus der Spielleitung
 import { spiele as klang } from "./ton.js";
 import * as THREE from "./vendor/three.module.js";
+import * as KF from "./kamera_frei.js";
+import { esc } from "./hilfe.js";
 
 // gleiche Farben wie die Namenspunkte: die 20 festen Spielerfarben --s0 ... --s19 aus style.css (eine Quelle, 31.10.2026)
 // (erst beim Aufbau gelesen, dann ist style.css sicher geladen)
@@ -46,15 +54,19 @@ const PODEST = V(2.5, 0, 2.1);   // Siegertreppchen (frei von Feldern und Wegen,
 const BURG = V(1.6, 0, -1.4);
 
 // ---------------------------------------------------------------- Qualitaetsstufen
-const STUFEN = ["niedrig", "mittel", "hoch"];
+// "beamer" (Runde 3, Plan 3.1 G/H): grosses Bild am Ally - Schatten 2048, alle Lichter, volle Partikel, scharfe Pixel;
+// faellt die Bildrate, geht es wie ueberall eine Stufe herunter (bildrateMessen)
+const STUFEN = ["niedrig", "mittel", "hoch", "beamer"];
 const STUFE = {
+  beamer: { pr: 1.5, schatten: 2048, lichter: 3, partikel: 1 },
   hoch: { pr: 2, schatten: 2048, lichter: 3, partikel: 1 },
   mittel: { pr: 1.5, schatten: 1024, lichter: 2, partikel: 0.6 },
   niedrig: { pr: 1, schatten: 0, lichter: 0, partikel: 0.3 },
 };
-function startStufe() {
+function startStufe(beamer = false) {
   const vor = (typeof globalThis !== "undefined" && globalThis.__brettQualitaet) || lsLesen("pa_brett_qualitaet");
   if (STUFE[vor]) return { stufe: vor, fest: true };
+  if (beamer) return { stufe: "beamer", fest: false };
   const handy = (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) || window.innerWidth < 700;
   return { stufe: handy ? "mittel" : "hoch", fest: false };
 }
@@ -176,7 +188,28 @@ function wuerfelMaterialien() {
 const WUERFEL_VORN = { 3: [0, 0, 0], 4: [0, Math.PI, 0], 1: [0, -Math.PI / 2, 0], 6: [0, Math.PI / 2, 0], 2: [Math.PI / 2, 0, 0], 5: [-Math.PI / 2, 0, 0] };
 const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _vz = new THREE.Vector3(0, 0, 1);
 // Zeitplan des Wurfs (Sekunden ab dem Wurf): Figur springt, trifft den Block, Zahl steht, dann geht es los
-const WURF = { sprung: 0.08, treffer: 0.32, los: 0.95, weg: 1.25 };
+// (Runde 3: ruhiger - die Zahl steht gut eine Sekunde, vorher 0,6 s)
+export const WURF = { sprung: 0.1, treffer: 0.42, los: 1.6, weg: 1.95 };
+export const LAUF = 2.5;            // Felder pro Sekunde (vorher 3,4)
+const SPRUNG = 1.25;                // Spruenge (Tausch, Rohr, Portal) je Sekunde
+// Auftritt: Pause nach der Landung, Fahrt heran, Zeigen, Fahrt zurueck (Sekunden)
+export const AUFTRITT = { pause: 0.5, hin: 0.75, halten: 2.6, zurueck: 0.65 };
+export const AUFTRITT_DAUER = AUFTRITT.pause + AUFTRITT.hin + AUFTRITT.halten + AUFTRITT.zurueck;
+const UEBERFLUG = 3.6;              // Rundenbeginn: Ueberflug, Stern, Figur (Summe der Fahrt "runde")
+// Wie lange das Brett nach diesem Stand noch vorfuehrt (Sekunden): Wurf, Laufen, Auftritt - brett.js sperrt so lange
+// "Weiter" und laesst die Computer-Spieler warten (Tempo, Nico 01.11.2026)
+export function vorfuehrDauer(s) {
+  if (!s || s.ende || s.phase === "mini" || s.phase === "dkampf" || s.phase === "bonus") return 0;
+  let t = 0;
+  const frisch = s.bilanz && s.bilanz.zug === s.zug;
+  if (s.wurf && s.spur && s.spur.j === s.dran && s.phase !== "wuerfeln") {
+    const schritte = Math.max(0, (s.spur.felder || []).length - 1);
+    t += (s.spur.sprung ? 0 : WURF.los) + (s.spur.sprung ? 1 / SPRUNG : schritte / LAUF) + 0.2;
+  }
+  if (s.phase === "wuerfeln" && !s.wurf && s.rundeZug === s.zug) t += UEBERFLUG;
+  if (frisch) t += AUFTRITT_DAUER;
+  return Math.min(11, t);
+}
 
 // ---------------------------------------------------------------- Gruppen aus vielen gleichen Teilen (ein Zeichenaufruf)
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3();
@@ -243,7 +276,7 @@ function figurBauen(farbe, look) {
 function aufbauen(muster, anzahlSpieler, brett) {
   const look = lookVon(), vulkan = brett.welt === "vulkan", L = LOOKS[vulkan ? "vulkan" : look];
   const nh = brett.nh || 36;   // Felder der Hauptrunde (danach Abkuerzung/Umweg)
-  const st = startStufe(), Q = STUFE[st.stufe];
+  const st = startStufe(!!brett.beamer), Q = STUFE[st.stufe];
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "default" });
   renderer.setPixelRatio(Math.min(Q.pr, window.devicePixelRatio || 1));
   renderer.shadowMap.enabled = true;
@@ -630,7 +663,11 @@ function aufbauen(muster, anzahlSpieler, brett) {
   });
   const muenzMat = new THREE.MeshStandardMaterial({ color: 0xffcf3a, metalness: 0.7, roughness: 0.25, emissive: 0x8a5a00, emissiveIntensity: 0.5 });
   const muenzGeo = new THREE.CylinderGeometry(0.17, 0.17, 0.05, 18); muenzGeo.rotateX(Math.PI / 2);
-  const muenzen = Array.from({ length: 16 }, () => { const m = new THREE.Mesh(muenzGeo, muenzMat); m.visible = false; scene.add(m); return { m, t: 1, dauer: 1 }; });
+  const muenzen = Array.from({ length: 32 }, () => { const m = new THREE.Mesh(muenzGeo, muenzMat); m.visible = false; scene.add(m); return { m, t: 1, dauer: 1 }; });
+  // Auftritt (Runde 3): Herzen fliegen wie Muenzen, ein grosser Feierstern faellt in die Figur
+  const herzen = Array.from({ length: 12 }, () => { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: emojiTextur("❤️"), transparent: true, depthWrite: false })); m.scale.set(0.55, 0.55, 1); m.visible = false; scene.add(m); return { m, t: 1, dauer: 1 }; });
+  const feierStern = new THREE.Mesh(sternGeo, new THREE.MeshStandardMaterial({ color: 0xffd23f, emissive: 0xffb300, emissiveIntensity: 1.1, metalness: 0.3, roughness: 0.25 }));
+  feierStern.visible = false; feierStern.castShadow = true; scene.add(feierStern);
   const blase = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), new THREE.MeshStandardMaterial({ color: 0x7fe3ff, emissive: 0x3fd0ff, emissiveIntensity: 0.6, transparent: true, opacity: 0.28, depthWrite: false }));
   blase.visible = false; scene.add(blase);
   const rohrMat = new THREE.MeshStandardMaterial({ color: 0x2fbf62, emissive: 0x1d7a3e, emissiveIntensity: 0.5, roughness: 0.35, metalness: 0.2 });
@@ -654,15 +691,18 @@ function aufbauen(muster, anzahlSpieler, brett) {
   scene.add(podest);
 
   g = { renderer, scene, camera, mess, sonne, lichter, felder, figuren, stern, sternLicht, saeule, ring, wuerfel, wuerfelMat, zaehler, funken, funkenNr: 0,
-    muenzen, blase, rohre, podest, PODEST_STUFE, geist, flederm, irrlichter, lichtBasis, nebel, brandung, n, lage, look,
+    muenzen, herzen, feierStern, auftritte: [], auftritt: null, auftrittZahl: 0, grossZahlen: [], karteHTML: "", zaehlerMax: 0, beamer: !!brett.beamer, kam: null,
+    blase, rohre, podest, PODEST_STUFE, geist, flederm, irrlichter, lichtBasis, nebel, brandung, n, lage, look,
     welt: vulkan ? "vulkan" : "insel", krater, rauch, portale, truhen, blitze, geschosse: [], marker: {}, wackelBis: 0, muenzGeo, muenzMat,
     stufe: st.stufe, stufeFest: st.fest, mess_dt: [], wurfSchluessel: null, wurf: null, uhr: new THREE.Clock(), container: null, aktiv: 0, laeuft: false,
     schweber: [], fallenObj: {}, schnapp: [], effektNr: null, nachLanden: [], fahrt: null, phase: "", sieger: null, hoehe: 0.82,
     folgen: lsLesen("pa_brett_kamera") !== "uebersicht" && !wenigBewegung(), sternFlug: null, sternPos: V(), wuerfelZahl: 1, wuerfelKlein: false,
     kamP: V(0, 23.5, 20), kamL: V(0, 0, 0.8), uebersichtCache: {}, bilder: 0 };
   camera.position.copy(g.kamP); camera.lookAt(g.kamL);
-  // ein Tipp aufs Bild ueberspringt die laufende Kamerafahrt
-  renderer.domElement.addEventListener("pointerdown", () => { if (g && g.fahrt) g.fahrt = null; });
+  // ein Tipp aufs Bild ueberspringt die laufende Kamerafahrt (auch den Auftritt); wer am Zug ist, fuehrt die Kamera
+  // mit Finger, Maus oder Controller (kamera_frei.js)
+  renderer.domElement.addEventListener("pointerdown", () => { if (g && g.fahrt) g.fahrt = null; if (g && g.auftritt && g.auftritt.stufe === "zeigen") g.auftritt.weg = true; });
+  KF.binden(renderer.domElement, { beiAenderung: () => { if (g) { g.fahrt = null; freiKnopfZeigen(); } } });
   qualitaetAnwenden();
 }
 
@@ -717,7 +757,7 @@ function muenzenFliegen(von, nach, anzahl, art) {
   frei.forEach((x, k) => {
     x.t = -k * 0.07; x.dauer = art === "bogen" ? 0.9 : 1.1; x.art = art; x.von = von.clone(); x.nach = (nach || von).clone();
     x.seite = V((Math.random() - 0.5) * 1.6, 0, (Math.random() - 0.5) * 1.6);
-    x.m.visible = false;
+    x.m.visible = false; x.m.scale.setScalar(1);
   });
 }
 const figurPos = (j) => (g.figuren[j] ? g.figuren[j].obj.position.clone().setY(FELD_OBEN) : V());
@@ -725,21 +765,17 @@ function gefuehl(j, art, dauer = 1.8) { const f = g.figuren[j]; if (f) f.gefuehl
 // erst ausloesen, wenn die Figur angekommen ist (sonst nach spaetestens 7 s)
 function nachDerLandung(j, fn) { g.nachLanden.push({ j, fn, bis: g.uhr.elapsedTime + 7 }); }
 
+// Seit Runde 3 zeigt der Auftritt (s.bilanz) Zahlen, fliegende Muenzen, Herzen und Sterne - hier bleiben nur die
+// besonderen Bilder je Ereignis (Geschosse, Blitze, Blase, Wirbel ...), ohne eigene "+3"-Schrift (sonst doppelt)
 function effektZeigen(e) {
   const p = figurPos(e.j);
   if (e.art === "muenzen") {
     if (e.von !== undefined && g.figuren[e.von] && e.wert > 0) {   // Muenzmagnet: vom Bestohlenen zum Dieb
       muenzenFliegen(figurPos(e.von).setY(1.4), p.clone().setY(1.4), e.wert, "bogen");
       gefuehl(e.j, "jubel"); gefuehl(e.von, "trauer");
-    } else {
-      muenzenFliegen(p.clone().setY(1.2), null, Math.abs(e.wert), e.wert > 0 ? "hoch" : "fallen");
-      gefuehl(e.j, e.wert > 0 ? "jubel" : "trauer", 1.5);
-    }
-    schweben(`${e.wert > 0 ? "+" : "−"}${Math.abs(e.wert)} 🪙`, e.wert > 0 ? "#ffd23f" : "#ff6b6b", p);
-    if (e.wert > 0) funkenAn(p, 0.13, 0.5);
+    } else gefuehl(e.j, e.wert > 0 ? "jubel" : "trauer", 1.5);
   } else if (e.art === "stern") {
-    funkenAn(p); funkenAn(p, 0.14); schweben("+1 ⭐", "#ffe27a", p); gefuehl(e.j, "jubel", 2.4);
-    zoomFahrt(e.j, "stern");
+    gefuehl(e.j, "jubel", 2.4);
   } else if (e.art === "ereignis") {
     funkenAn(p, 0.62); schweben("❓", "#9fb8ff", p);
     zoomFahrt(e.j, "ereignis");
@@ -752,17 +788,16 @@ function effektZeigen(e) {
   } else if (e.art === "tausch") {
     funkenAn(p, 0.78); if (e.ziel !== undefined) funkenAn(figurPos(e.ziel), 0.78);
   } else if (e.art === "schaden") {
-    const treffer = () => { funkenAn(figurPos(e.j), 0.0, 0.5); schweben(`−${Math.abs(e.wert)} ❤️`, "#ff5b5b", figurPos(e.j)); gefuehl(e.j, "trauer", 1.6); };
+    const treffer = () => { funkenAn(figurPos(e.j), 0.0, 0.5); gefuehl(e.j, "trauer", 1.6); };
     const q = e.quelle;
     if (q && q.von !== undefined && g.figuren[q.von]) { gefuehl(q.von, "jubel", 1.2); geschoss(figurPos(q.von).setY(1.2), () => figurPos(e.j).setY(1.0), q.art === "faust" ? "🥊" : "🏹", treffer); }
     else treffer();
   } else if (e.art === "heilen") {
-    funkenAn(p, 0.92, 0.6); if (e.wert) schweben(`+${e.wert} ❤️`, "#ff8ad8", p); gefuehl(e.j, "jubel", 1.2);
+    funkenAn(p, 0.92, 0.6); gefuehl(e.j, "jubel", 1.2);
   } else if (e.art === "ko") {
     // am Unglücksfeld: graue Wolke und "K.O."; die Figur fliegt zum Start (Sprung, siehe Uebernahme der Positionen)
     const ort = e.feld !== undefined && g.lage[e.feld] ? g.lage[e.feld].clone() : p;
     funkenAn(ort, 0.0, 0.8); funkenAn(ort, 0.6, 0.4); schweben("K.O. 💫", "#ffffff", ort); wackeln(0.35);
-    if (e.wert) schweben(`−${Math.abs(e.wert)} 🪙`, "#ff6b6b", ort.clone().setY(-0.8));
     zoomFahrt(e.j, "ko");
   } else if (e.art === "flaeche") {
     // mehrere Getroffene auf einmal: Blitz, Bombe, Gift, Vulkanausbruch
@@ -774,7 +809,8 @@ function effektZeigen(e) {
         const q = figurPos(z.j);
         if (z.schild) { g.blase.userData = { j: z.j, t: 0 }; g.blase.visible = true; schweben("🛡️", "#7fe3ff", q); return; }
         funkenAn(q, e.quelle === "gift" ? 0.33 : e.quelle === "blitz" ? 0.15 : 0.05, 0.6);
-        schweben(z.ko ? "K.O. 💫" : `−${Math.abs(z.wert)} ❤️`, z.ko ? "#ffffff" : "#ff5b5b", q); gefuehl(z.j, "trauer", 1.6);
+        if (z.ko) schweben("K.O. 💫", "#ffffff", q);
+        gefuehl(z.j, "trauer", 1.6);
       };
       if (e.quelle === "blitz") { blitz(figurPos(z.j)); setTimeout(zeig, 120 + k * 60); }
       else if (e.quelle === "ausbruch" && g.krater) geschoss(g.krater.pos.clone(), () => figurPos(z.j).setY(0.8), "🔥", zeig, 1.1 + k * 0.12);
@@ -783,11 +819,11 @@ function effektZeigen(e) {
     if (!ziele.length && e.quelle === "blitz") blitz(p.clone().add(V(1.5, 0, 0)));
   } else if (e.art === "rakete") {
     funkenAn(p, 0.06, 0.8); gefuehl(e.j, "jubel", 1.4);
-    (e.ziele || []).forEach((z) => { const q = figurPos(z.j); funkenAn(q, 0.05, 0.5); schweben(z.ko ? "K.O. 💫" : `−${Math.abs(z.wert)} ❤️`, "#ff5b5b", q); gefuehl(z.j, "trauer", 1.4); });
+    (e.ziele || []).forEach((z) => { const q = figurPos(z.j); funkenAn(q, 0.05, 0.5); if (z.ko) schweben("K.O. 💫", "#ffffff", q); gefuehl(z.j, "trauer", 1.4); });
   } else if (e.art === "portal") {
     funkenAn(p, 0.75, 0.9); schweben("🌀", "#c9a6ff", p);
   } else if (e.art === "truhe") {
-    funkenAn(p, 0.13, 0.7); schweben(`${e.inhalt || "🧰"}${e.wert ? ` +${e.wert}` : ""}`, "#ffd23f", p); gefuehl(e.j, "jubel", 1.4);
+    funkenAn(p, 0.13, 0.7); if (e.inhalt && e.inhalt !== "🪙") schweben(e.inhalt, "#ffd23f", p); gefuehl(e.j, "jubel", 1.4);
     const t = g.truhen.find((x) => x.feld === g.figuren[e.j].anzeige) || g.truhen.reduce((a, x) => (!a || g.lage[x.feld].distanceTo(p) < g.lage[a.feld].distanceTo(p) ? x : a), null);
     if (t) t.auf = 1.8;
   } else if (e.art === "gift" || e.art === "fluch") {
@@ -847,6 +883,156 @@ function markerAbgleichen(s) {
     if (art === "sperre") { const nx = g.lage[(g.next[f] || [f])[0]] || p; o.lookAt(nx.x, FELD_OBEN, nx.z); }   // Balken quer zum Weg
     o.userData.art = art; g.scene.add(o); g.marker[k] = o;
   });
+}
+
+// ---------------------------------------------------------------- Auftritt: Gewinn und Verlust gross zeigen (Runde 3)
+// b = s.bilanz aus brett.js: { nr, zug, emo, titel, text, liste: [{ j, m, st, lp }] } (m Muenzen, st Sterne, lp Lebenspunkte)
+function auftrittPlanen(b, namen) {
+  if (!b || !Array.isArray(b.liste)) return;
+  g.auftritte.push({ b, namen: namen || [], t: 0, stufe: "warten", gewartet: 0 });
+  if (g.auftritte.length > 3) g.auftritte.splice(0, g.auftritte.length - 3);   // nie lange hinterherhinken
+}
+const istUnterwegs = (j) => { const f = g.figuren[j]; return !!f && (f.pfad.length > 0 || f.startIn > 0); };
+function auftrittTakt(dt) {
+  let a = g.auftritt;
+  if (!a && g.auftritte.length) { a = g.auftritt = g.auftritte.shift(); g.auftrittZahl++; }
+  if (!a) return;
+  const wer = a.b.liste.map((x) => x.j).filter((j) => g.figuren[j]);
+  if (a.stufe === "warten") {
+    a.gewartet += dt;
+    const warten = (wer.some(istUnterwegs) || istUnterwegs(g.aktiv) || (g.fahrt && g.fahrt.name === "runde")) && a.gewartet < 12;
+    if (warten) { a.t = 0; return; }
+    a.t += dt;
+    if (a.t < AUFTRITT.pause) return;
+    a.stufe = "zeigen"; a.t = 0; a.gezeigt = false;
+    karteZeigen(a.b, a.namen);
+    if (!KF.K.an) fahrtStarten("auftritt", [{ ziel: () => auftrittPose(wer), dauer: AUFTRITT.hin, halten: AUFTRITT.halten }, { ziel: () => ruhePose(), dauer: AUFTRITT.zurueck }]);
+  }
+  a.t += dt;
+  const fahrt = g.fahrt && g.fahrt.name === "auftritt";
+  if (!a.gezeigt && (a.t >= AUFTRITT.hin * 0.85 || !fahrt)) { a.gezeigt = true; zahlenZeigen(a.b); }
+  if (a.weg && g.fahrt && g.fahrt.name === "auftritt") g.fahrt = null;
+  if (a.t >= AUFTRITT.hin + AUFTRITT.halten + (a.weg ? 0 : AUFTRITT.zurueck) || (a.weg && a.gezeigt && a.t > 0.3)) { karteWeg(); g.auftritt = null; }
+}
+// Kamera: eine Figur nah von vorn (Zahl ueber dem Kopf noch im Bild), mehrere Figuren gemeinsam im Bild
+function auftrittPose(wer) {
+  if (wer.length <= 1) {
+    const f = g.figuren[wer.length ? wer[0] : g.aktiv];
+    if (!f) return ruhePose();
+    const l = f.boden.clone().setY(1.5);
+    return pose(l.clone().addScaledVector(NAH_RICHTUNG, 6.6), l);
+  }
+  const punkte = wer.flatMap((j) => { const b = g.figuren[j].boden; return [b.clone().setY(0), b.clone().setY(3.4)]; });
+  const l = punkte.reduce((x, y) => x.add(y.clone()), V()).multiplyScalar(1 / punkte.length).setY(1.2);
+  const d = passendAbstand(l, NAH_RICHTUNG, punkte, 5, 48, 0.72);
+  return pose(l.clone().addScaledVector(NAH_RICHTUNG, d), l);
+}
+const vz = (x) => (x > 0 ? "+" : "−") + Math.abs(x);
+function zahlenZeigen(b) {
+  let summe = 0, stern = false, muenz = 0, herz = 0;
+  b.liste.forEach((e, k) => {
+    if (!g.figuren[e.j]) return;
+    const zeilen = [];
+    if (e.st) zeilen.push([`${vz(e.st)} ⭐`, e.st > 0 ? "#ffe27a" : "#ff6b6b"]);
+    if (e.m) zeilen.push([`${vz(e.m)} 🪙`, e.m > 0 ? "#ffd23f" : "#ff6b6b"]);
+    if (e.lp) zeilen.push([`${vz(e.lp)} ❤️`, e.lp > 0 ? "#ff8ad8" : "#ff5b5b"]);
+    zeilen.forEach(([t, farbe], z) => grosseZahl(t, farbe, e.j, zeilen.length - 1 - z, k * 0.12));
+    if (e.m) { muenzenStrom(e.j, e.m, k * 0.1); muenz += e.m; }
+    if (e.st) { sternFeier(e.j, e.st); stern = stern || e.st > 0; }
+    if (e.lp) { herzenStrom(e.j, e.lp, k * 0.1); herz += e.lp; }
+    const gut = (e.st || 0) * 20 + (e.m || 0) + (e.lp || 0) * 0.3;
+    summe += gut;
+    gefuehl(e.j, gut >= 0 ? "jubel" : "trauer", AUFTRITT.halten);
+    if (gut > 0) funkenAn(figurPos(e.j), e.st > 0 ? 0.14 : 0.13, 0.5);
+  });
+  if (b.liste.length > 1 || Math.abs(summe) > 9) wackeln(0.25);
+  // zwei echte Klaenge: erst das Ding (Sterne, Muenzen, Treffer), dann gut oder schlecht
+  const erst = stern ? "stern" : muenz ? "muenzen" : herz < 0 ? "aua" : herz > 0 ? "magie" : null;
+  if (erst) klang(erst);
+  const dann = stern ? "fanfare" : summe > 0 ? "richtig" : summe < 0 ? "falsch" : null;
+  if (dann) setTimeout(() => klang(dann), 420);
+}
+// grosse schwebende Zahl ueber der Figur (zeile 0 = unten); springt auf, bleibt stehen, verblasst am Ende
+function grosseZahl(text, farbe, j, zeile, verz = 0) {
+  const c = document.createElement("canvas"); c.width = 512; c.height = 176;
+  const x = c.getContext("2d");
+  x.font = "900 128px sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
+  x.lineJoin = "round"; x.lineWidth = 22; x.strokeStyle = "#0b0b18"; x.strokeText(text, 256, 92);
+  x.fillStyle = farbe; x.fillText(text, 256, 92);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false, depthTest: false }));
+  sp.renderOrder = 10; sp.scale.set(0.01, 0.01, 1); g.scene.add(sp);
+  g.grossZahlen.push({ sp, j, zeile, t: -verz, dauer: AUFTRITT.halten + 0.35 });
+}
+// Muenzen: Gewinn = aus einem Kranz ueber der Figur hinein in den Bauch; Verlust = aus dem Bauch heraus, fallen zu Boden
+function muenzenStrom(j, d, verz = 0) {
+  const n = Math.max(3, Math.min(12, Math.abs(d)));
+  const frei = g.muenzen.filter((x) => x.t >= x.dauer).slice(0, n);
+  const mitte = figurPos(j).setY(1.0);
+  frei.forEach((x, k) => {
+    const w = k * 2.4 + Math.random() * 0.4;
+    x.t = -verz - k * 0.09; x.dauer = d > 0 ? 0.62 : 0.95; x.art = d > 0 ? "rein" : "raus"; x.j = j;
+    x.von = d > 0 ? mitte.clone().add(V(Math.cos(w) * 2.3, 2.6 + (k % 3) * 0.35, Math.sin(w) * 2.3)) : mitte.clone();
+    x.nach = mitte.clone();
+    x.seite = V(Math.cos(w), 0, Math.sin(w)).multiplyScalar(1.6 + Math.random() * 0.9);
+    x.m.visible = false; x.m.scale.setScalar(1.25);
+  });
+}
+// ein fliegendes Teil des Auftritts (Muenze oder Herz) zum Zeitpunkt u (0..1)
+function flugTeil(x, u) {
+  const f = g.figuren[x.j];
+  const mitte = f ? f.obj.position.clone().setY(f.obj.position.y + 0.85) : x.von;
+  if (x.art === "rein") {
+    const k = u * u * (3 - 2 * u);
+    x.m.position.lerpVectors(x.von, mitte, k);
+    x.m.position.y += Math.sin(u * Math.PI) * 0.6;
+    x.m.scale.setScalar((x.m.isSprite ? 0.55 : 1.25) * (u > 0.82 ? Math.max(0.05, 1 - (u - 0.82) * 5) : 1));
+  } else {
+    x.m.position.copy(x.von).addScaledVector(x.seite, u);
+    x.m.position.y = x.von.y + u * 2.6 - u * u * 3.4;
+    x.m.scale.setScalar((x.m.isSprite ? 0.55 : 1.25) * (u > 0.8 ? Math.max(0.05, 1 - (u - 0.8) * 5) : 1));
+  }
+}
+function herzenStrom(j, d, verz = 0) {
+  const n = Math.max(2, Math.min(8, Math.round(Math.abs(d) / 2)));
+  const frei = g.herzen.filter((x) => x.t >= x.dauer).slice(0, n);
+  const mitte = figurPos(j).setY(1.0);
+  frei.forEach((x, k) => {
+    const w = k * 2.1 + 0.5;
+    x.t = -verz - k * 0.11; x.dauer = d > 0 ? 0.7 : 1.0; x.art = d > 0 ? "rein" : "raus"; x.j = j;
+    x.von = d > 0 ? mitte.clone().add(V(Math.cos(w) * 1.9, 2.4, Math.sin(w) * 1.9)) : mitte.clone();
+    x.seite = V(Math.cos(w), 0, Math.sin(w)).multiplyScalar(1.4 + Math.random() * 0.6);
+    x.m.visible = false;
+  });
+}
+// grosser Stern faellt drehend in die Figur (Gewinn) bzw. steigt aus ihr auf und fliegt davon (Verlust)
+function sternFeier(j, d) {
+  g.feierStern.userData = { j, t: 0, dauer: 1.25, rein: d > 0 };
+  g.feierStern.visible = false;
+}
+// Ereigniskarte im Bild: Symbol, was passiert ist, und je Spieler die Aenderung (Farbpunkt, Name, Zahlen)
+function karteZeigen(b, namen) {
+  const chips = b.liste.map((e) => {
+    const teile = [e.st ? `${vz(e.st)} ⭐` : "", e.m ? `${vz(e.m)} 🪙` : "", e.lp ? `${vz(e.lp)} ❤️` : ""].filter(Boolean);
+    const gut = (e.st || 0) * 20 + (e.m || 0) + (e.lp || 0) * 0.3;
+    return `<span class="b3k-chip ${gut >= 0 ? "gut" : "schlecht"}"><i class="farbe f${e.j % 20}"></i>${esc(namen[e.j] || "")} <b>${teile.join(" ")}</b></span>`;
+  }).join("");
+  g.karteHTML = `<span class="b3k-emo">${esc(b.emo || "✨")}</span><span class="b3k-text">${b.titel ? `<b>${esc(b.titel)}</b>` : ""}${b.text ? `<small>${esc(b.text)}</small>` : ""}</span>${chips ? `<span class="b3k-chips">${chips}</span>` : ""}`;
+  karteSetzen(true);
+}
+function karteSetzen(neu = false) {
+  const c = g.container;
+  if (!c) return;
+  let el = c.querySelector(".b3-karte");
+  if (!g.karteHTML) { if (el) el.remove(); return; }
+  if (!el) { el = document.createElement("div"); el.className = "b3-karte"; el.setAttribute("role", "status"); c.appendChild(el); neu = true; }
+  if (el.innerHTML !== g.karteHTML) el.innerHTML = g.karteHTML;
+  if (neu) { el.classList.remove("rein", "weg"); void el.offsetWidth; el.classList.add("rein"); }
+}
+function karteWeg() {
+  g.karteHTML = "";
+  const el = g.container && g.container.querySelector(".b3-karte");
+  if (el) { el.classList.add("weg"); setTimeout(() => { if (!g || !g.karteHTML) el.remove(); }, 380); }
 }
 
 // ---------------------------------------------------------------- Kamera-Regie
@@ -927,6 +1113,7 @@ const fahrtenAn = () => g.folgen && !(typeof globalThis !== "undefined" && globa
 // Ruhelage ohne Fahrt: je nach Lage im Zug
 function ruhePose() {
   if (g.sieger) return siegerPose();
+  if (KF.K.an) { const q = KF.pose(); return pose(V(q.p.x, q.p.y, q.p.z), V(q.l.x, q.l.y, q.l.z)); }   // freie Kamera
   if (!fahrtenAn()) return uebersichtPose();
   const j = g.aktiv, f = g.figuren[j];
   if (!f) return uebersichtPose();
@@ -936,8 +1123,10 @@ function ruhePose() {
   return folgePose(j);
 }
 function fahrtStarten(name, schritte) {
-  if (!fahrtenAn() || g.sieger) return;
+  if (!fahrtenAn() || g.sieger || KF.K.an) return;
   g.fahrt = { name, schritte, i: 0, t: 0, von: pose(g.kamP.clone(), g.kamL.clone()) };
+  g.fahrtenListe = [...(g.fahrtenListe || []), name].slice(-8);   // fuer die Tests: welche Fahrten zuletzt liefen
+  g.nahMin = 99;   // naechster Kameraabstand dieser Fahrt (fuer die Tests: Fotos halten das Zeichnen an)
 }
 function zoomFahrt(j, name) {
   if (g.fahrt && g.fahrt.name === "runde") return;
@@ -956,10 +1145,13 @@ function kameraBewegen(dt) {
       if (fa.i >= fa.schritte.length) g.fahrt = null;
     }
     g.kamP.copy(ziel.p); g.kamL.copy(ziel.l);
+    g.nahMin = Math.min(g.nahMin || 99, g.kamP.distanceTo(g.kamL));
   } else {
     ziel = ruhePose();
-    const k = 1 - Math.exp(-dt * 3.2);
-    g.kamP.lerp(ziel.p, k); g.kamL.lerp(ziel.l, 1 - Math.exp(-dt * 4.2));
+    // freie Kamera: selbst gefuehrt fast ohne Nachlauf, von der Leitung weich nachgezogen
+    const schnell = KF.K.an && KF.K.quelle !== "fern" ? 4 : 1;
+    const k = 1 - Math.exp(-dt * 3.2 * schnell);
+    g.kamP.lerp(ziel.p, k); g.kamL.lerp(ziel.l, 1 - Math.exp(-dt * 4.2 * schnell));
   }
   g.camera.position.copy(g.kamP); g.camera.lookAt(g.kamL); g.camera.updateMatrixWorld();
   // Nebel wandert mit dem Abstand (beginnt kurz vor dem Blickpunkt)
@@ -974,7 +1166,8 @@ function schleife(gen) {
   if (!g || !g.laeuft || g.gen !== gen) return;
   requestAnimationFrame(() => schleife(gen));
   if (!g.container || !g.container.isConnected) return;
-  const dt = Math.min(0.05, g.uhr.getDelta());
+  // bis 10 Bilder/s laeuft die Spielzeit mit der echten Uhr (die Weiter-Sperre in brett.js rechnet in echter Zeit)
+  const dt = Math.min(0.1, g.uhr.getDelta());
   const t = g.uhr.elapsedTime;
   g.bilder++;
   bildrateMessen(dt);
@@ -994,7 +1187,7 @@ function schleife(gen) {
       const laufend = f.pfad.length > 0 && f.startIn <= 0;
       let a = g.lage[f.anzeige], b = laufend ? g.lage[f.pfad[0]] : a;
       if (laufend) {
-        f.huepfen += dt * (f.sprung ? 1.6 : 3.4);
+        f.huepfen += dt * (f.sprung ? SPRUNG : LAUF);
         if (f.huepfen >= 1) {
           f.huepfen = 0; f.anzeige = f.pfad.shift(); klang("schritt");
           a = g.lage[f.anzeige]; b = f.pfad.length ? g.lage[f.pfad[0]] : a;
@@ -1132,6 +1325,7 @@ function schleife(gen) {
   if (g.zaehler.visible) {
     if (g.zaehler.userData.n !== rest) { g.zaehler.material.map = zahlTextur(rest); g.zaehler.userData.n = rest; }
     g.zaehler.position.copy(lf.obj.position).y += 2.25;
+    g.zaehlerMax = Math.max(g.zaehlerMax, rest);
   }
 
   // ---- Funken, Muenzen, Blase, Rohre
@@ -1150,8 +1344,44 @@ function schleife(gen) {
     x.m.visible = u < 1;
     if (x.art === "bogen") { x.m.position.lerpVectors(x.von, x.nach, u); x.m.position.y += Math.sin(u * Math.PI) * 2.4; }
     else if (x.art === "hoch") { x.m.position.copy(x.von).addScaledVector(x.seite, u * 0.5); x.m.position.y += u * 2.2 - u * u * 0.6; x.m.scale.setScalar(1 - Math.max(0, u - 0.7) * 3); }
+    else if (x.art === "rein" || x.art === "raus") flugTeil(x, u);
     else { x.m.position.copy(x.von).addScaledVector(x.seite, u * 1.4); x.m.position.y += u * 1.6 - u * u * 3.6; }
     x.m.rotation.y += dt * 12;
+  });
+  // Auftritt: Herzen, Feierstern, grosse Zahlen
+  g.herzen.forEach((x) => {
+    if (x.t >= x.dauer) { x.m.visible = false; return; }
+    x.t += dt;
+    if (x.t < 0) return;
+    const u = Math.min(1, x.t / x.dauer);
+    x.m.visible = u < 1;
+    flugTeil(x, u);
+  });
+  const fs = g.feierStern, fd = fs.userData;
+  if (fd && fd.dauer && fd.t < fd.dauer) {
+    fd.t += dt;
+    const u = Math.min(1, fd.t / fd.dauer), f = g.figuren[fd.j];
+    fs.visible = u < 1 && !!f;
+    if (f) {
+      const p = f.obj.position, k = fd.rein ? sanft(u) : u;
+      fs.position.set(p.x, fd.rein ? 1.1 + (1 - k) * 5.5 : 1.1 + k * 6, p.z);
+      if (!fd.rein) fs.position.x += k * 2.5;
+      fs.rotation.set(0.3, fd.t * 9, 0);
+      fs.scale.setScalar(fd.rein ? 1.35 - k * 0.9 : 1 - k * 0.5);
+      if (fd.rein && u >= 1 && !fd.platzt) { fd.platzt = true; funkenAn(p.clone().setY(FELD_OBEN), 0.14, 1.2); funkenAn(p.clone().setY(FELD_OBEN)); }
+    }
+  }
+  g.grossZahlen = g.grossZahlen.filter((x) => {
+    x.t += dt;
+    const f = g.figuren[x.j];
+    if (x.t < 0) return true;
+    if (!f || x.t > x.dauer) { g.scene.remove(x.sp); x.sp.material.map.dispose(); x.sp.material.dispose(); return false; }
+    const pop = x.t < 0.18 ? (x.t / 0.18) * 1.25 : x.t < 0.32 ? 1.25 - ((x.t - 0.18) / 0.14) * 0.25 : 1;
+    const gr = 1.15 * pop;
+    x.sp.scale.set(2.9 * gr, 1.0 * gr, 1);
+    x.sp.position.set(f.obj.position.x, f.obj.position.y + 2.55 + x.zeile * 0.92 + Math.sin(x.t * 3) * 0.06 + Math.min(0.4, x.t * 0.15), f.obj.position.z);
+    x.sp.material.opacity = Math.min(1, Math.max(0, (x.dauer - x.t) / 0.35));
+    return true;
   });
   if (g.blase.visible) {
     const b = g.blase.userData; b.t += dt;
@@ -1233,6 +1463,12 @@ function schleife(gen) {
     f.lpSchild.visible = !g.sieger && n < LP_MAX && !verdeckt && !(f === dranLauf && f.pfad.length);
   });
 
+  // freie Kamera: Lage von der Leitung (wer am Zug ist), Controller dieses Geraets; dann der Auftritt
+  const freiVorher = KF.K.an;
+  if (g.kam && g.kam.lesen && !g.sieger) { try { KF.fern(g.kam.lesen()); } catch (e) { /* Leitung ist Beiwerk */ } }
+  if (!g.sieger && KF.padTakt(dt, g.groesse ? g.groesse[1] : 600)) g.fahrt = null;
+  if (KF.K.an !== freiVorher) freiKnopfZeigen();
+  if (!g.sieger) auftrittTakt(dt);
   kameraBewegen(dt);
   if (g.wackelBis > t) { const st = Math.min(1, g.wackelBis - t) * 0.16; g.camera.position.add(V((Math.random() - 0.5) * st, (Math.random() - 0.5) * st, (Math.random() - 0.5) * st)); }
   g.renderer.render(g.scene, g.camera);
@@ -1272,7 +1508,39 @@ export function kameraStand() {
   if (!g) return null;
   return { fahrt: g.fahrt ? g.fahrt.name : null, folgen: fahrtenAn(), abstand: +g.kamP.distanceTo(g.kamL).toFixed(2), stufe: g.stufe, sieger: !!g.sieger,
     wuerfel: g.wuerfel.filter((x) => x.visible).length, zaehler: g.zaehler.visible ? g.zaehler.userData.n : 0, look: g.look, bilder: g.bilder,
-    laufen: g.figuren.some((f) => f.pfad.length > 0 || f.startIn > 0) };
+    laufen: g.figuren.some((f) => f.pfad.length > 0 || f.startIn > 0),
+    // Runde 3: hoechster Schrittzaehler seit dem letzten Wurf, Auftritt, Ereigniskarte, schwebende Zahlen, freie Kamera
+    zaehlerMax: g.zaehlerMax, nahMin: +(g.nahMin || 99).toFixed(2), fahrten: (g.fahrtenListe || []).slice(), auftritt: g.auftritt ? g.auftritt.stufe : null, auftritte: g.auftrittZahl, karte: !!g.karteHTML,
+    zahlen: g.grossZahlen.filter((x) => x.t >= 0).length, muenzenFliegen: g.muenzen.filter((x) => x.m.visible).length,
+    frei: KF.K.an, freiQuelle: KF.K.quelle, freiDarf: KF.darf(), blick: [+g.kamL.x.toFixed(2), +g.kamL.z.toFixed(2)],
+    kameraHoehe: +g.kamP.y.toFixed(2), beamer: g.beamer };
+}
+
+// Knopf "Karte ansehen" / "Zurueck zur Figur" (nur wer die Kamera fuehren darf: am Zug bzw. am Beamer)
+function freiKnopfZeigen() {
+  const el = g && g.container && g.container.querySelector(".brett3d-frei");
+  if (!el) return;
+  el.hidden = !KF.darf() || !!g.sieger;
+  el.textContent = KF.K.an ? "🎯 Zurück zur Figur" : "🗺️ Karte ansehen";
+  el.classList.toggle("an", KF.K.an);
+  g.renderer.domElement.style.touchAction = KF.darf() ? (KF.K.an ? "none" : "pan-y") : "";
+}
+function freiKnopf(container) {
+  let el = container.querySelector(".brett3d-frei");
+  if (!el) {
+    el = document.createElement("span");
+    el.className = "brett3d-frei"; el.setAttribute("role", "button"); el.tabIndex = 0;
+    container.appendChild(el);
+  }
+  const umschalten = (ev) => {
+    ev.preventDefault(); ev.stopPropagation();
+    if (KF.K.an) KF.zurueck();
+    else { const ue = uebersichtPose(); KF.karteAnsehen(KF.ausKamera(ue.p, ue.l)); g.fahrt = null; }
+    freiKnopfZeigen();
+  };
+  el.onclick = umschalten;
+  el.onkeydown = (ev) => { if (ev.key === "Enter" || ev.key === " ") umschalten(ev); };
+  freiKnopfZeigen();
 }
 
 // Schalter oben rechts: Kamera folgt / ganzes Brett (kein <button>, damit die Controller-Fuehrung ihn nicht anspringt)
@@ -1295,7 +1563,7 @@ function kameraSchalter(container) {
 // sieger (nur fuer die Siegerehrung): { plaetze: [[j, stufe 1-3 oder 0], ...], jubel: [j], trauer: [j] }
 export function brett3dZeigen(container, s, muster, brett, sieger = null) {
   // neu bauen, wenn sich Spielerzahl, Felder oder Aussehen aendern (ohne Trinken: Aufgabenfelder statt Trinkfelder)
-  if (g && (g.figuren.length !== s.pos.length || g.muster !== muster || g.look !== lookVon() || g.welt !== (brett.welt === "vulkan" ? "vulkan" : "insel"))) {
+  if (g && (g.figuren.length !== s.pos.length || g.muster !== muster || g.look !== lookVon() || g.welt !== (brett.welt === "vulkan" ? "vulkan" : "insel") || g.beamer !== !!brett.beamer)) {
     try { g.renderer.dispose(); } catch (e) { /* egal */ }
     g.laeuft = false; g = null;
   }
@@ -1311,9 +1579,12 @@ export function brett3dZeigen(container, s, muster, brett, sieger = null) {
   // Siegerehrung: flacheres Bild, Figuren aufs Treppchen
   const warSieger = !!g.sieger;
   g.sieger = sieger ? siegerPlaetze(sieger, s.pos.length) : null;
+  if (g.sieger) { g.auftritte = []; if (g.auftritt) { g.auftritt = null; g.karteHTML = ""; } g.grossZahlen.forEach((x) => g.scene.remove(x.sp)); g.grossZahlen = []; }
   g.podest.visible = !!g.sieger;
   g.hoehe = g.sieger ? 0.56 : 0.82;
   const breite = container.clientWidth || 360;
+  // Beamer: das Bild fuellt den Kasten, den beamer_spiele.js vorgibt (Hoehe aus dem CSS)
+  if (brett.beamer && container.clientHeight > 80) g.hoehe = Math.max(0.35, Math.min(1.2, container.clientHeight / breite));
   g.groesse = [breite, Math.round(breite * g.hoehe)];
   g.renderer.setSize(g.groesse[0], g.groesse[1], false);
   g.renderer.domElement.style.width = "100%"; g.renderer.domElement.style.height = "auto";
@@ -1324,6 +1595,11 @@ export function brett3dZeigen(container, s, muster, brett, sieger = null) {
   kameraSchalter(container);
   const ersterBlick = g.rundeAlt === undefined;
   g.phase = s.phase;
+  // freie Kamera: wer fuehrt sie hier (kamera = { darf, sendet, key, senden, lesen } aus brett.js / beamer_spiele.js)
+  g.kam = brett.kamera || null;
+  KF.steuerung({ ...(g.kam || {}), darf: !!(g.kam && g.kam.darf) && !g.sieger, start: () => KF.ausKamera(g.kamP, g.kamL) });
+  freiKnopf(container);
+  karteSetzen();
 
   // Wurf: neuer Wurf -> Block anspringen, erst danach loslaufen
   const zahlen = s.wuerfe && s.wuerfe.length ? s.wuerfe : s.wurf ? [s.wurf] : null;
@@ -1335,7 +1611,12 @@ export function brett3dZeigen(container, s, muster, brett, sieger = null) {
     if (alt !== null || !ersterBlick) {
       neuerWurf = true;
       g.wurf = { j: s.dran, t0: performance.now(), zahlen: zahlen.map((z) => Math.min(6, z)), getroffen: false };
+      g.zaehlerMax = 0;
       klang("wuerfel");
+      // gewuerfelt: Freiflug endet (die Kamera folgt der Figur), ein noch laufender Auftritt wird abgekuerzt
+      if (KF.K.an) { KF.zurueck(); freiKnopfZeigen(); }
+      if (g.auftritt && g.auftritt.stufe === "zeigen") g.auftritt.weg = true;
+      g.auftritte = g.auftritte.filter((x) => x.b.zug === s.zug);
     }
   }
   g.wuerfelZahl = s.wuerfelArt === "dreifach" ? 3 : s.wuerfelArt === "doppel" ? 2 : 1;
@@ -1428,9 +1709,15 @@ export function brett3dZeigen(container, s, muster, brett, sieger = null) {
     }
     g.effektNr = e.nr;
   }
+  // Auftritt je neuer Bilanz (einmal je Bilanz; was beim ersten Anblick schon da war, wird nicht nachgespielt)
+  if (ersterBlick) g.bilanzNr = s.bilanz ? s.bilanz.nr : 0;
+  if (s.bilanz && s.bilanz.nr !== g.bilanzNr) {
+    g.bilanzNr = s.bilanz.nr;
+    if (!g.sieger) auftrittPlanen(s.bilanz, brett.namen);
+  }
   if (!g.sieger) {
     const sternSchluessel = s.sterne.join(",");
-    if (g.sterneAlt !== undefined && g.sterneAlt !== sternSchluessel && !(s.effekt && s.effekt.art === "stern")) nachDerLandung(s.dran, () => { funkenAn(figurPos(s.dran)); gefuehl(s.dran, "jubel"); });
+    if (g.sterneAlt !== undefined && g.sterneAlt !== sternSchluessel && !(s.effekt && s.effekt.art === "stern") && !(s.bilanz && s.bilanz.zug === s.zug)) nachDerLandung(s.dran, () => { funkenAn(figurPos(s.dran)); gefuehl(s.dran, "jubel"); });
     g.sterneAlt = sternSchluessel;
   }
   if (!g.laeuft) { g.laeuft = true; g.gen = ++generation; g.uhr.getDelta(); schleife(g.gen); }

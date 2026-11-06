@@ -258,7 +258,25 @@ details.verdeckt summary { cursor: pointer; font-weight: 900; text-align: center
 .todeskarte { background: linear-gradient(135deg, #2a0f14, #160a0d); border: 2px solid #7a1f2a; border-radius: 16px; padding: 12px; margin: 8px 0; text-align: center; font-size: 17px; animation: aufploppen .5s; }
 .meinerolle { margin-top: 12px; color: var(--leise); font-weight: 700; text-align: center; } .meinerolle summary { cursor: pointer; }
 .rollenaufloesung { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 8px 0; } .rollenaufloesung span { background: #0f1022; padding: 5px 9px; border-radius: 10px; font-weight: 700; font-size: 14px; }
-body.nachtmodus { background: #020208; } body.nachtmodus::before { opacity: .15; } body.nachtmodus .fuss, body.nachtmodus .kopf { opacity: .35; }
+/* Werwolf-Nacht in der Huette (Nico 01.11.2026): Licht aus, Augen zu. Jedes Handy fast schwarz und gedimmt; wer gerade
+   handelt, leuchtet nicht heller als ein schlafendes Handy. Kein Aufblitzen (Sonnenuntergang), kein Funkeln, kein Glanz. */
+body.nachtmodus, html:has(body.nachtmodus) { background: #000; } body.nachtmodus::before, body.nachtmodus::after { opacity: 0; }
+body.nachtmodus #app { filter: brightness(.55) saturate(.55); }
+body.nachtmodus .fuss, body.nachtmodus .kopf, body.nachtmodus .ton-schalter { opacity: .2; }
+body.nachtmodus #ansage, body.nachtmodus #hinweis, body.nachtmodus #ton-hinweis { filter: brightness(.35); }
+body.nachtmodus .ww-nacht { height: 84px; background: #000; box-shadow: none; }
+body.nachtmodus .ww-nacht, body.nachtmodus .ww-nacht .mond, body.nachtmodus .anim-unter, body.nachtmodus .anim-unter .mond { animation: none; }
+body.nachtmodus .ww-nacht .mond { box-shadow: none; opacity: .3; width: 34px; height: 34px; top: 22px; }
+body.nachtmodus .ww-nacht .sterne { animation: none; opacity: .25; }
+body.nachtmodus .ww-dorf.nacht { filter: brightness(.18); }
+body.nachtmodus .ww-titel { color: #7d82ab; text-shadow: none; font-size: 19px; }
+body.nachtmodus .nachtpanel { background: #000; border-color: #10132a; color: #7d82ab; }
+body.nachtmodus .nachttext { color: #9196c2; }
+body.nachtmodus #app button { background: #080a17; color: #9196c2; border-color: #161a33; box-shadow: none; text-shadow: none; }
+body.nachtmodus #app button.gewaehlt { background: #241b42; color: #d4d7f5; }
+body.nachtmodus .stern { color: #5c5020; }
+body.nachtmodus .rollenkarte { filter: brightness(.55); box-shadow: none; animation: none; }
+body.nachtmodus .meinerolle { color: #4a4f70; }
 /* Farben fuer Spieler 5 bis 20 (feste Liste --s4 ... --s19 oben, 31.10.2026) */
 .f4 { background: var(--s4); color: var(--s4); } .n4 { color: var(--s4); } .fig.f4 { background: var(--s4); } .brett2d .fig2.f4 { fill: var(--s4); }
 .f5 { background: var(--s5); color: var(--s5); } .n5 { color: var(--s5); } .fig.f5 { background: var(--s5); } .brett2d .fig2.f5 { fill: var(--s5); }
@@ -1101,6 +1119,8 @@ button.bp-schreck { display: block; width: 100%; font-size: 26px; min-height: 84
 .bp-anzeige { font-size: 34px; letter-spacing: 6px; text-align: center; padding: 10px; border-radius: 14px; background: #000; border: 2px solid var(--rand); min-height: 64px; margin: 10px 0; }
 .bp-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .bp-pad button { font-size: 30px; min-height: 72px; margin: 0; }
+.bp-abc { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: 8px; }
+.bm-pult .bp-abc button { font-size: 20px; min-height: 46px; margin: 0; padding: 4px 0; }
 .bp-meldung { font-weight: 800; text-align: center; }
 /* Zuschauen: Spiele unten in der Leiste antippen = gross; Uebersicht mit Live-Bildern */
 button.bm-fokus-knopf { font-size: max(14px, 1em); padding: .25em .8em; border-radius: 99px; background: #ffffff22; box-shadow: none; min-height: 0; }
@@ -1127,3 +1147,168 @@ button.bm-fokus-knopf { font-size: max(14px, 1em); padding: .25em .8em; border-r
 .bsf-z.wasser { color: #7dd3fc; } .bsf-z.treffer { background: #b91c1c !important; color: #fff; } .bsf-z.versenkt { background: #450a0a !important; color: #fca5a5; }
 .bsf-wuerfel { display: flex; gap: .2em; font-size: 4em; line-height: 1; } .bsf-wuerfel span { opacity: .55; } .bsf-wuerfel span.halten { opacity: 1; color: var(--gelb); }
 .bsf-rang { width: min(100%, 26em); } .bsf-rang li.dran { outline: .1em solid var(--blurple); }
+
+/* ---------------------------------------------------------------- Duelle (Grossumbau Runde 1, duell.js) */
+.du-versus { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; margin: 6px 0 8px; }
+.du-versus > b { font-size: 30px; line-height: 1; animation: du-puls 1.4s ease-in-out infinite; }
+.du-sp { display: flex; align-items: center; gap: 6px; font-weight: 900; min-width: 0; overflow-wrap: anywhere; line-height: 1.2; }
+.du-sp.a { justify-content: flex-end; text-align: right; } .du-sp.b { justify-content: flex-start; }
+.du-sp small { display: block; font-size: 11px; color: var(--leise); font-weight: 800; }
+@keyframes du-puls { 50% { transform: scale(1.18) rotate(-6deg); } }
+.du-einsatz { font-weight: 800; color: var(--gelb); overflow-wrap: anywhere; }
+.du-wahlfrage { margin-top: 4px; }
+.du-wahl { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 8px 0; }
+.du-wahl button.duell-wahl { margin: 0; text-align: left; font-size: 20px; padding: 14px; overflow-wrap: anywhere; }
+.du-wahl button.duell-wahl small, .du-angebot small { display: block; font-size: 13px; font-weight: 700; opacity: .85; margin-top: 4px; }
+.du-angebot { background: var(--flaeche2); border: 2px dashed var(--rand); border-radius: 16px; padding: 12px; font-weight: 900; font-size: 18px; overflow-wrap: anywhere; }
+.du-wahl.still { opacity: .8; }
+.du-stechen { text-align: center; font-weight: 900; font-size: 18px; color: #1a1300; background: linear-gradient(90deg, #ffd23f, #ff9600); border-radius: 14px; padding: 8px; margin: 6px 0; animation: aufploppen .4s; overflow-wrap: anywhere; }
+.du-titel { margin: 0 0 6px; }
+.du-count { font-size: 92px; font-weight: 900; line-height: 1; color: var(--gelb); text-shadow: 0 0 24px #ffd23f88; animation: du-zahl 1s ease-out infinite; }
+@keyframes du-zahl { 0% { transform: scale(1.5); opacity: .2; } 30% { transform: scale(1); opacity: 1; } }
+.mn-regel.klein { font-size: 14px; color: var(--leise); }
+.du-feld .mn-bild { min-height: 190px; }
+.du-zeile { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; font-weight: 800; min-width: 0; flex-wrap: wrap; }
+.du-zeile > span { overflow-wrap: anywhere; min-width: 0; text-align: left; } .du-zeile > b { overflow-wrap: anywhere; min-width: 0; }
+.du-zeile.gegner { color: var(--leise); }
+.du-punkte { display: inline-flex; gap: 5px; } .du-punkte i { width: 16px; height: 16px; border-radius: 50%; background: #0f1022; border: 2px solid var(--rand); }
+.du-punkte i.an { background: var(--gelb); border-color: var(--gelb); box-shadow: 0 0 10px var(--gelb); }
+.du-punkte.gegner i.an { background: var(--s0); border-color: var(--s0); box-shadow: 0 0 10px var(--s0); }
+.mn-arena .du-mitte { position: absolute; left: 50%; top: 4%; bottom: 4%; width: 2px; margin-left: -1px; background: repeating-linear-gradient(#ffffff55 0 6px, transparent 6px 12px); }
+/* Duell um zwoelf */
+.du-mittag { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; width: 100%; }
+.du-mittag .mn-wort { font-size: 30px; padding: 14px 4px; }
+.du-cowboy { display: flex; flex-direction: column; align-items: center; min-width: 58px; max-width: 110px; }
+.du-cowboy span { font-size: 46px; line-height: 1; } .du-cowboy.gegner span { transform: scaleX(-1); }
+.du-cowboy small, .du-cowboy em { font-weight: 800; font-size: 12px; overflow-wrap: anywhere; text-align: center; font-style: normal; }
+.du-cowboy.gruen span { filter: drop-shadow(0 0 10px #58cc02); } .du-cowboy.rot span { filter: drop-shadow(0 0 10px #e11d48); }
+.du-cowboy.gruen em { color: var(--gruen); } .du-cowboy.rot em { color: #ff6b81; }
+/* Tauziehen */
+.du-tau { position: relative; width: 100%; height: 92px; }
+.du-seil { position: absolute; left: 0; right: 0; top: 34px; height: 14px; border-radius: 99px; background: repeating-linear-gradient(90deg, #a07848 0 10px, #8a6238 10px 20px); box-shadow: 0 3px 0 #0006; }
+.du-knoten { position: absolute; top: 41px; transform: translate(-50%, -50%); font-size: 34px; transition: left .12s linear; filter: drop-shadow(0 0 8px #ff5fae); }
+.du-linie { position: absolute; top: 14px; height: 54px; width: 4px; background: var(--gelb); box-shadow: 0 0 10px var(--gelb); border-radius: 2px; }
+.du-linie.l { left: 8%; } .du-linie.r { right: 8%; }
+.du-zieher { position: absolute; bottom: 0; font-size: 13px; max-width: 46%; overflow-wrap: anywhere; } .du-zieher.l { left: 0; text-align: left; } .du-zieher.r { right: 0; text-align: right; }
+.du-stand { display: flex; align-items: baseline; justify-content: center; gap: 14px; font-variant-numeric: tabular-nums; }
+.du-stand b { font-size: 34px; } .du-stand span { color: var(--leise); font-weight: 800; }
+/* Quizduell */
+.du-quizkopf { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; font-weight: 800; flex-wrap: wrap; }
+.du-quizkopf span { color: var(--leise); } .du-quizkopf b { overflow-wrap: anywhere; }
+.du-frage { font-size: 19px; font-weight: 900; line-height: 1.3; overflow-wrap: anywhere; padding: 4px; }
+.du-uhrbalken { width: 100%; height: 10px; border-radius: 99px; background: #0f1022; overflow: hidden; } .du-uhrbalken i { display: block; height: 100%; background: linear-gradient(90deg, #e11d48, #ffd23f, #58cc02); }
+.du-buzz { font-weight: 900; color: #1a1300; background: var(--gelb); border-radius: 12px; padding: 6px 10px; overflow-wrap: anywhere; } .du-buzz.leise { background: #ffffff18; color: var(--text); }
+.du-antwort { font-weight: 800; } .du-loesung { font-weight: 900; color: var(--gruen); overflow-wrap: anywhere; }
+.mn-k.du-qk { font-size: 15px; min-height: 58px; text-align: left; line-height: 1.25; }
+.du-qraster { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; width: 100%; }
+.du-qraster span { background: #ffffff10; border-radius: 10px; padding: 6px 8px; font-weight: 800; overflow-wrap: anywhere; } .du-qraster span.richtig { background: #15803d; color: #fff; }
+/* Folgenduell */
+.du-folge { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; width: min(100%, 300px); }
+.du-folge .du-farbe { margin: 0; aspect-ratio: 1.5; min-height: 64px; border-radius: 18px; background: var(--f); opacity: .38; box-shadow: 0 5px 0 #0008; border: 0; padding: 0; transition: opacity .08s, transform .08s; touch-action: manipulation; }
+.du-folge.offen .du-farbe { opacity: .75; cursor: pointer; }
+.du-folge .du-farbe.an { opacity: 1; transform: scale(1.06); box-shadow: 0 0 26px var(--f), 0 5px 0 #0008; }
+.du-folge.klein { width: min(100%, 160px); } .du-folge.klein .du-farbe { min-height: 30px; opacity: .8; display: block; }
+/* Zuschauer und Ergebnis */
+.du-zuschau { background: var(--flaeche2); border: 2px solid var(--rand); border-radius: 20px; padding: 10px; margin: 8px 0; text-align: center; min-width: 0; }
+.du-zuschau-feld { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
+.du-ergebnisse { display: grid; gap: 8px; margin: 8px 0; }
+.du-erg { display: grid; gap: 4px; background: var(--flaeche2); border: 2px solid var(--rand); border-radius: 14px; padding: 8px 10px; min-width: 0; }
+.du-erg span { overflow-wrap: anywhere; } .du-erg .sieg { color: var(--gelb); } .du-erg .sieg::before { content: "🏆 "; } .du-erg small { color: var(--leise); font-weight: 800; }
+.du-erg-spiel { font-weight: 900; }
+.du-du { font-size: 18px; font-weight: 900; }
+.du-folgen { display: grid; gap: 6px; margin: 8px 0; text-align: center; font-weight: 800; }
+.du-folgen span { background: #ffffff10; border-radius: 12px; padding: 6px 10px; overflow-wrap: anywhere; }
+.du-spaeter { margin-top: 8px; }
+.du-padwahl .mn-chip { font-size: 15px; }
+.rad-duellwahl { flex-wrap: wrap; }
+/* Beamer */
+.bdu { display: grid; gap: .35em; text-align: center; min-width: 0; }
+.bdu .du-versus { font-size: 1.3em; } .bdu .du-versus > b { font-size: 1.4em; } .bdu .du-sp small { font-size: .6em; }
+.bdu-wahl { display: flex; gap: 1em; justify-content: center; flex-wrap: wrap; }
+.bdu-wahl div { display: flex; flex-direction: column; align-items: center; gap: .15em; background: #ffffff10; border: .1em dashed #ffffff44; border-radius: .6em; padding: .5em 1em; min-width: 0; max-width: 16em; }
+.bdu-wahl span { font-size: 2.4em; line-height: 1; } .bdu-wahl b { font-size: 1.1em; } .bdu-wahl small { color: var(--leise); font-weight: 700; font-size: .7em; overflow-wrap: anywhere; }
+.bdu .du-zuschau { background: transparent; border: 0; padding: 0; }
+.bdu .du-tau { height: 5.5em; } .bdu .du-seil { top: 2em; height: .8em; } .bdu .du-knoten { top: 2.4em; font-size: 2.2em; } .bdu .du-linie { top: .8em; height: 3.2em; width: .25em; }
+.bdu .du-zieher { font-size: .9em; } .bdu .du-stand b { font-size: 2.2em; } .bdu .du-count { font-size: 5em; }
+.bdu .du-mittag .mn-wort { font-size: 2.2em; } .bdu .du-cowboy span { font-size: 3em; } .bdu .du-cowboy { max-width: 9em; } .bdu .du-cowboy small, .bdu .du-cowboy em { font-size: .8em; }
+.bdu .mn-arena { height: 9em; } .bdu .mn-arena i { font-size: 2em; } .bdu .du-punkte i { width: .9em; height: .9em; }
+.bdu .du-frage { font-size: 1.3em; } .bdu .du-qraster { font-size: .9em; }
+.bdu .mini-titelkarte { font-size: 1.2em; } .bdu .mn-regel { font-size: .9em; }
+.bdu .du-ergebnisse { width: min(100%, 30em); margin: .3em auto; } .bdu .du-erg { font-size: .9em; } .bdu .urteil { font-size: 1.4em; }
+.bdu p.leise.klein { font-size: .85em; } .bdu .du-folgen { font-size: .9em; }
+@media (prefers-reduced-motion: reduce) { .du-versus > b, .du-count { animation: none; } }
+
+/* ================================================================ Grossumbau Runde 3: Partybrett-Vorfuehrung, freie Kamera, Brett am Beamer, Kopplung */
+/* Ereigniskarte im 3D-Bild (unten, damit Figur und Zahl frei bleiben) bzw. im Fluss am Handy neben dem Beamer */
+.b3-karte { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 3; pointer-events: none; width: max-content; max-width: calc(100% - 20px);
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 10px; padding: 8px 14px; border-radius: 18px; box-sizing: border-box;
+  background: linear-gradient(135deg, #1b1c2ef0, #2c2158f0); border: 2px solid #ffffff38; box-shadow: 0 6px 0 #0008, 0 0 24px #0008; font-size: 14px; color: #fff; }
+.b3-karte.rein { animation: b3k-rein .45s cubic-bezier(.2, 1.3, .4, 1) both; }
+.b3-karte.weg { animation: b3k-weg .35s ease-in both; }
+@keyframes b3k-rein { from { opacity: 0; transform: translate(-50%, 40%) scale(.7); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+@keyframes b3k-weg { to { opacity: 0; transform: translate(-50%, 30%) scale(.9); } }
+.b3-karte.im-fluss { position: static; transform: none; width: auto; max-width: 100%; margin: 8px 0; pointer-events: auto; animation: none; }
+.b3k-emo { font-size: 2.1em; line-height: 1; filter: drop-shadow(0 3px 0 #0008); }
+.b3k-text { display: flex; flex-direction: column; min-width: 0; max-width: 100%; text-align: left; }
+.b3k-text b { font-size: 1.12em; font-weight: 900; overflow-wrap: anywhere; }
+.b3k-text small { font-size: .86em; color: #d9dcf7; font-weight: 700; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.b3k-chips { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; flex-basis: 100%; min-width: 0; }
+.b3k-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 99px; background: #0009; font-weight: 800; font-size: .92em; max-width: 100%; overflow-wrap: anywhere; }
+.b3k-chip .farbe { width: .75em; height: .75em; }
+.b3k-chip.gut b { color: #ffe27a; } .b3k-chip.schlecht b { color: #ff8a8a; }
+/* freie Kamera: Knopf im Bild (unter "Kamera folgt"), Kamera-Flaeche und kleine Karte am Handy neben dem Beamer */
+.brett3d-frei { position: absolute; top: 44px; right: 12px; background: #000a; padding: 5px 10px; border-radius: 99px; font-weight: 900; font-size: 12px; cursor: pointer; z-index: 2; user-select: none; }
+.brett3d-frei.an { background: #ffd23f; color: #1b1c2e; }
+.brett3d-frei[hidden] { display: none; }
+.brett3d canvas { cursor: grab; } .brett3d canvas:active { cursor: grabbing; }
+.brett-wand-info { text-align: center; font-weight: 900; font-size: 14px; color: #c9cdf0; background: #0f1022; border: 2px solid var(--rand); border-radius: 14px; padding: 7px 10px; margin: 6px 0; overflow-wrap: anywhere; }
+.kamera-flaeche { touch-action: none; user-select: none; -webkit-user-select: none; min-height: 150px; margin: 10px 0 6px; border-radius: 20px; border: 2px dashed #ffffff55;
+  background: repeating-linear-gradient(0deg, #ffffff08 0 1px, transparent 1px 28px), repeating-linear-gradient(90deg, #ffffff08 0 1px, transparent 1px 28px), radial-gradient(circle at 50% 40%, #2c3a78, #0f1022 75%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center; padding: 10px; font-weight: 900; cursor: grab; }
+.kamera-flaeche span { font-size: 18px; } .kamera-flaeche small { color: var(--leise); font-weight: 700; font-size: 13px; }
+.kamera-knoepfe button { font-size: 15px; }
+.brett-minikarte { margin: 8px auto 0; max-width: 340px; background: #0f1022; border: 2px solid var(--rand); border-radius: 16px; padding: 6px; }
+.brett-minikarte .blickmarke { fill: #ffd23f22; stroke: #ffd23f; stroke-width: .18; }
+/* Beamer: Partybrett gross */
+.bsb3 { display: grid; gap: .35em; }
+.bsb3-reihe { display: grid; grid-template-columns: minmax(0, 1fr) 13em; gap: .6em; align-items: stretch; }
+.bsb3.ende .bsb3-reihe, .bsb3.mini .bsb3-reihe { grid-template-columns: minmax(0, 1fr) 15em; }
+.bs-brett3d { height: 66vh; min-height: 0; margin: 0; border-radius: 1em; }
+.bs-brett3d.sieger { height: 56vh; }
+.bs-brett3d canvas { height: 100% !important; width: 100% !important; }
+body.beamer .bs-brett3d .brett3d-kamera, body.beamer .bs-brett3d .brett3d-frei { font-size: .6em; }
+body.beamer .bs-brett3d .brett3d-frei { top: 2.6em; }
+body.beamer .bs-brett3d .b3-karte { font-size: .95em; bottom: .6em; }
+.bsb3-tafel { display: flex; flex-direction: column; gap: .3em; min-width: 0; max-height: 66vh; overflow: hidden; }
+.bsb3-sp { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .1em .4em; align-items: center; background: #0f1022cc; border: .12em solid var(--rand); border-radius: .6em; padding: .25em .5em; font-size: .72em; }
+.bsb3-sp b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bsb3-sp.dran { border-color: #ffd23f; box-shadow: 0 0 .6em #ffd23f66; }
+.bsb3-werte { grid-column: 1 / -1; display: flex; gap: .5em; font-weight: 800; font-size: .9em; } .bsb3-werte .niedrig { color: #ff6b6b; }
+.bsb3-beutel { grid-column: 1 / -1; font-size: .85em; }
+/* viele Gaeste (Huette: 20-25): alle bleiben sichtbar - bis 14 eine Zeile je Spieler, darueber zwei Spalten */
+.bsb3-tafel.eng { gap: .18em; }
+.bsb3-tafel.eng .bsb3-sp { grid-template-columns: auto minmax(0, 1fr) auto; font-size: .58em; padding: .1em .45em; border-width: .08em; line-height: 1.25; }
+.bsb3-tafel.eng .bsb3-werte { grid-column: auto; gap: .4em; font-size: .85em; }
+.bsb3-tafel.eng .bsb3-beutel, .bsb3-tafel.sehr-eng .bsb3-beutel { display: none; }
+.bsb3-tafel.sehr-eng { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: .12em .2em; height: 66vh; }
+.bsb3-tafel.sehr-eng .bsb3-sp { font-size: .44em; padding: 0 .35em; border-width: .08em; border-radius: .5em; line-height: 1.12; gap: 0 .35em; align-content: center; }
+.bsb3-tafel.sehr-eng .bsb3-werte { gap: .4em; font-size: .92em; }
+.bsb3-meldung { margin: 0; text-align: center; font-size: .8em; font-weight: 700; color: #d9dcf7; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.bsb3-rang { font-size: .8em; align-self: center; width: 100%; }
+.bsb3 .mini-titelkarte { font-size: 1.1em; }
+/* Kopplung: Seite #beamer am Ally und Steuerpult (Zahl statt Ziffernfeld) */
+body.koppel-seite { overflow: hidden; }
+.koppel { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: .3em; padding: 2vh 4vw; box-sizing: border-box; }
+.koppel-logo { font-size: 2.6em; line-height: 1.1; } .koppel h1 { margin: 0; font-size: 1.6em; }
+.koppel-zeile { font-size: 1em; font-weight: 800; max-width: 40em; margin: .4em 0; }
+.koppel-zahl { font-size: 6em; font-weight: 900; letter-spacing: .12em; font-variant-numeric: tabular-nums; color: #ffe27a; text-shadow: 0 .08em 0 #0008, 0 0 .4em #ffd23f55; line-height: 1.1; }
+.koppel-leise { color: var(--leise); font-weight: 700; margin: .4em 0; }
+.koppel-voll { margin-top: .4em; font-size: .8em; width: auto; padding: .5em 1.4em; }
+.bp-koppeln { text-align: center; } .bp-koppeln p { margin: .3em 0; }
+.bp-zahl { font-size: 64px; font-weight: 900; letter-spacing: 8px; color: #ffe27a; font-variant-numeric: tabular-nums; margin: 4px 0; }
+.bp-ersatz { margin-top: 12px; }
+.koppeln { margin: 10px 0; padding: 10px 12px; border: 2px dashed var(--rand); border-radius: 16px; }
+.koppeln-zeile { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.koppeln-zeile input { font-size: 24px; letter-spacing: 6px; text-align: center; margin-top: 0; }
+.koppeln-zeile button { margin: 0; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .b3-karte.rein, .b3-karte.weg { animation: none; } }

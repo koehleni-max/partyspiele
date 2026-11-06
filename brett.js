@@ -15,7 +15,15 @@ import * as T from "./texte.js";
 import * as BE from "./brett_ereignisse.js";
 import * as R from "./brett_minis.js";
 import * as STAPEL from "./stapel.js";
-import { brett3dZeigen } from "./brett3d.js";
+import * as DU from "./duell.js";
+import { brett3dZeigen, vorfuehrDauer, WURF, LAUF } from "./brett3d.js";
+import * as KF from "./kamera_frei.js";
+import { still as amBeamer } from "./ton.js";
+// Grossumbau Runde 3 (Nico 01.11.2026, Vorbild Pummel Party): jede Aktion bekommt eine Bilanz (s.bilanz: wer wie viele
+// Muenzen, Sterne, Lebenspunkte gewonnen oder verloren hat, mit Symbol und Anlass) - brett3d.js fuehrt sie gross vor.
+// Waehrend der Vorfuehrung sind "Weiter" und Co. gesperrt und die Computer-Spieler warten (ruhigeres Tempo).
+// Zeigt der Beamer das Brett, sehen die Handys statt der 3D-Ansicht: Wuerfel, Gegenstaende, Ereigniskarte, Kamera-Flaeche
+// (wer am Zug ist, fuehrt die Kamera am Beamer) und eine kleine Karte.
 
 const RUNDEN = 8;                       // Vorgabe
 export const RUNDEN_WAHL = [6, 8, 12, 20];
@@ -132,7 +140,8 @@ export const brett = {
       waren: je(() => []), fallen: {}, rabatt: je(false), stat: { mini: je(0), gesammelt: je(0), ereignis: je(0), ko: je(0) },
       rest: 0, wahl: null, spur: null, spurNr: 0, sternVorbei: false, wuerfelArt: null, wareBenutzt: false, zielWare: null,
       extra: false, schluss: null, bonus: null, miniNr: 0, sternSeit: 1, gezogen: [], effekt: null,
-      runden: RUNDEN, brettNr: 1, lp: je(LP), gift: je(0), fluch: je(false), bomben: {}, sperren: {}, haufen: {}, angebot: null, unterwegs: null };
+      runden: RUNDEN, brettNr: 1, lp: je(LP), gift: je(0), fluch: je(false), bomben: {}, sperren: {}, haufen: {}, angebot: null, unterwegs: null,
+      duell: null, duellNr: 0, zug: 0, bilanz: null, grund: null, rundeZug: -1 };
     s.stern = neuerStern(s);
     return s;
   },
@@ -143,7 +152,49 @@ export const brett = {
     const max = Math.max(...s.pos.map((_, j) => best(j)));
     return { nr: "1", sieger: s.pos.map((_, j) => j).filter((j) => best(j) === max) };
   },
+  // jede Aktion: vorher/nachher vergleichen -> Bilanz fuer den Auftritt (Runde 3)
   aktion(s, i, a, namen, raum) {
+    const vor = Array.isArray(s.pos) && a.typ !== "neustart" ? { m: s.muenzen.slice(), st: s.sterne.slice(), lp: Array.isArray(s.lp) ? s.lp.slice() : null,
+      ko: s.stat && Array.isArray(s.stat.ko) ? s.stat.ko.slice() : null, sig: zugSig(s) } : null;
+    s.grund = null;
+    const r = aktionInnen(s, i, a, namen, raum);
+    if (vor && zugSig(s) !== vor.sig) { s.zug = (s.zug || 0) + 1; bilanzZiehen(s, vor); }
+    s.grund = null;
+    return r;
+  },
+  render(s, ich, namen, raum) { return renderBrett(s, ich, namen, raum); },
+  musik(s) { return s.ende ? null : "brett"; },
+  // Computer-Spieler warten, bis das Brett fertig vorgefuehrt hat (app.js: botMindest)
+  botMindest: (s) => Math.round(vorfuehrDauer(s) * 1000) + 400,
+  botPause: (s) => brettBotPause(s),
+  bot(s, i) { return brettBot(s, i); },
+  nach(s, ich, senden, namen, raum) { return brettNach(s, ich, senden, namen, raum); },
+};
+
+// was sich durch eine Aktion sichtbar geaendert hat (fuer den Zug-Zaehler s.zug)
+const zugSig = (s) => `${s.phase}|${s.dran}|${s.spurNr}|${s.runde}|${s.meldung}|${s.muenzen}|${s.sterne}|${s.lp}|${s.ende}|${s.mini ? Object.keys(s.mini.werte || {}).length : ""}`;
+// Anlass der Aenderung fuer die Ereigniskarte; fest = spaetere Feldwirkung ueberschreibt ihn nicht (Sternkauf, Gegenstand)
+function grundSetzen(s, emo, titel, text = "", mehr = {}) {
+  if (s.grund && s.grund.fest && !mehr.fest) return;
+  s.grund = { emo, titel, text: String(text || "").trim().slice(0, 160), ...mehr };
+}
+function bilanzZiehen(s, vor) {
+  if (s.ende || ["mini", "dkampf", "bonus"].includes(s.phase)) return;
+  const liste = [];
+  s.pos.forEach((_, j) => {
+    const e = { j, m: (s.muenzen[j] || 0) - (vor.m[j] || 0), st: (s.sterne[j] || 0) - (vor.st[j] || 0), lp: vor.lp && s.lp ? s.lp[j] - vor.lp[j] : 0 };
+    // K.O.: Lebenspunkte springen auf voll - gezeigt wird der Treffer, nicht das Auffuellen
+    if (vor.ko && s.stat.ko && s.stat.ko[j] > (vor.ko[j] || 0) && vor.lp) e.lp = -vor.lp[j];
+    if (e.m || e.st || e.lp) liste.push(e);
+  });
+  const gr = s.grund;
+  if (!liste.length && !(gr && gr.immer)) return;
+  liste.sort((x, y) => (x.j === s.dran ? -1 : y.j === s.dran ? 1 : 0));
+  s.bilanz = { nr: ((s.bilanz && s.bilanz.nr) || 0) + 1, zug: s.zug, emo: gr ? gr.emo : "✨", titel: gr ? gr.titel : "", text: gr ? gr.text : "", liste };
+}
+
+function aktionInnen(s, i, a, namen, raum) {
+  {
     if (a.typ === "neustart") {
       const wahl = { runden: s.runden, brettNr: s.brettNr };
       Object.assign(s, brett.start(namen));
@@ -167,6 +218,7 @@ export const brett = {
         s.meldung = `⭐ ${namen[i]} kauft einen Stern${p < STERNPREIS ? ` für nur ${p}` : ""}! Alle anderen trinken 1 Schluck.`;
         s.stern = neuerStern(s); s.sternSeit = s.runde;
         effekt(s, "stern", i);
+        grundSetzen(s, "⭐", "Stern gekauft!", `${namen[i]} zahlt ${p} Münzen${s.ohne ? "" : " – alle anderen trinken 1 Schluck"}`, { fest: true });
       }
       feldWirkung(s, i, muster(s)[s.pos[i]], namen, raum);
     } else if (s.phase === "laden" && dran && a.typ === "kaufware") {
@@ -174,31 +226,40 @@ export const brett = {
       if (!w || !angebot(s).includes(w.id) || s.muenzen[i] < w.preis || s.waren[i].length >= BEUTEL) return;
       s.muenzen[i] -= w.preis; s.waren[i].push(w.id);
       s.meldung = `🛒 ${namen[i]} kauft: ${w.emo} ${w.name}.`;
+      grundSetzen(s, "🛒", `Gekauft: ${w.emo} ${w.name}`, w.text, { fest: true });
       s.phase = "weiter"; s.angebot = null;
     } else if (s.phase === "laden" && dran && a.typ === "nein") { s.meldung = `🛒 ${namen[i]} kauft nichts.`; s.phase = "weiter"; s.angebot = null; }
-    else if (s.phase === "duell" && dran && a.typ === "duell" && a.ziel !== i && a.ziel >= 0 && a.ziel < s.pos.length) {
-      const ich = 1 + zufall(6), du = 1 + zufall(6);
-      const sieger = ich >= du ? i : a.ziel, verl = sieger === i ? a.ziel : i;
-      const beute = Math.min(4, s.muenzen[verl]);
-      s.muenzen[verl] -= beute; geben(s, sieger, beute);
-      s.meldung = `⚔️ Duell: ${namen[i]} ${ich} gegen ${namen[a.ziel]} ${du} – ${namen[sieger]} gewinnt ${beute} Münzen, ${namen[verl]} trinkt 2 Schlucke! `;
-      s.meldung += schaden(s, verl, 5, namen);
-      zugEnde(s, namen, raum);
-    } else if (s.phase === "weiter" && a.typ === "weiter") zugEnde(s, namen, raum);
+    // Duellfeld (Grossumbau Runde 1, Nico 01.11.2026): kein Wuerfel mehr - der Herausforderer waehlt den Gegner, dann
+    // spielen beide ein echtes Duell (duell.js). Einsatz fest 5 Muenzen; Trinken und Schaden wie bisher.
+    else if (s.phase === "duell" && dran && a.typ === "duell" && Number.isInteger(a.ziel) && a.ziel !== i && a.ziel >= 0 && a.ziel < s.pos.length) {
+      s.duell = DU.neu(i, a.ziel, s.duellNr++, namen || []);
+      s.phase = "dkampf";
+      s.meldung = `⚔️ ${namen[i]} fordert ${namen[a.ziel]} zum Duell heraus – Einsatz ${DU.EINSATZ} Münzen!`;
+    } else if (s.phase === "dkampf") duellAktion(s, i, a, namen, raum);
+    else if (s.phase === "weiter" && a.typ === "weiter") zugEnde(s, namen, raum);
     else if (s.phase === "aufgabe" && a.typ === "aufgabe" && dran) {
-      if (!a.ok) { s.muenzen[i] = Math.max(0, s.muenzen[i] - AUFGABE_STRAFE); s.meldung = `🙅 ${namen[i]} kneift – −${AUFGABE_STRAFE} Münzen.`; }
+      if (!a.ok) { s.muenzen[i] = Math.max(0, s.muenzen[i] - AUFGABE_STRAFE); s.meldung = `🙅 ${namen[i]} kneift – −${AUFGABE_STRAFE} Münzen.`; grundSetzen(s, "🙅", "Aufgabe verweigert", "", { fest: true }); }
       else s.meldung = `✅ ${namen[i]} hat die Aufgabe erledigt.`;
       zugEnde(s, namen, raum);
     } else if (s.phase === "bonus" && a.typ === "weiter") { s.ende = true; s.phase = "ende"; }
     else if (s.phase === "mini") miniAktion(s, i, a, namen, raum);
-  },
-  render(s, ich, namen, raum) {
+  }
+}
+
+function renderBrett(s, ich, namen, raum) {
+  {
     sicher(s);
-    const tafel = `<div class="tafel">${namen.map((nm, j) => `<div class="${j === s.dran && s.phase !== "mini" ? "dran" : ""}"><span class="farbe f${j}"></span><b>${esc(nm)}</b>
+    // Zeigt der Beamer das Brett, steht die ganze Tafel dort; bei vielen Gaesten bleiben am Handy nur "ich" und wer dran ist,
+    // sonst muesste man erst an 20 Namen vorbei zum Wuerfel
+    const kurzTafel = amBeamer() && !s.ende && namen.length > 6;
+    const tafel = `<div class="tafel">${namen.map((nm, j) => kurzTafel && j !== ich && j !== s.dran ? "" : `<div class="${j === s.dran && s.phase !== "mini" ? "dran" : ""}"><span class="farbe f${j}"></span><b>${esc(nm)}</b>
       <span>⭐${s.sterne[j]}</span><span>🪙${s.muenzen[j]}</span><span class="lp ${s.lp[j] <= 10 ? "niedrig" : ""}" title="Lebenspunkte">❤️${s.lp[j]}</span>${s.gift[j] ? `<span title="vergiftet">🧪</span>` : ""}${s.fluch[j] ? `<span title="Schneckenfluch">🐌</span>` : ""}${s.waren[j].length ? `<span class="beutel" title="Gegenstände">${s.waren[j].map((w) => ware(w).emo).join("")}</span>` : ""}</div>`).join("")}</div>`;
     const m = s.meldung || "";
-    const klang = /kauft einen Stern/.test(m) ? "stern" : /K\.O\.|Vulkan bricht aus|BUMM/.test(m) ? "falsch" : /\+3 Münzen|\+6 Münzen|Truhe/.test(m) ? "richtig" : /−3 Münzen|−6 Münzen|−\d+ ❤️/.test(m) ? "falsch" : /❓/.test(m) ? "magie" : /Duell/.test(m) ? "spannung" : /Trinkfeld|Aufgabenfeld|🛒|Portal/.test(m) ? "pop" : "";
-    const meldung = `<div class="meldung">${esc(m)}</div>${klang ? `<i hidden data-key="bt-${s.runde}-${s.dran}-${m.length}-${klang}" data-ton="${klang}" data-ton-nach="${s.wurf && klang !== "stern" ? 1000 + Math.min(12, s.wurf) * 290 : 0}"></i>` : ""}`;   // 3D: erst Wuerfelblock anspringen (~1 s), dann ~0,3 s je Feld
+    // Muenzen, Sterne und Treffer klingen seit Runde 3 im Auftritt (brett3d.js, im Takt der fliegenden Muenzen) - hier nur
+    // noch die Klaenge ohne Bilanz; sie kommen, wenn die Figur angekommen ist
+    const klang = /❓/.test(m) ? "magie" : /Duell/.test(m) ? "spannung" : /Trinkfeld|Aufgabenfeld|🛒|Portal/.test(m) ? "pop" : "";
+    const nachLand = s.wurf && s.spur && !s.spur.sprung ? Math.round((WURF.los + Math.max(0, s.spur.felder.length - 1) / LAUF) * 1000) : 0;
+    const meldung = `<div class="meldung">${esc(m)}</div>${klang ? `<i hidden data-key="bt-${s.runde}-${s.dran}-${m.length}-${klang}" data-ton="${klang}" data-ton-nach="${nachLand}"></i>` : ""}`;
     const schluss = s.schluss && !s.ende ? `<div class="schlussband">🔥 Schlussrunden: ${esc(SCHLUSS[s.schluss].text)}</div>` : "";
     if (s.ende) {
       const rang = rangfolge(s);
@@ -213,9 +274,13 @@ export const brett = {
         <i hidden data-key="btbonus-${s.runde}" data-ton="stern"></i><i hidden data-ergebnis="bw-bonus"></i>${knopf("Weiter", { typ: "weiter" }, "gross")}`;
     }
     if (s.phase === "mini") return `${tafel}<i hidden data-key="btmini-${s.runde}-${s.mini && s.mini.art}" data-ton="los"></i>${miniRender(s, ich, namen)}`;
+    if (s.phase === "dkampf" && s.duell) return `${tafel}${duellRender(s, ich, namen)}`;
     const bb = B(s);
-    const brettHtml = `<div id="brett3d" class="brett3d welt-${bb.welt}">${brett2d(s, namen)}<div class="brett3d-info">${bb.emo} Runde ${Math.min(s.runde, s.runden)}/${s.runden}${s.wurf ? ` · 🎲 ${s.wuerfe && s.wuerfe.length > 1 ? `${s.wuerfe.join("+")} = ` : ""}${s.wurf}` : ""}</div></div>`;
     const istDran = ich === s.dran;
+    // Beamer zeigt das Brett: hier nur Kamera-Flaeche (wer am Zug ist) und kleine Karte, dazu die Ereigniskarte
+    const wand = amBeamer();
+    const infoZeile = `${bb.emo} Runde ${Math.min(s.runde, s.runden)}/${s.runden}${s.wurf ? ` · 🎲 ${s.wuerfe && s.wuerfe.length > 1 ? `${s.wuerfe.join("+")} = ` : ""}${s.wurf}` : ""}`;
+    const brettHtml = wand ? "" : `<div id="brett3d" class="brett3d welt-${bb.welt}">${brett2d(s, namen)}<div class="brett3d-info">${infoZeile}</div></div>`;
     const wer = esc(namen[s.dran]);
     let steuer = "";
     if (s.phase === "wuerfeln") {
@@ -237,22 +302,51 @@ export const brett = {
     if (s.phase === "laden") steuer = istDran ? `<p class="mitte">🛒 Laden – ${s.waren[ich].length}/${BEUTEL} im Beutel, du hast 🪙${s.muenzen[ich]}</p><div class="laden">${angebot(s).map((id) => { const w = ware(id); const geht = s.muenzen[ich] >= w.preis && s.waren[ich].length < BEUTEL;
         return knopf(`<span>${w.emo} ${esc(w.name)} <b>${w.preis} 🪙</b></span><small>${esc(w.text)}</small>`, { typ: "kaufware", ware: id }, "ware-knopf", geht ? "" : "disabled"); }).join("")}</div>${knopf("🚪 Nichts kaufen", { typ: "nein" }, "zweit")}`
       : `<p class="mitte leise">${wer} stöbert im Laden …</p>`;
-    if (s.phase === "duell") steuer = istDran ? `<p class="mitte">Wen forderst du heraus? Der Verlierer gibt Münzen ab und verliert 5 ❤️.</p><div class="raster">${namen.map((nm, j) => (j === ich ? "" : knopf(esc(nm), { typ: "duell", ziel: j }, "gross"))).join("")}</div>` : `<p class="mitte leise">${wer} wählt einen Gegner …</p>`;
+    if (s.phase === "duell") steuer = istDran ? `<p class="mitte">Wen forderst du heraus? Ihr spielt ein echtes Duell – der Verlierer gibt ${DU.EINSATZ} Münzen ab, trinkt 2 Schlucke und verliert 5 ❤️.</p><div class="raster">${namen.map((nm, j) => (j === ich ? "" : knopf(`${esc(nm)}<small>🪙${s.muenzen[j]} ❤️${s.lp[j]}</small>`, { typ: "duell", ziel: j }, "gross"))).join("")}</div>` : `<p class="mitte leise">${wer} wählt einen Gegner …</p>`;
     if (s.phase === "weiter") steuer = knopf("Weiter", { typ: "weiter" }, "gross");
     if (s.phase === "aufgabe") steuer = istDran ? `<div class="raster2">${knopf("✅ Erledigt", { typ: "aufgabe", ok: true }, "gross gruen")}${knopf(`🙅 Keine Lust (−${AUFGABE_STRAFE} 🪙)`, { typ: "aufgabe", ok: false }, "gross")}</div>`
       : `<p class="mitte leise">${wer} ist mit der Aufgabe dran …</p>`;
     // nach dem Wurf steht das Feld erst eine Weile: Weiter, Kaufen/Nein, Wegwahl, Laden und die Duell-Wahl sind kurz gesperrt
     // (app.js), damit ein zweiter Tipp auf "Wuerfeln" nicht gleich das Ergebnis wegtippt
     const nachWurf = ["weiter", "stern", "duell", "aufgabe", "weg", "laden"].includes(s.phase) ? `<i hidden data-ergebnis="bw-${s.runde}-${s.dran}-${s.phase}-${m.length}"></i>` : "";
+    if (wand) {
+      const karte = s.bilanz && s.bilanz.zug === s.zug ? ereignisKarte(s.bilanz, namen) : "";
+      const kamera = istDran ? `<div class="kamera-flaeche" data-kamera-flaeche role="application" aria-label="Kamera am Beamer führen">
+          <span>🎥 Kamera am Beamer</span><small>ein Finger schiebt · zwei Finger zoomen und drehen</small></div>
+        <div class="raster2 kamera-knoepfe"><button class="zweit" data-kf="karte">🗺️ Karte ansehen</button><button class="zweit" data-kf="zurueck">🎯 Zurück zur Figur</button></div>` : "";
+      return `${tafel}${schluss}<div class="brett-wand-info">📽️ ${infoZeile} · das Brett läuft groß am Beamer</div>${karte}${meldung}${nachWurf}${steuer}${kamera}
+        <div class="brett-minikarte" aria-label="Kleine Karte">${brett2d(s, namen)}</div>`;
+    }
     return `${tafel}${schluss}${brettHtml}${meldung}${nachWurf}${steuer}`;
-  },
-  musik(s) { return s.ende ? null : "brett"; },
-  // Computer-Mitspieler: wuerfeln, Wege, Laden, Gegenstaende, kaufen, duellieren und spielen die Minispiele mit glaubwuerdigen Werten
-  botPause: (s) => (s.phase === "weiter" || s.phase === "bonus" ? 2800 : s.phase === "mini" ? 4500 : 1400),
-  bot(s, i) {
+  }
+}
+
+// Ereigniskarte als HTML (Handy, wenn das 3D-Brett am Beamer laeuft): Symbol, Anlass, je Spieler die Aenderung
+function ereignisKarte(b, namen) {
+  const vz = (x) => (x > 0 ? "+" : "−") + Math.abs(x);
+  const chips = b.liste.map((e) => {
+    const teile = [e.st ? `${vz(e.st)} ⭐` : "", e.m ? `${vz(e.m)} 🪙` : "", e.lp ? `${vz(e.lp)} ❤️` : ""].filter(Boolean);
+    const gut = (e.st || 0) * 20 + (e.m || 0) + (e.lp || 0) * 0.3;
+    return `<span class="b3k-chip ${gut >= 0 ? "gut" : "schlecht"}"><i class="farbe f${e.j % 20}"></i>${esc(namen[e.j] || "")} <b>${teile.join(" ")}</b></span>`;
+  }).join("");
+  return `<div class="b3-karte im-fluss" role="status" data-key="bk-${b.nr}"><span class="b3k-emo">${esc(b.emo || "✨")}</span><span class="b3k-text">${b.titel ? `<b>${esc(b.titel)}</b>` : ""}${b.text ? `<small>${esc(b.text)}</small>` : ""}</span>${chips ? `<span class="b3k-chips">${chips}</span>` : ""}</div>`;
+}
+
+// Computer-Mitspieler: wuerfeln, Wege, Laden, Gegenstaende, kaufen, duellieren und spielen die Minispiele mit glaubwuerdigen Werten
+function brettBotPause(s) {
+  return s.phase === "weiter" || s.phase === "bonus" ? 2800 : s.phase === "mini" ? 4500 : s.phase === "dkampf" ? (s.duell && s.duell.phase === "ende" ? 3800 : 1600) : 1400;
+}
+function brettBot(s, i) {
+  {
     if (s.ende) return null;
     sicher(s);
     const n = s.pos.length;
+    // Duell: Spielwahl und Verlauf je Bot-Staerke (duell.js); nach dem Ergebnis blaettert der Herausforderer weiter
+    if (s.phase === "dkampf") {
+      if (!s.duell) return { typ: "weiter" };
+      if (s.duell.phase === "ende") return i === s.dran ? { typ: "weiter" } : null;
+      return DU.bot(s.duell, i);
+    }
     if (s.phase === "mini") {
       const m = s.mini;
       if (!m || m.fertig || m.werte[i] !== undefined || !teilVon(s, m).includes(i)) return null;
@@ -277,22 +371,106 @@ export const brett = {
     if (s.phase === "weiter") return { typ: "weiter" };
     if (s.phase === "aufgabe") return { typ: "aufgabe", ok: true };
     return null;
-  },
-  nach(s, ich, senden) {
+  }
+}
+
+// Kamera-Leitung des Spielers am Zug (kamera_frei.js): Kanal stand/live/<pid>kam, Schluessel je Zug
+function kameraLeitung(s, ich, raum, pid = null) {
+  const p = pid ? { pid } : raum && raum.partien ? Object.values(raum.partien).find((x) => x && x.s === s) : null;
+  const kanal = p && p.pid ? `${p.pid}kam` : null;
+  const key = `${s.runde}-${s.dran}`;
+  const brettZug = !s.ende && !["mini", "dkampf", "bonus"].includes(s.phase);
+  const darf = brettZug && ich >= 0 && ich === s.dran;
+  return { darf, sendet: darf && !!kanal, key, kanal,
+    senden: (v) => { if (kanal) DU.kanalSchreiben(kanal, s.dran, key, v); },
+    lesen: () => (kanal ? DU.liveVon(kanal, s.dran, key) : null) };
+}
+export const brettKamera = kameraLeitung;   // fuer den Beamer (beamer_spiele.js)
+export const brettMuster = (s) => muster(s);
+export const brettVon = (s) => B(s);
+export { endSieger as brettEndSieger, miniSieger as brettMiniSieger };
+
+// Waehrend das Brett vorfuehrt (Wurf, Laufen, Auftritt), sind Weiter, Kaufen, Wegwahl usw. gesperrt - je Geraet ab dem
+// ersten Anblick des neuen Stands. Danach geht es nur bewusst weiter (Nico 01.11.2026: Tempo runter).
+const SPERR = new Set(["weiter", "kaufen", "nein", "kaufware", "weg", "duell", "aufgabe", "ziel"]);
+let sperre = { key: "", bis: 0, timer: null };
+function vorfuehrSperre(s) {
+  const key = `${s.zug || 0}-${s.spurNr || 0}`;
+  if (key !== sperre.key) {
+    sperre.key = key;
+    sperre.bis = performance.now() + vorfuehrDauer(s) * 1000;
+    clearTimeout(sperre.timer);
+  }
+  const rest = sperre.bis - performance.now();
+  const knoepfe = [...document.querySelectorAll("#app .spielflaeche button[data-a], #app button[data-a]")].filter((k) => {
+    try { return SPERR.has(JSON.parse(k.dataset.a).typ); } catch (e) { return false; }
+  });
+  if (rest <= 60) {
+    let frei = false;
+    knoepfe.forEach((k) => { if (k.dataset.vorfuehrung !== undefined) { k.disabled = false; delete k.dataset.vorfuehrung; frei = true; } });
+    // Controller: Fokus auf den jetzt wieder freien Knopf (app.js hoert darauf)
+    if (frei) document.dispatchEvent(new CustomEvent("pa-entsperrt"));
+    return;
+  }
+  knoepfe.forEach((k) => { if (!k.disabled) { k.disabled = true; k.dataset.vorfuehrung = ""; } });
+  clearTimeout(sperre.timer);
+  sperre.timer = setTimeout(() => vorfuehrSperre(s), rest + 30);
+}
+
+// Kamera-Flaeche am Handy (Beamer zeigt das Brett): Eingaben fuehren die Kamera am Beamer, die kleine Karte zeigt, wohin
+let flaecheLauf = null, flaecheWurf = null;
+function flaecheTakt() {
+  const el = document.querySelector("[data-kamera-flaeche]");
+  if (!el) { flaecheLauf = null; return; }
+  const t = performance.now(), dt = Math.min(0.1, (t - (flaecheLauf || t)) / 1000);
+  flaecheLauf = t;
+  if (KF.padTakt(dt, 500)) blickMarke();
+  requestAnimationFrame(flaecheTakt);
+}
+function blickMarke() {
+  const svg = document.querySelector(".brett-minikarte svg");
+  if (!svg) return;
+  let m = svg.querySelector(".blickmarke");
+  if (!KF.K.an) { if (m) m.remove(); return; }
+  if (!m) { m = document.createElementNS("http://www.w3.org/2000/svg", "circle"); m.setAttribute("class", "blickmarke"); svg.appendChild(m); }
+  m.setAttribute("cx", KF.K.x.toFixed(2)); m.setAttribute("cy", KF.K.z.toFixed(2)); m.setAttribute("r", Math.max(1.2, KF.K.a * 0.16).toFixed(2));
+}
+
+function brettNach(s, ich, senden, namen, raum) {
+  {
     const c = document.getElementById("brett3d");
-    const bb = B(s), opt = { lage: bb.lage, next: bb.next, waren: WAREN, nh: bb.nh, welt: bb.welt };
+    const bb = B(s), opt = { lage: bb.lage, next: bb.next, waren: WAREN, nh: bb.nh, welt: bb.welt, namen: namen || [] };
     // Siegerehrung in 3D: am Ende das Treppchen nach der Rangliste, nach einem Minispiel die Gewinner oben
     if (c && c.classList.contains("sieger")) {
       const sg = s.ende ? endSieger(s) : s.phase === "mini" && s.mini && s.mini.fertig ? miniSieger(s, s.mini) : null;
       if (!sg || !brett3dZeigen(c, s, muster(s), opt, sg)) c.remove();
     }
     if (s.phase === "mini") return miniNach(s, ich, senden);
+    if (s.phase === "dkampf") return DU.nach(s.duell, ich, senden);
+    const kam = kameraLeitung(s, ich, raum);
     if (c && !s.ende && s.phase !== "bonus") {
       const zweiD = c.querySelector(".brett2d");
-      if (brett3dZeigen(c, s, muster(s), opt) && zweiD) zweiD.remove();
+      if (brett3dZeigen(c, s, muster(s), { ...opt, kamera: kam }) && zweiD) zweiD.remove();
     }
-  },
-};
+    // Handy neben dem Beamer: Kamera-Flaeche fuer den Spieler am Zug
+    const fl = document.querySelector("[data-kamera-flaeche]");
+    if (fl) {
+      const L = bb.lage[s.pos[s.dran]] || { x: 0, z: 0 };
+      KF.steuerung({ ...kam, start: () => ({ x: L.x, z: L.z, a: 12, d: 0 }) });
+      // gewuerfelt: der Freiflug endet, Beamer und Zuschauer folgen wieder der Figur (ohne Beamer macht das brett3d.js;
+      // hier laeuft kein 3D-Bild, und die Wand wuerde sonst weiter die alte Lage von der Leitung nehmen)
+      const wurfKey = `${s.runde}-${s.dran}-${s.spurNr}`;
+      if (flaecheWurf !== wurfKey) { if (flaecheWurf !== null && KF.K.an) KF.zurueck(); flaecheWurf = wurfKey; }
+      KF.binden(fl, { beiAenderung: blickMarke });
+      document.querySelectorAll("[data-kf]").forEach((k) => {
+        k.onclick = () => { if (k.dataset.kf === "karte") KF.karteAnsehen({ x: 0, z: 0.8, a: 30, d: 0 }); else KF.zurueck(); blickMarke(); };
+      });
+      blickMarke();
+      if (!flaecheLauf) { flaecheLauf = performance.now(); requestAnimationFrame(flaecheTakt); }
+    }
+    if (!s.ende && s.phase !== "bonus") vorfuehrSperre(s);
+  }
+}
 
 // alte Staende (vor dem Ausbau) bekommen die neuen Felder
 function sicher(s) {
@@ -309,6 +487,39 @@ function sicher(s) {
   if (!Array.isArray(s.gift)) s.gift = je(0);
   if (!Array.isArray(s.fluch)) s.fluch = je(false);
   ["bomben", "sperren", "haufen"].forEach((k) => { if (!s[k] || typeof s[k] !== "object") s[k] = {}; });
+  if (!Number.isInteger(s.duellNr)) s.duellNr = 0;
+  if (!Number.isInteger(s.zug)) s.zug = 0;
+  if (s.phase === "dkampf" && !s.duell) s.phase = "weiter";
+}
+
+// ---------------------------------------------------------------- Duell (duell.js)
+function duellAktion(s, i, a, namen, raum) {
+  const du = s.duell;
+  if (du.phase === "ende") {
+    if (a.typ === "weiter") { s.duell = null; zugEnde(s, namen, raum); }
+    return;
+  }
+  if (!DU.aktion(du, i, a, { muenzen: s.muenzen })) return;
+  if (du.phase === "ende") duellFolgen(s, du, namen);
+}
+// Einsatz fest 5 Muenzen (Nico 01.11.2026); Verlierer trinkt 2 Schlucke und verliert 5 Lebenspunkte (wie bisher)
+function duellFolgen(s, du, namen) {
+  const sg = du.sieger, vl = du.verlierer;
+  const beute = Math.min(DU.EINSATZ, s.muenzen[vl]);
+  s.muenzen[vl] -= beute; geben(s, sg, beute);
+  du.beute = beute;
+  s.meldung = `⚔️ ${namen[sg]} gewinnt das Duell gegen ${namen[vl]} – ${beute} ${beute === 1 ? "Münze" : "Münzen"} an ${namen[sg]}, ${namen[vl]} trinkt 2 Schlucke! `;
+  du.schaden = schaden(s, vl, 5, namen).trim();
+  s.meldung += du.schaden;
+}
+function duellRender(s, ich, namen) {
+  const du = s.duell;
+  const einsatz = `Einsatz: <b>${DU.EINSATZ} 🪙</b> · der Verlierer trinkt 2 Schlucke und verliert 5 ❤️`;
+  if (du.phase !== "ende") return DU.html(du, ich, namen, { einsatz });
+  const vl = du.verlierer;
+  const folgen = `<div class="du-folgen"><span>🪙 ${du.beute || 0} ${du.beute === 1 ? "Münze" : "Münzen"} von ${esc(namen[vl])} an ${esc(namen[du.sieger])}</span>
+    <span>🍺 ${esc(namen[vl])} trinkt 2 Schlucke</span>${du.schaden ? `<span>${esc(du.schaden)}</span>` : ""}</div>`;
+  return DU.html(du, ich, namen, { folgen, knopf: knopf("Weiter", { typ: "weiter" }, "gross") }) + `<i hidden data-ergebnis="bd-${du.nr}"></i>`;
 }
 function geben(s, j, d) {
   if (d > 0) { s.muenzen[j] += d; s.stat.gesammelt[j] += d; return d; }
@@ -407,7 +618,7 @@ function laufen(s, i) {
 }
 function nachLauf(s, i, namen, raum) {
   const u = s.unterwegs || {};
-  if (u.muenzen) { s.meldung += ` 🪙 Unterwegs ${u.muenzen} liegengebliebene Münzen eingesammelt!`; effekt(s, "muenzen", i, u.muenzen); }
+  if (u.muenzen) { s.meldung += ` 🪙 Unterwegs ${u.muenzen} liegengebliebene Münzen eingesammelt!`; effekt(s, "muenzen", i, u.muenzen); grundSetzen(s, "🪙", "Münzen eingesammelt", "lagen unterwegs auf dem Weg"); }
   if (u.sperre >= 0) s.meldung += ` 🚧 Absperrung von ${namen[u.sperre]} – hier ist Schluss!`;
   s.unterwegs = null;
   const preis = sternPreis(s, i);
@@ -446,6 +657,7 @@ function wareEinsetzen(s, i, id, namen) {
   s.waren[i].splice(k, 1);
   s.wareBenutzt = true;
   const w = ware(id);
+  grundSetzen(s, w.emo, w.name, w.text, { fest: true });
   if (id === "doppel" || id === "dreifach" || id === "mini") { s.wuerfelArt = id; s.meldung = `${namen[i]} nimmt den ${w.emo} ${w.name}.`; }
   else if (w.ziel) { s.zielWare = id; s.phase = "ziel"; s.meldung = `${namen[i]} holt ${w.emo} ${w.name} heraus …`; }
   else if (id === "falle") { s.fallen[s.pos[i]] = i; s.meldung = `🪤 ${namen[i]} stellt eine Falle auf.`; effekt(s, "falle", i); }
@@ -486,6 +698,7 @@ function wundertuete(s, i, namen) {
 function zielWirkung(s, i, j, namen) {
   const id = s.zielWare; s.zielWare = null; s.phase = "wuerfeln";
   const w = ware(id);
+  grundSetzen(s, w.emo, `${w.name} gegen ${namen[j]}`, w.text, { fest: true });
   if (schildFaengt(s, j)) { s.meldung = `${w.emo} 🛡️ ${namen[j]} hält den Schild hoch – nichts passiert.`; return; }
   if (id === "tausch") { [s.pos[i], s.pos[j]] = [s.pos[j], s.pos[i]]; s.spur = { j: i, nr: ++s.spurNr, felder: [s.pos[i]], sprung: true }; s.meldung = `🔄 ${namen[i]} und ${namen[j]} tauschen die Plätze!`; effekt(s, "tausch", i, 0, { ziel: j }); }
   else if (id === "dieb") { const d = -geben(s, j, -5); geben(s, i, d); s.meldung = `🧲 ${namen[i]} zieht ${d} Münzen von ${namen[j]} ab!`; effekt(s, "muenzen", i, d, { von: j }); }
@@ -527,21 +740,22 @@ function feldWirkung(s, i, feld, namen, raum) {
     delete s.fallen[s.pos[i]];
     if (schildFaengt(s, i)) falle = `🪤 Falle von ${namen[f]} – aber der Schild hält! `;
     else { const d = -geben(s, i, -5); geben(s, f, d); falle = `🪤 In die Falle von ${namen[f]} getappt: ${d} Münzen an ${namen[f]}! `; effekt(s, "muenzen", i, -d); }
+    grundSetzen(s, "🪤", `Falle von ${namen[f]}!`, falle.replace(/^🪤\s*/, ""));
   }
   const mal = s.schluss === "doppelt" ? 2 : 1;
   s.phase = "weiter";
-  if (feld === "m") { geben(s, i, 3 * mal); s.meldung = pre + falle + `+${3 * mal} Münzen.`; effekt(s, "muenzen", i, 3 * mal); }
-  else if (feld === "v") { geben(s, i, -3 * mal); s.meldung = pre + falle + `−${3 * mal} Münzen.`; effekt(s, "muenzen", i, -3 * mal); }
+  if (feld === "m") { geben(s, i, 3 * mal); s.meldung = pre + falle + `+${3 * mal} Münzen.`; effekt(s, "muenzen", i, 3 * mal); grundSetzen(s, "🪙", "Münzfeld", mal > 1 ? "Schlussrunden: doppelt!" : ""); }
+  else if (feld === "v") { geben(s, i, -3 * mal); s.meldung = pre + falle + `−${3 * mal} Münzen.`; effekt(s, "muenzen", i, -3 * mal); grundSetzen(s, "💸", "Pechfeld", mal > 1 ? "Schlussrunden: doppelt!" : ""); }
   else if (feld === "t") s.meldung = pre + falle + `🍺 Trinkfeld: ${namen[i]} trinkt ${schlucke(1 + zufall(3))}.`;
   // Aufgabenfeld (ohne Trinken): kleine Aufgabe; wer nicht will, gibt Muenzen ab
   else if (feld === "a") { s.meldung = pre + falle + `🎯 Aufgabenfeld: ${namen[i]} – ${ziehe(T.AUFGABEN)}`; s.phase = "aufgabe"; }
   else if (feld === "e") { s.stat.ereignis[i]++; s.meldung = pre + falle + "❓ " + ereignis(s, i, namen, raum); effekt(s, "ereignis", i); }
   else if (feld === "d") { s.meldung = pre + falle + "⚔️ Duellfeld!"; s.phase = "duell"; }
   else if (feld === "l") { s.meldung = pre + falle + "🛒 Laden!"; s.phase = "laden"; s.angebot = mischen([...LADEN]).slice(0, ANGEBOT); }
-  else if (feld === "s") s.meldung = pre + falle + `🌵 Stachelfeld! ${schaden(s, i, 10, namen)}`;
-  else if (feld === "h") { const d = heilen(s, i, 8); s.meldung = pre + falle + `💖 Heilquelle: +${d} ❤️.`; effekt(s, "heilen", i, d); }
-  else if (feld === "k") s.meldung = pre + falle + `🧰 Truhe! ${truhe(s, i, namen)}`;
-  else if (feld === "g") { geben(s, i, 5); s.meldung = pre + falle + `🔥 Glutfeld: +5 heiße Münzen, aber ${schaden(s, i, 5, namen)}`; }
+  else if (feld === "s") { s.meldung = pre + falle + `🌵 Stachelfeld! ${schaden(s, i, 10, namen)}`; grundSetzen(s, "🌵", "Stachelfeld", s.pos[i] === 0 ? "K.O. – zurück zum Start" : ""); }
+  else if (feld === "h") { const d = heilen(s, i, 8); s.meldung = pre + falle + `💖 Heilquelle: +${d} ❤️.`; effekt(s, "heilen", i, d); grundSetzen(s, "💖", "Heilquelle"); }
+  else if (feld === "k") { const t = truhe(s, i, namen); s.meldung = pre + falle + `🧰 Truhe! ${t}`; grundSetzen(s, "🧰", "Truhe!", t); }
+  else if (feld === "g") { geben(s, i, 5); s.meldung = pre + falle + `🔥 Glutfeld: +5 heiße Münzen, aber ${schaden(s, i, 5, namen)}`; grundSetzen(s, "🔥", "Glutfeld", "heiße Münzen – aber es brennt"); }
   else if (feld === "p") {
     const ziel = B(s).portale[s.pos[i]];
     if (ziel !== undefined) { s.pos[i] = ziel; s.meldung = pre + falle + `🌀 Portal! ${namen[i]} wird auf die andere Seite der Insel gezogen.`; effekt(s, "portal", i); }
@@ -554,15 +768,21 @@ function ereignis(s, i, namen, raum) {
   let pool = BE.ziehbar(raum && raum.brettWeg, s.ohne);
   const t = testVorgabe();
   if (t && Array.isArray(t.ereignisse)) pool = pool.filter((x) => t.ereignisse.includes(x.id));
-  if (!pool.length) { geben(s, i, 2); return "Ruhiges Feld: +2 Münzen."; }
+  if (!pool.length) { geben(s, i, 2); grundSetzen(s, "❓", "Ruhiges Feld"); return "Ruhiges Feld: +2 Münzen."; }
   let frei = pool.filter((x) => !s.gezogen.includes(x.id));
   if (!frei.length) { s.gezogen = []; frei = pool; }
   const ev = frei[zufall(frei.length)];
   s.gezogen.push(ev.id);
-  if (ev.boese && schildFaengt(s, i)) return `${ev.text} 🛡️ Der Schild fängt es ab!`;
+  // Ereigniskarte (Runde 3): Symbol und Name der Kategorie, darunter der Text - auch ohne Gewinn/Verlust
+  const kat = (BE.KATEGORIEN.find(([k]) => k === ev.kat) || ["", "❓ Ereignis"])[1];
+  const [kEmo, ...kName] = kat.split(" ");
+  const karte = (text) => grundSetzen(s, kEmo || "❓", `Ereignis: ${kName.join(" ") || "Überraschung"}`, text, { immer: true });
+  if (ev.boese && schildFaengt(s, i)) { karte(`${ev.text} – der Schild fängt es ab!`); return `${ev.text} 🛡️ Der Schild fängt es ab!`; }
   let extra;
   try { extra = ev.f(s, i, helfer(s, namen)); } catch (e) { console.error(e); }
-  return extra ? `${ev.text} ${extra}` : ev.text;
+  const text = extra ? `${ev.text} ${extra}` : ev.text;
+  karte(text);
+  return text;
 }
 function helfer(s, namen) {
   const n = s.pos.length, alle = [...Array(n).keys()], bb = B(s);
@@ -646,6 +866,9 @@ function rundeBeginnt(s, namen) {
     teile.push(`🔥 Die letzten 3 Runden! ${SCHLUSS[s.schluss].text}${n > 1 ? ` ${namen[l]} bekommt 10 Münzen Schub` : ""}`);
   }
   s.meldung = `${teile.join(" · ")} – ${namen[0]} würfelt.`;
+  s.rundeZug = (s.zug || 0) + 1;   // diese Aktion (Zaehler steigt gleich danach): Ueberflug laeuft, Bots warten (vorfuehrDauer)
+  const was = teile.slice(1);
+  grundSetzen(s, quelle === "ausbruch" ? "🌋" : quelle === "bombe" ? "💣" : quelle === "gift" ? "🧪" : "🔔", `Runde ${s.runde}`, was.join(" · "));
 }
 function bonusVergeben(s) {
   const kat = [["mini", "🎮", "Minispiel-Ass", "Minispiel-Siege"], ["gesammelt", "🪙", "Münzsammler", "Münzen eingesammelt"], ["ereignis", "❓", "Ereignis-Jäger", "Ereignisfelder"]];

@@ -217,6 +217,28 @@ export function schieben(raum, von, an, jetzt) {
   abschliessen(raum, jetzt);
   return true;
 }
+// ---- Feld "Duell" (Grossumbau Runde 1, Plan 3.2): der Getroffene waehlt einen Gegner, dann wird wirklich gespielt.
+// art "app"  = echtes Duell am Handy (app.js legt das Spiel "gduell" fuer die zwei an, duell.js)
+// art "echt" = das angesagte Duell aus dem Vorrat (z. B. Daumencatchen) in echt; danach traegt einer das Ergebnis ein und es
+//              laeuft ueber den Bestaetigungsweg der Gesamtwertung (wertung.js: der Verlierer bestaetigt).
+export const duellOffen = (l) => !!(l && l.fertig && l.feld === "duell" && l.getroffen && (!l.duell || (l.duell.art === "echt" && !l.duell.erg)));
+export function duellWaehlen(raum, von, an, art, jetzt) {
+  const l = lesen(raum).lauf;
+  if (!l || !l.fertig || l.feld !== "duell" || l.duell || l.getroffen !== von || von === an) return false;
+  const ich = spielerVon(raum, von), du = spielerVon(raum, an);
+  if (!ich || !du || (art !== "app" && art !== "echt")) return false;
+  l.duell = { von, vonName: ich.name, an, anName: du.name, art, t: jetzt, erg: null, pid: null };
+  return true;
+}
+// Echtes Duell: einer der beiden meldet, wer gewonnen hat -> {sieger, verlierer, wer} (Namen) fuer die Wertung
+export function duellMelden(raum, von, gewonnen) {
+  const l = lesen(raum).lauf, d = l && l.duell;
+  if (!d || d.art !== "echt" || d.erg || (von !== d.von && von !== d.an)) return null;
+  const ich = von === d.von ? d.vonName : d.anName, er = von === d.von ? d.anName : d.vonName;
+  d.erg = { sieger: gewonnen ? ich : er, verlierer: gewonnen ? er : ich, wer: ich };
+  return d.erg;
+}
+
 // Getroffener nimmt es selbst (Joker bleibt)
 export function behalten(raum, von, jetzt) {
   const l = lesen(raum).lauf;
@@ -276,6 +298,7 @@ export function idErsetzen(raum, alt, neu) {
   if (l) {
     if (l.wer === alt) l.wer = neu;
     if (l.getroffen === alt) l.getroffen = neu;
+    if (l.duell) { if (l.duell.von === alt) l.duell.von = neu; if (l.duell.an === alt) l.duell.an = neu; }
     if (l.schub) { if (l.schub.von === alt) l.schub.von = neu; if (l.schub.an === alt) l.schub.an = neu; }
   }
   if (g.jokerNeu && Array.isArray(g.jokerNeu.ids)) g.jokerNeu.ids = g.jokerNeu.ids.map((x) => (x === alt ? neu : x));
@@ -287,6 +310,8 @@ export function aktion(raum, von, a, jetzt, admin, zufall = Math.random) {
   if (a.was === "drehen") return drehen(raum, von, jetzt, zufall, false);
   if (a.was === "schieben") return schieben(raum, von, String(a.an ?? a.wert ?? ""), jetzt);
   if (a.was === "behalten") return behalten(raum, von, jetzt);
+  if (a.was === "duell") return duellWaehlen(raum, von, String(a.an ?? a.wert ?? ""), a.art, jetzt);
+  if (a.was === "duellerg") return !!duellMelden(raum, von, !!a.gewonnen);
   if (!admin) return false;
   const g = sicher(raum);
   if (a.was === "frei") { g.frei = !g.frei; return true; }
