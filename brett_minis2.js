@@ -11,8 +11,9 @@
 //   einheit(w, m, j), punkte(werte, j, teil, m), bot(m, i) -> m (mit Teams und allen Werten) und j/i koennen fehlen
 // Gemeinsame Ablaeufe (Lava-Wellen, Strecke, Labyrinth ...) wuerfelt der Gastgeber einmal aus (daten -> m.d): alle spielen
 // dieselbe Arena, also ist "wer haelt am laengsten durch" ein echtes Last-Man-Standing.
+import { DEFS_GEB } from "./minis_geburtstag.js";   // Geburtstags-Runde D: Farbverwirrung, Schuetteln, Bierdeckel, Torte, Kugel
 
-const r = (n) => Math.floor(Math.random() * n);
+const r = (n) =>Math.floor(Math.random() * n);
 const mischen = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = r(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const komma = (x, n = 1) => x.toFixed(n).replace(".", ",");
 const begrenzt = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -833,6 +834,7 @@ const DEFS2 = [
       return team.reduce((a, k) => a + (Number(werte[k]) || 0), 0) / team.length;
     },
   },
+  ...DEFS_GEB,
 ];
 
 function geistIn(st, m, ms, l) {

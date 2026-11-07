@@ -1,0 +1,31 @@
+// Fragenpaket "Geburtstag" fuer Ich hab noch nie (Geburtstags-Runde E, Vorschlag 73, Nico 06.11.2026: "allgemein, nicht
+// ueber Nico"). Harmlos bis frech, ohne 18+. Wird in fragen.js als eigene Kategorie eingehaengt.
+export const GEBURTSTAG = {
+  id: "geburtstag", name: "Geburtstag", emoji: "🎂", kurz: "Partys, Geschenke, Kerzen", farben: ["#ff9f1c", "#d6246e"],
+  nochnie: [
+    "meinen eigenen Geburtstag vergessen", "den Geburtstag meiner besten Freundin oder meines besten Freundes vergessen",
+    "ein Geschenk weiterverschenkt", "ein Geschenk bekommen, das ich vorher selbst verschenkt hatte",
+    "mich über ein Geschenk gefreut, obwohl ich es schrecklich fand", "ein Geschenk heimlich umgetauscht",
+    "ein Geschenk erst auf dem Weg zur Party gekauft", "an der Tankstelle ein Geburtstagsgeschenk gekauft",
+    "eine Geburtstagskarte unterschrieben, ohne zu wissen, für wen sie ist", "einen Gutschein verschenkt, den ich selbst nie einlösen würde",
+    "beim Kerzenausblasen gespuckt", "die Kerzen nicht in einem Zug ausbekommen", "mir etwas gewünscht, das tatsächlich in Erfüllung ging",
+    "auf einer Geburtstagsparty eingeschlafen", "auf meiner eigenen Geburtstagsparty als Erster schlafen gegangen",
+    "auf einer Geburtstagsparty gewesen, auf der ich niemanden kannte", "eine Party gefeiert, zu der weniger Leute kamen als eingeladen",
+    "mich vor einer Überraschungsparty verplappert", "eine Überraschungsparty schon vorher durchschaut und überrascht getan",
+    "an meinem Geburtstag geweint", "an meinem Geburtstag arbeiten müssen und es gehasst",
+    "an meinem Geburtstag mein Handy ausgeschaltet, um meine Ruhe zu haben", "mehr als hundert Glückwünsche an einem Tag bekommen",
+    "einen Glückwunsch absichtlich erst am nächsten Tag geschickt", "jemandem am falschen Tag gratuliert",
+    "„Happy Birthday“ absichtlich schief gesungen", "auf einer Feier eine Rede gehalten, die keiner hören wollte",
+    "eine Torte selbst gebacken, die niemand essen wollte", "Kuchen mit den Fingern gegessen, weil keine Gabeln da waren",
+    "am Morgen nach einer Party Kuchen zum Frühstück gegessen", "beim Partyspiel absichtlich verloren, damit das Geburtstagskind gewinnt",
+    "einen Geburtstag in einer Hütte oder im Zelt gefeiert", "bis zum Sonnenaufgang Geburtstag gefeiert",
+    "an meinem Geburtstag einen Kater gehabt", "am Tag nach meinem Geburtstag nicht mehr gewusst, wer alles da war",
+    "über mein Alter gelogen", "mich an meinem Geburtstag älter gefühlt, als ich bin", "mir zum Geburtstag selbst etwas Teures gekauft",
+    "Geld zum Geburtstag bekommen und sofort ausgegeben", "einen Geburtstag nur mit mir selbst gefeiert",
+    "ein Ständchen am Telefon bekommen, das mir peinlich war", "auf einer Party das Geburtstagskind nicht erkannt",
+    "eine Geburtstagsdeko selbst gebastelt", "einen Luftballon so lange aufgeblasen, bis er geplatzt ist",
+    "die Geschenke von anderen heimlich vorher abgetastet", "auf einer Party mehr gegessen als getanzt",
+    "jemandem zum Geburtstag Socken geschenkt", "einen Geburtstag verpasst, weil ich verschlafen habe",
+    "mich als Erster auf das Buffet gestürzt", "für ein Gruppengeschenk bezahlt und nie erfahren, was es war",
+  ],
+};

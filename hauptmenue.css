@@ -1,0 +1,237 @@
+/* Hauptmenue Partybrett (Nico 06.11.2026, Entwurf entwurf/hauptmenue.css). Baut auf style.css auf: dieselben Farben, Flaechen,
+   Knopf-Lippen und Aussehen (Party, Halloween, Edel). Richtung: Rahmen ruhig, die Karte laut (Nexon), Dunkel als Buehne mit einem
+   Akzent (Rayark), Bild oben und Titel darunter (Nintendo). */
+body.hm-offen { padding-bottom: 0; }
+body.hm-offen #app { max-width: none; padding: 0; }
+.hm { font-size: 16px; display: grid; gap: 12px; padding: 12px 12px calc(96px + env(safe-area-inset-bottom)); max-width: 620px; margin: 0 auto; }
+.hm.gast { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+.hm button { font-family: inherit; }
+.hm h1, .hm h2, .hm h3, .hm p { margin: 0; }
+.hm.lesen .hm-reiter button { pointer-events: auto; }
+
+/* Am Beamer liegt das Menue ueber dem Bild, das Pult bleibt darueber */
+.bm-menue { position: fixed; inset: 0; z-index: 70; background: var(--bg); overflow-y: auto; font-size: 16px; }
+.bm-menue[hidden] { display: none; }
+
+/* Kopf */
+.hm-kopf { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.hm-titel { display: flex; gap: 10px; align-items: center; min-width: 0; grid-row: 1; grid-column: 1; }
+.hm-titel h1 { font-size: 1.65em; line-height: 1.05; letter-spacing: -.5px; }
+.hm-titel small { color: var(--leise); font-weight: 800; font-size: .85em; display: block; }
+.hm-titel small.an { color: var(--gelb); }
+.hm-wuerfel { font-size: 2.1em; line-height: 1; filter: drop-shadow(0 4px 12px #0009); }
+.hm-oben { grid-row: 1; grid-column: 2; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.hm-oben .klein2 { margin: 0; white-space: nowrap; }
+.hm-vorlage { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; min-width: 0; }
+.hm-vorlage label { position: absolute; width: 1px; height: 1px; overflow: hidden; margin: 0; font-size: .9em; font-weight: 800; }
+.hm-vorlage select { flex: 1 1 0; min-width: 0; width: 100%; font: inherit; font-size: .88em; font-weight: 800; color: var(--text); background: var(--flaeche); border: 2px solid var(--rand); border-radius: 12px; padding: 9px 8px; }
+.hm-vorlage .klein2 { margin: 0; white-space: nowrap; flex: none; }
+.hm-zusatz { grid-column: 1 / -1; min-width: 0; }
+
+/* Buehne: Bild der Karte, darunter Name und alles Eingestellte auf einen Blick */
+.hm-buehne { border-radius: 22px; overflow: hidden; background: var(--flaeche2); border: 2px solid var(--rand);
+  box-shadow: 0 8px 0 #0007, 0 18px 40px #0007; display: flex; flex-direction: column; min-height: 0; }
+.hm-bild { position: relative; aspect-ratio: 1008 / 665; overflow: hidden; background: #0a1633; flex: none; }
+.hm-bild img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.hm-bild canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block; }
+.hm-bild.hat-3d img { visibility: hidden; }
+.hm-bild .brett3d-kamera, .hm-bild .brett3d-frei { display: none; }
+.hm-bild::after { content: ""; position: absolute; inset: auto 0 0 0; height: 26%; background: linear-gradient(to top, var(--flaeche2), transparent); pointer-events: none; }
+.hm-pfeil { position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 56px; padding: 0; z-index: 2; font-size: 1.6em; line-height: 1; border-radius: 14px;
+  background: #000a; box-shadow: 0 3px 0 #0008; }
+.hm-pfeil:active { transform: translateY(-50%) translateY(3px); }
+.hm-pfeil.links { left: 10px; } .hm-pfeil.rechts { right: 10px; }
+.hm-leer { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; padding: 16px; font-weight: 800; color: var(--leise); }
+.hm-leer b { font-size: 1.5em; color: var(--text); } .hm-leer span { font-size: 3em; }
+.hm-info { padding: 2px 16px 16px; display: grid; gap: 8px; position: relative; z-index: 1; margin-top: -14px; }
+.hm-name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.hm-name h2 { margin: 0; font-size: 1.75em; font-weight: 900; letter-spacing: -.5px; line-height: 1.1; text-shadow: 0 2px 10px #000a; }
+.hm-marke { background: var(--blurple); border-radius: 99px; padding: 3px 11px; font-weight: 900; font-size: .8em; white-space: nowrap; }
+.hm-text { color: var(--leise); font-weight: 700; font-size: .95em; line-height: 1.35; display: none; }
+.hm[data-reiter="karte"] .hm-text, .hm.gast .hm-text { display: block; }   /* am Handy steht die Kartenregel nur im Reiter Karte, sonst rutschen die Einstellungen zu weit nach unten */
+.hm-kurz { display: flex; flex-wrap: wrap; gap: 6px; }
+.hm-kurz span { background: #0005; border: 2px solid var(--rand); border-radius: 99px; padding: 2px 8px; font-weight: 800; font-size: .8em; }
+
+/* Reiter */
+.hm-pult { display: flex; flex-direction: column; gap: 10px; min-height: 0; min-width: 0; }
+.hm-reiter { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 6px 0; }
+.hm-reiter button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 8px 2px 7px; font-size: .78em; font-weight: 900; line-height: 1.1; min-height: 58px;
+  background: var(--flaeche2); color: var(--leise); box-shadow: 0 3px 0 #0009; overflow-wrap: normal; min-width: 0; }
+.hm-reiter button .emo { font-size: 1.65em; line-height: 1.1; }
+.hm-reiter button[aria-selected="true"] { background: var(--blurple); color: #fff; box-shadow: 0 4px 0 var(--blurple-lippe); }
+.hm-reiter .lang { display: none; }
+.hm-inhalt { display: grid; gap: 12px; align-content: start; min-width: 0; }
+
+/* Gruppen */
+.hm-gruppe { background: linear-gradient(180deg, var(--flaeche2), var(--flaeche)); border: 2px solid var(--rand); border-radius: 18px; padding: 14px; display: grid; gap: 10px; min-width: 0; }
+.hm-gruppe h3 { font-size: 1.1em; font-weight: 900; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.hm-gruppe h3 small { color: var(--leise); font-size: .8em; font-weight: 800; }
+.hm-hinweis { color: var(--leise); font-weight: 700; font-size: .88em; line-height: 1.3; }
+.hm-zweispaltig { display: grid; gap: 12px; min-width: 0; }
+
+/* Zahl mit Plus und Minus */
+.hm-zahl { display: grid; grid-template-columns: 58px minmax(0, 1fr) 58px; gap: 10px; align-items: center; }
+.hm-zahl button { height: 54px; padding: 0; font-size: 1.7em; background: var(--flaeche3); }
+.hm-zahl output { text-align: center; font-size: 1.75em; font-weight: 900; line-height: 1.05; }
+.hm-zahl output small { display: block; font-size: .5em; color: var(--leise); font-weight: 800; }
+.hm-chips { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.hm-chips button { padding: 9px 0; font-size: 1em; }
+.hm-chips button.an, .hm-wahl button.an { background: var(--blurple); box-shadow: 0 4px 0 var(--blurple-lippe); outline: 2px solid #fff; outline-offset: -2px; }
+.hm-wahl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.hm-wahl button { padding: 13px 6px; font-size: 1em; line-height: 1.15; }
+.hm-schalter { display: flex; align-items: center; gap: 12px; font-weight: 800; cursor: pointer; margin: 0; color: var(--text); font-size: 1em; }
+.hm-schalter input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; padding: 0; }
+.hm-schalter i { flex: none; width: 58px; height: 34px; border-radius: 99px; background: #0007; border: 2px solid var(--rand); position: relative; transition: background .15s; }
+.hm-schalter i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: var(--leise); transition: transform .15s, background .15s; }
+.hm-schalter input:checked + i { background: var(--blurple); border-color: var(--blurple); }
+.hm-schalter input:checked + i::after { transform: translateX(24px); background: #fff; }
+.hm-schalter input:focus-visible + i { outline: 3px solid #fff; }
+.hm-schalter span { min-width: 0; }
+
+/* Tempo-Schieber: vier Stufen, die Worte stehen genau unter den Raststellen */
+.hm-schieber { --daumen: 34px; padding: 0 16px; }
+.hm-schieber input[type="range"] { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: var(--daumen); padding: 0; margin: 0; background: transparent !important; border: 0; border-radius: 0; box-shadow: none !important; }
+.hm-schieber input[type="range"]::-webkit-slider-runnable-track { height: 12px; border-radius: 99px;
+  background: linear-gradient(90deg, var(--blau), var(--blurple) 34%, var(--orange) 67%, var(--rot)); box-shadow: inset 0 2px 3px #0007; }
+.hm-schieber input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: var(--daumen); height: var(--daumen); margin-top: calc((12px - var(--daumen)) / 2); border-radius: 50%;
+  background: #fff; border: 5px solid var(--blurple); box-shadow: 0 3px 0 #0009; cursor: pointer; }
+.hm-schieber input[type="range"]::-moz-range-track { height: 12px; border-radius: 99px; background: linear-gradient(90deg, var(--blau), var(--blurple) 34%, var(--orange) 67%, var(--rot)); }
+.hm-schieber input[type="range"]::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 5px solid var(--blurple); }
+.hm-stufen { position: relative; height: 1.5em; margin-top: 3px; }
+.hm-stufen span { position: absolute; transform: translateX(-50%); font-size: .82em; font-weight: 800; color: var(--leise); white-space: nowrap; cursor: pointer; }
+.hm-stufen span.an { color: var(--text); font-weight: 900; }
+.hm-stufen span:nth-child(1) { left: calc(var(--daumen) / 2); } .hm-stufen span:nth-child(2) { left: calc(var(--daumen) / 2 + (100% - var(--daumen)) / 3); }
+.hm-stufen span:nth-child(3) { left: calc(var(--daumen) / 2 + (100% - var(--daumen)) * 2 / 3); } .hm-stufen span:nth-child(4) { left: calc(100% - var(--daumen) / 2); }
+.hm-fein { display: grid; gap: 8px; } .hm-fein > summary { cursor: pointer; font-weight: 800; color: var(--leise); font-size: .92em; }
+.hm-feinzeile { display: grid; gap: 2px; font-weight: 800; font-size: .92em; }
+.hm-feinzeile .hm-schieber { --daumen: 26px; padding: 0 16px; }
+.hm-feinzeile b { display: flex; justify-content: space-between; gap: 8px; font-weight: 800; } .hm-feinzeile b em { font-style: normal; color: var(--leise); }
+
+/* Karten-Kacheln */
+.hm-karten { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.hm-kachel { padding: 0; overflow: hidden; display: flex; flex-direction: column; text-align: left; background: var(--flaeche2); border: 3px solid transparent; box-shadow: 0 5px 0 #0009; border-radius: 16px; min-width: 0; }
+.hm-kachel .vorschau { display: block; position: relative; aspect-ratio: 1008 / 665; overflow: hidden; background: #0a1633; }
+.hm-kachel .vorschau img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.hm-kachel .vorschau.zufall { display: flex; align-items: center; justify-content: center; font-size: 2.8em; background: linear-gradient(150deg, var(--blurple), var(--pink)); }
+.hm-kachel .wort { display: grid; gap: 1px; padding: 8px 10px 9px; }
+.hm-kachel b { font-size: 1em; font-weight: 900; line-height: 1.15; } .hm-kachel small { color: var(--leise); font-weight: 700; font-size: .8em; line-height: 1.2; }
+.hm-kachel.an { border-color: #fff; box-shadow: 0 5px 0 var(--blurple-lippe), 0 0 22px #ffffff33; }
+
+/* Spieler */
+.hm-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.hm-sp { background: #0005; border: 2px solid var(--rand); border-radius: 16px; min-width: 0; }
+.hm-sp.offen { border-color: var(--blurple); }
+.hm-sp-kopf { display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; gap: 10px; align-items: center; width: 100%; padding: 7px 12px 7px 8px; background: none; box-shadow: none; text-align: left; border-radius: 14px; cursor: pointer; }
+.hm-sp-kopf .wer { min-width: 0; display: grid; } .hm-sp-kopf b { font-size: 1.05em; font-weight: 900; line-height: 1.15; overflow-wrap: anywhere; } .hm-sp-kopf small { color: var(--leise); font-weight: 700; font-size: .8em; }
+.hm-sp-kopf .auf { color: var(--leise); font-size: .85em; font-weight: 800; white-space: nowrap; }
+.hm-sp-kopf .rechts2 { display: flex; align-items: center; gap: 6px; }
+.hm-weg { width: 34px; height: 34px; padding: 0; border-radius: 10px; font-size: .9em; background: var(--flaeche3); box-shadow: 0 2px 0 #0009; }
+.hm-fig { display: block; width: 100%; height: auto; overflow: visible; filter: drop-shadow(0 3px 3px #0008); }
+.hm-team { padding: 6px 10px; font-size: .82em; border-radius: 99px; white-space: nowrap; box-shadow: 0 3px 0 #0009; }
+.hm-team.t0 { background: var(--rot); box-shadow: 0 3px 0 var(--rot-lippe); } .hm-team.t1 { background: var(--blau); box-shadow: 0 3px 0 var(--blau-lippe); }
+.hm-sp-wahl { padding: 2px 12px 12px; display: grid; gap: 8px; }
+.hm-gruppe > .hm-sp-wahl { padding: 0; }
+.hm-sp-wahl h4 { margin: 2px 0 0; font-size: .85em; color: var(--leise); font-weight: 900; }
+.hm-farben { display: grid; grid-template-columns: repeat(5, minmax(0, 46px)); justify-content: space-between; gap: 6px; }
+.hm-farbe { aspect-ratio: 1; padding: 0; border-radius: 50%; box-shadow: inset 0 -3px 0 #0005; border: 3px solid transparent; min-width: 0; }
+.hm-farbe.an { border-color: #fff; box-shadow: 0 0 0 2px var(--blurple); } .hm-farbe:disabled { opacity: .22; filter: none; }
+.hm-huete { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 6px; }
+.hm-hut { padding: 6px 2px 5px; background: var(--flaeche2); box-shadow: 0 3px 0 #0009; display: grid; justify-items: center; gap: 1px; font-size: .74em; font-weight: 800; color: var(--leise); min-width: 0; }
+.hm-hut .hm-fig { width: 40px; } .hm-hut.an { outline: 2px solid #fff; outline-offset: -2px; background: var(--flaeche3); color: #fff; }
+.hm-dazu { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } .hm-dazu button { margin: 0; line-height: 1.15; padding: 11px 6px; }
+
+/* Gaeste */
+.hm.gast .kartenwahl-info, .hm.gast .trinkwahl-info { margin: 0; }
+.hm.gast .gross, .hm.gast .zweit { margin: 0; }
+.hm-gast-liste { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; }
+.hm-gast-sp { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 8px; align-items: center; background: #0005; border: 2px solid var(--rand); border-radius: 12px; padding: 4px 8px 4px 5px; min-width: 0; }
+.hm-gast-sp b { font-weight: 900; overflow-wrap: anywhere; line-height: 1.15; } .hm-gast-sp small { color: var(--leise); font-weight: 700; display: block; }
+.hm-gast-sp small.du { display: inline; }
+
+/* Minispiele und Gegenstaende */
+.hm-zeile { display: flex; flex-wrap: wrap; gap: 6px; }
+.hm-zeile > button { margin: 0; flex: 1 1 110px; padding: 9px 8px; }
+details.hm-art { background: #0005; border: 2px solid var(--rand); border-radius: 14px; padding: 9px 11px; min-width: 0; }
+details.hm-art summary { cursor: pointer; font-weight: 900; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+details.hm-art summary small { color: var(--leise); font-weight: 800; white-space: nowrap; }
+details.hm-art[open] summary { margin-bottom: 8px; }
+.hm-chipliste { display: flex; flex-wrap: wrap; gap: 6px; }
+.hm-chip { padding: 6px 9px; font-size: .86em; font-weight: 800; border-radius: 10px; background: var(--flaeche3); box-shadow: 0 2px 0 #0009; text-align: left; line-height: 1.2; min-width: 0; overflow-wrap: anywhere; }
+.hm-chip.aus { background: #0006; color: var(--leise); text-decoration: line-through; box-shadow: none; opacity: .75; }
+
+/* Fuss: am Handy klebt nur der Startknopf unten */
+.hm-plaetze, .hm-mitmachen { display: none; }
+.hm-fuss { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; padding: 8px 12px calc(14px + env(safe-area-inset-bottom)); background: linear-gradient(to top, var(--bg) 70%, transparent); }
+button.hm-los { margin: 0 auto; max-width: 596px; line-height: 1.15; }
+.hm-los:disabled { filter: grayscale(.9) brightness(.65); }
+.hm-qr svg { display: block; width: 64px; height: 64px; background: #fff; border-radius: 8px; }
+
+/* Beamer und PC: alles auf einem Bild, kein Rollen der Seite */
+@media (min-width: 1100px) {
+  body.hm-offen { overflow: hidden; }
+  .hm:not(.gast) { font-size: 15px; max-width: none; height: 100dvh; padding: 16px 24px 18px; gap: 14px; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
+  .hm.gast { height: 100dvh; overflow-y: auto; }
+  .hm:not(.gast) .hm-text { display: block; }
+  .hm-vorlage label { position: static; width: auto; height: auto; }
+  .hm-vorlage select { font-size: .95em; }
+  .hm-zahl { grid-template-columns: 76px minmax(0, 1fr) 76px; } .hm-zahl button { height: 72px; font-size: 2em; } .hm-zahl output { font-size: 2.5em; }
+  .hm-chips button { padding: 14px 0; font-size: 1.1em; }
+  .hm-wahl button { padding: 24px 8px; font-size: 1.2em; }
+  .hm-gruppe { padding: 18px; gap: 14px; } .hm-gruppe h3 { font-size: 1.25em; }
+  .hm:not(.gast) .hm-kopf { grid-column: 1 / -1; grid-template-columns: auto auto minmax(0, 1fr); gap: 16px; }
+  .hm:not(.gast) .hm-oben { grid-column: 1; grid-row: 1; } .hm:not(.gast) .hm-titel { grid-column: 2; }
+  .hm:not(.gast) .hm-vorlage { grid-column: 3; grid-row: 1; justify-self: end; width: min(620px, 100%); }
+  .hm-vorlage select { flex: 1 1 210px; }
+  .hm-buehne { min-height: 0; }
+  .hm:not(.gast) .hm-bild { flex: 1 1 0; aspect-ratio: auto; min-height: 0; }
+  .hm-info { margin-top: -10px; }
+  .hm-name h2 { font-size: 2.3em; }
+  .hm-pult { min-height: 0; }
+  .hm-reiter { position: static; padding: 0 0 4px; background: none; grid-template-columns: 1fr 1fr 1fr 1.15fr 1.45fr; }
+  .hm-sp-wahl { padding: 0; } .hm-inhalt[data-seite="spieler"] .hm-zweispaltig { align-items: stretch; }
+  .hm-inhalt[data-seite="spieler"] .hm-gruppe { align-content: start; } .hm-inhalt[data-seite="spieler"] .hm-wahl button { padding: 13px 8px; font-size: 1.05em; }
+  .hm-inhalt[data-seite="spieler"] .hm-liste { gap: 6px; } .hm-sp-kopf { grid-template-columns: 40px minmax(0, 1fr) auto; padding: 3px 12px 3px 6px; }
+  .hm-inhalt[data-seite="tempo"] .hm-schieber { --daumen: 42px; } .hm-inhalt[data-seite="tempo"] .hm-feinzeile .hm-schieber { --daumen: 32px; }
+  .hm-inhalt[data-seite="tempo"] .hm-fein { gap: 18px; } .hm-inhalt[data-seite="tempo"] .hm-feinzeile { gap: 6px; }
+  .hm-inhalt[data-seite="regeln"] { grid-template-rows: minmax(max-content, 1.3fr) minmax(max-content, 1fr) auto; align-content: stretch; }
+  .hm-inhalt[data-seite="regeln"] .hm-zweispaltig { align-items: stretch; }
+  .hm-inhalt[data-seite="regeln"] .hm-gruppe { align-content: center; }
+  .hm-reiter button { flex-direction: row; gap: 7px; font-size: .95em; min-height: 54px; padding: 8px 8px; }
+  .hm-reiter button .emo { font-size: 1.35em; }
+  .hm-reiter .lang { display: inline; text-align: left; } .hm-reiter .kurz { display: none; }
+  .hm-inhalt { flex: 1 1 0; min-height: 0; overflow-y: auto; padding-right: 6px; scrollbar-width: thin; scrollbar-color: var(--rand) transparent; }
+  .hm-zweispaltig { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .hm-karten { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .hm-fuss { position: static; grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(250px, 340px); gap: 14px; align-items: stretch; padding: 0; background: none; }
+  .hm-plaetze { display: flex; gap: 8px; min-width: 0; }
+  .hm-platz { flex: 1 1 0; display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; align-items: center; padding: 6px 10px 6px 7px; min-height: 76px; text-align: left;
+    background: var(--flaeche2); border: 2px solid var(--rand); border-radius: 16px; box-shadow: none; min-width: 0; }
+  .hm-platz:active { transform: none; }
+  .hm-platz b { font-size: .98em; font-weight: 900; line-height: 1.12; display: block; overflow-wrap: break-word; hyphens: manual; min-width: 0; }
+  .hm-platz small { display: block; color: var(--leise); font-weight: 700; font-size: .78em; }
+  .hm-platz.dazu { flex: 0 0 150px; grid-template-columns: 1fr; justify-items: center; text-align: center; border-style: dashed; color: var(--leise); font-weight: 900; background: none; }
+  .hm-plaetze.dicht { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); max-height: 148px; overflow-y: auto; }
+  .hm-plaetze.dicht .hm-platz { min-height: 46px; grid-template-columns: 26px minmax(0, 1fr); padding: 3px 8px 3px 5px; }
+  .hm-plaetze.dicht .hm-platz small { display: none; }
+  .hm-plaetze .hm-platz.dazu { grid-template-columns: 1fr; white-space: nowrap; }
+  .hm-mitmachen { display: grid; grid-template-columns: auto auto; gap: 10px; align-items: center; background: var(--flaeche2); border: 2px solid var(--rand); border-radius: 16px; padding: 6px 12px 6px 6px; }
+  .hm-mitmachen b { display: block; font-weight: 900; font-size: 1.02em; } .hm-mitmachen small { color: var(--leise); font-weight: 700; font-size: .82em; line-height: 1.15; display: block; }
+  button.hm-los { max-width: none; height: 100%; font-size: 1.5em; padding: 10px; }
+}
+/* Laptop: sechs Plaetze nebeneinander waeren zu schmal fuer lange Namen, also zwei Zeilen mit kleiner Figur */
+@media (min-width: 1100px) and (max-width: 1599px) {
+  .hm-plaetze, .hm-plaetze.dicht { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); max-height: 168px; overflow-y: auto; }
+  .hm-platz { min-height: 50px; grid-template-columns: 30px minmax(0, 1fr); padding: 3px 8px 3px 5px; }
+  .hm-platz small { display: none; }
+  .hm-fuss { grid-template-columns: minmax(0, 1fr) auto minmax(190px, 240px); }
+  .hm-reiter button { font-size: .86em; }
+}
+@media (min-width: 1600px) { .hm:not(.gast) { font-size: 18px; padding: 20px 32px 24px; gap: 18px; } .hm-platz { grid-template-columns: 52px minmax(0, 1fr); min-height: 88px; } .hm-qr svg { width: 76px; height: 76px; } }
+/* schmale Handys: der Titel braucht den Platz, Beenden bleibt als Zeichen */
+@media (max-width: 400px) { .hm-abbruch .wort { display: none; } .hm-titel { gap: 6px; } .hm-titel h1 { font-size: 1.5em; } .hm-wuerfel { font-size: 1.8em; } }
+@media (max-width: 345px) { .hm-reiter button { font-size: .72em; } .hm-titel h1 { font-size: 1.3em; } .hm-kachel b { font-size: .95em; } }
+
+/* Am Zug: Zeit je Zug am Handy (Spieltempo) */
+.zugzeit { text-align: center; margin: 6px 0; color: var(--leise); font-weight: 800; font-size: 14px; }
+.teamzeile { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 14px; margin: 6px 0; font-weight: 900; }
+.teamzeile .t0 { color: var(--rot); } .teamzeile .t1 { color: var(--blau); }

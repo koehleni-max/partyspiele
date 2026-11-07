@@ -1,6 +1,7 @@
 // Fragen und Aufgaben nach Kategorien - eigene Texte. Felder: nochnie, wer, wahrheit, pflicht, lieber ("A ODER B").
 // ab18: nur waehlbar, wenn in der Lobby "Alle ueber 18" bestaetigt ist.
 import { MEHR, HALLOWEEN } from "./fragen_mehr.js";
+import { GEBURTSTAG } from "./fragen_geburtstag.js";
 export const KATEGORIEN = [
 { id: "klassiker", name: "Klassiker", emoji: "⭐", kurz: "Für jede Runde", farben: ["#6d5dfc", "#3a2d9c"],
   nochnie: ["im Kino geweint", "einen Strafzettel bekommen", "auf einer Party eingeschlafen", "mein Handy ins Klo fallen lassen", "bei einer Prüfung geschummelt",
@@ -226,3 +227,4 @@ export const KATEGORIEN = [
 const FELDER = ["nochnie", "wer", "wahrheit", "pflicht", "lieber"];
 KATEGORIEN.forEach((k) => FELDER.forEach((f) => { if (MEHR[k.id] && MEHR[k.id][f]) k[f] = [...(k[f] || []), ...MEHR[k.id][f]]; }));
 KATEGORIEN.splice(KATEGORIEN.findIndex((k) => k.ab18), 0, HALLOWEEN);
+KATEGORIEN.splice(KATEGORIEN.findIndex((k) => k.ab18), 0, GEBURTSTAG);   // Geburtstags-Runde E (07.11.2026)

@@ -14,6 +14,7 @@
 // Buchung angelegt und zaehlen erst nach "Stimmt" des Gegners; Duelle und App-Spiele kommen ueber wertung.js dazu.
 import { esc, knopf, mischen, nameSauber } from "./hilfe.js";
 import * as W from "./wertung.js";
+import * as SH from "./show_geburtstag.js";   // Runde G: Zeugnis, Bester Verlierer, Herzen
 
 const NAME_MAX = 24;
 export const SPEICHER = "pa_tafel";
@@ -204,6 +205,7 @@ const laufName = (feld, ohneAlkohol) => (feld === "n" ? (ohneAlkohol ? "1. Lauf"
 // ---------------------------------------------------------------- Eingaben pruefen (am eigenen Handy, vor dem Senden)
 export function pruefen(a) {
   if (String(a.was).startsWith("w_")) return W.pruefen(a);
+  if (String(a.was).startsWith("sh_")) return "";
   const w = a.werte || [];
   if (a.was === "neu" && a.art === "punkte" && a.eigen && !nameSauber(w[0])) return "Bitte einen Namen für die Station eingeben";
   if (a.was === "team" && !nameSauber(w[0]) && !nameSauber(w[1])) return "Bitte mindestens einen Namen eingeben";
@@ -222,6 +224,7 @@ export function pruefen(a) {
 export function aktion(t, a, ctx) {
   const { gastgeber, wer = "" } = ctx;
   if (String(a.was).startsWith("w_")) return W.aktion(t, a, ctx);
+  if (String(a.was).startsWith("sh_")) return SH.aktion(t, a, ctx);
   W.sicher(t);
   const w = a.werte || [];
   const st = a.id != null ? station(t, a.id) : null;
@@ -330,9 +333,9 @@ function namensliste(t, info) {
 export function render(t, ansicht, info) {
   t = t || neu();
   if (ansicht.modus === "ehrung") return renderEhrung(t, info);
-  if (ansicht.modus === "wertung") return W.renderWertung(t, ansicht, info, info.jetzt);
+  if (ansicht.modus === "wertung") { SH.cssEinhaengen(); return W.renderWertung(t, ansicht, info, info.jetzt) + SH.renderHandy(t, info); }
   if (ansicht.modus === "pokal") return W.renderPokal(t, info);
-  if (ansicht.modus === "abend") return W.renderAbend(t, info);
+  if (ansicht.modus === "abend") { SH.cssEinhaengen(); return W.renderAbend(t, info) + SH.renderHandy(t, info) + SH.renderAbschluss(t, info); }
   const st = ansicht.station != null ? station(t, ansicht.station) : null;
   if (st) return namensliste(t, info) + renderStation(st, info);
   return renderUebersicht(t, ansicht, info);

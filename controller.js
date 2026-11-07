@@ -70,8 +70,9 @@ export function starten(cb) {
 
 // ---------------------------------------------------------------- Fokus: Steuerkreuz waehlt einen Knopf, A drueckt ihn
 let fokusKey = null;
-const ZIELE = "#ansage button, #app button:not([disabled]), #app .schalter, #app a.knopf-link";
-const schluessel = (el) => el.dataset.a || (el.dataset.ansicht !== undefined ? "ansicht:" + el.dataset.ansicht : "") || el.id || el.textContent.trim().slice(0, 40);
+// Hauptmenue des Partybretts (auch am Beamer): Knoepfe, Schieber, aufklappbare Gruppen, Schalter, Vorlagen-Liste, Spielerzeilen
+const ZIELE = "#ansage button, #app button:not([disabled]), #app .schalter, #app a.knopf-link, .hm button:not([disabled]), .hm input[type=range]:not([disabled]), .hm summary, .hm select:not([disabled]), .hm label.hm-schalter, .hm [role=button]";
+const schluessel = (el) => el.dataset.a || el.dataset.hm || el.dataset.hmr || (el.dataset.ansicht !== undefined ? "ansicht:" + el.dataset.ansicht : "") || el.id || el.textContent.trim().slice(0, 40);
 function sichtbar(el) { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden"; }
 // Minispiel-Knoepfe (data-mt) gehoeren dem Handy - Controller spielen in ihrem eigenen Feld (brett_minis.js)
 export function ziele() { return [...document.querySelectorAll(ZIELE)].filter((el) => !el.closest(".padbox") && !el.matches("[data-mt]") && sichtbar(el)); }
@@ -96,7 +97,14 @@ export function fokusBewegen(richtung) {
   const z = ziele();
   if (!z.length) return;
   const jetzt = fokus();
-  if (!jetzt) return fokusSetzen(z.find((el) => el.closest(".spielflaeche")) || z[0]);
+  // Hauptmenue: los geht es beim offenen Reiter, von dort sind die Einstellungen darunter nah
+  if (!jetzt) return fokusSetzen(z.find((el) => el.closest(".spielflaeche")) || z.find((el) => el.matches(".hm-reiter [aria-selected='true']")) || z[0]);
+  // Schieber im Hauptmenue: links und rechts stellen die Stufe, hoch und runter gehen weiter
+  if (jetzt.matches("input[type=range]") && (richtung === "links" || richtung === "rechts")) {
+    const neu = Number(jetzt.value) + (richtung === "rechts" ? 1 : -1);
+    if (neu >= Number(jetzt.min) && neu <= Number(jetzt.max)) { jetzt.value = neu; jetzt.dispatchEvent(new Event("input", { bubbles: true })); jetzt.dispatchEvent(new Event("change", { bubbles: true })); }
+    return;
+  }
   const m = (r) => [r.left + r.width / 2, r.top + r.height / 2];
   const [x0, y0] = m(jetzt.getBoundingClientRect());
   const d = { hoch: [0, -1], runter: [0, 1], links: [-1, 0], rechts: [1, 0] }[richtung];
@@ -111,6 +119,16 @@ export function fokusBewegen(richtung) {
     if (wert < bestWert) { bestWert = wert; best = el; }
   });
   if (best) fokusSetzen(best);
+}
+
+// A auf dem Fokus: eine Auswahlliste klappt am Controller nicht auf, also schaltet A zum naechsten Eintrag
+export function druecken(el = fokus()) {
+  if (!el) return false;
+  if (el.tagName === "SELECT") {
+    el.selectedIndex = (el.selectedIndex + 1) % el.options.length;
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  } else el.click();
+  return true;
 }
 
 // ---------------------------------------------------------------- Minispiele des Partybretts mit Controller

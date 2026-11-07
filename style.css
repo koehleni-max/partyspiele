@@ -497,6 +497,62 @@ details.codekarte { color: var(--leise); }
 .netzweg { position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%); z-index: 55; background: #3a1010ee; border: 2px solid var(--rot); border-radius: 99px;
   padding: 8px 14px; font-weight: 800; font-size: 14px; max-width: calc(100% - 24px); text-align: center; }
 .netzhinweis { font-size: 14px; }
+/* Netzwache, Stellvertreter, Notfall (Geburtstags-Runde A) */
+.gaeste { display: grid; gap: 6px; margin: 8px 0; }
+.gz { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; padding: 6px 0; border-bottom: 1px solid var(--rand); }
+.gz-name { flex: 1 1 90px; min-width: 0; font-weight: 800; overflow-wrap: anywhere; }
+.gz-akku { font-size: 13px; font-weight: 700; color: var(--leise); white-space: nowrap; }
+.gz-akku.knapp { color: #ff7a7a; }
+.gz-knoepfe { display: inline-flex; flex-wrap: wrap; gap: 6px; max-width: 100%; }
+.gz-knoepfe button { width: auto; margin: 0; }
+.ampel { width: 14px; height: 14px; border-radius: 50%; flex: none; background: #777; box-shadow: 0 0 0 2px #0005; }
+.ampel[data-stand="gruen"] { background: #3ddc84; } .ampel[data-stand="gelb"] { background: #ffd23f; }
+.ampel[data-stand="rot"] { background: #ff4d4d; } .ampel[data-stand="ohne"] { background: #8d8dae; }
+.gaeste-auf summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: 12px; font-weight: 800; padding: 6px 0; }
+.ampelzahl { white-space: nowrap; }
+.gm-liste { display: grid; gap: 8px; margin: 8px 0; }
+.gm { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; background: #5a1d1d88; border: 2px solid var(--rot); border-radius: 12px; padding: 8px 10px; min-width: 0; }
+.gm-text { flex: 1 1 140px; min-width: 0; overflow-wrap: anywhere; } .gm-text small { display: block; color: var(--leise); }
+.gm button { width: auto; margin: 0; }
+.spielhilfe { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 12px; }
+.spielhilfe button { width: auto; margin: 0; }
+.dran-hinweis { flex: 1 1 100%; margin: 0; text-align: center; }
+/* Spielleitung und Ablauf (Geburtstags-Runde B) */
+.pausebild { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 16px; background: #000c; backdrop-filter: blur(4px); }
+.pausebox { background: var(--flaeche); border: 2px solid var(--rand); border-radius: 18px; padding: 24px; text-align: center; max-width: 340px; }
+.pausebox h2 { margin: 6px 0; }
+.pausebild.leitung { inset: auto 8px calc(8px + env(safe-area-inset-bottom)) 8px; left: 50%; right: auto; transform: translateX(-50%); width: min(calc(100% - 16px), 540px); padding: 10px 12px; gap: 10px; flex-wrap: wrap;
+  background: #000e; border: 2px solid var(--rand); border-radius: 14px; backdrop-filter: none; }
+.pausebild.leitung b { flex: 1 1 160px; min-width: 0; }
+.pausebild.leitung button { width: auto; margin: 0; flex: 0 0 auto; }
+.sl-knoepfe { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.sl-knoepfe button { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+button.sl-rueck { overflow-wrap: anywhere; }
+.steuer-ablauf details { margin-top: 10px; }
+.steuer-ablauf summary { font-weight: 700; cursor: pointer; padding: 6px 0; }
+.sl-plan { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
+.sl-plan li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sl-plan-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.sl-plan button { width: auto; flex: 0 0 auto; margin: 0; }
+.sl-frage { grid-template-columns: 1fr; margin-top: 8px; }
+.sl-planform { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0 8px; }   /* am Handy untereinander: lange Spielnamen passen ganz in die Auswahl */
+.bm-pult .sl-planform { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.sl-planform input, .sl-planform select { min-width: 0; width: 100%; box-sizing: border-box; font: inherit; font-size: 17px; color: var(--text); background: #0f1022; border: 2px solid var(--rand); border-radius: 14px; padding: 12px 10px; margin-top: 6px; }
+.protokoll { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; max-height: 50vh; overflow-y: auto; overscroll-behavior: contain; }
+.pk-zeile { display: flex; gap: 8px; min-width: 0; font-size: 14px; }
+.pk-zeit { flex: 0 0 auto; color: var(--leise); font-variant-numeric: tabular-nums; }
+.pk-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.pk-text small { display: block; color: var(--leise); }
+.pk-text .pk-punkte b { color: var(--text, #fff); }
+.platzwahl { margin-top: 8px; }
+.platzwahl select, .platz-fremd select { width: 100%; font: inherit; font-size: 17px; color: var(--text); background: #0f1022; border: 2px solid var(--rand); border-radius: 14px; padding: 12px 10px; margin: 6px 0 8px; }
+.stvleiste { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; margin-top: 10px; }
+.stvleiste button { width: auto; margin: 0; max-width: 100%; overflow-wrap: anywhere; }
+.notfall { display: grid; gap: 6px; padding: 8px 0; border-top: 1px solid var(--rand); min-width: 0; }
+.notfall b { overflow-wrap: anywhere; }
+.platz-fremd summary { cursor: pointer; font-weight: 700; }
+.doppelname { display: grid; gap: 6px; margin-top: 8px; }
+.bp-alarm { background: var(--rot) !important; }
 .fledermaus { position: fixed; left: -60px; z-index: 45; font-size: 34px; pointer-events: none; animation: flattern 3.4s ease-in forwards; }
 @keyframes flattern { 30% { transform: translate(35vw, -4vh) rotate(-8deg); } 60% { transform: translate(70vw, 3vh) rotate(6deg); } to { transform: translate(115vw, -6vh) rotate(-4deg); } }
 
@@ -642,7 +698,18 @@ body.beamer[data-look="halloween"] .bm-h { color: #ffd9b0; }
 /* Ereignisse (unterbrechen die Diashow kurz) */
 .bm-ereignis { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; padding: 5vh 5vw; overflow: hidden;
   background: radial-gradient(circle at 50% 45%, #000a, #000e 75%); backdrop-filter: blur(6px); animation: bm-auf .5s ease-out; }
-.bm-ereignis[hidden], .bm-schreck[hidden] { display: none; }
+.bm-ereignis[hidden], .bm-schreck[hidden], .bm-pause[hidden], .bm-abend[hidden] { display: none; }
+.bm-pause { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; background: #000c; backdrop-filter: blur(.6vh); }
+.bm-pause-box { text-align: center; }
+.bm-buehne.geteilt { padding-right: 28%; }
+.bm-abend { position: absolute; top: 0; right: 0; bottom: 0; width: 26.5%; overflow: hidden; background: #0008; border: .15em solid var(--rand); border-radius: .6em; padding: .5em .6em; font-size: .62em; box-sizing: border-box; }
+.bm-abend h3 { margin: 0 0 .4em; font-size: 1.1em; }
+.bm-abend-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: .25em; }
+.bm-abend-liste li { display: grid; grid-template-columns: 2em minmax(0, 1fr) auto; align-items: baseline; gap: .3em; }
+.bm-abend-liste b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bm-abend-liste i { font-style: normal; font-weight: 800; }
+.bm-plan { white-space: nowrap; font-weight: 700; }
+.bm-lobby { justify-content: flex-start; margin-top: .6em; font-size: .7em; }
 @keyframes bm-auf { from { opacity: 0; } }
 .bm-e-box { text-align: center; max-width: 90vw; transform-origin: center; overflow-wrap: anywhere; animation: aufploppen .6s cubic-bezier(.2, 1.6, .4, 1); }
 .bm-e-emo { font-size: 4em; line-height: 1.1; }
@@ -907,8 +974,8 @@ body[data-look="halloween"] .mini-titelkarte { background: repeating-linear-grad
 .mtk-text b { font-size: 22px; font-weight: 900; line-height: 1.1; overflow-wrap: anywhere; text-shadow: 0 2px 6px #0005; }
 .mtk-vor { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; opacity: .85; font-weight: 900; }
 .mini-titelkarte .mini-typ { color: #fff; opacity: .85; }
-.mini-titelkarte.ankunft { animation: mtk-rein .65s cubic-bezier(.2, 1.2, .4, 1) both; }
-.mini-titelkarte.ankunft .mtk-emo { animation: mtk-emo 1s ease-out both; }
+.mini-titelkarte.ankunft { animation: mtk-rein calc(.65s * var(--brett-anim, 1)) cubic-bezier(.2, 1.2, .4, 1) both; }
+.mini-titelkarte.ankunft .mtk-emo { animation: mtk-emo calc(1s * var(--brett-anim, 1)) ease-out both; }
 @keyframes mtk-rein { 0% { transform: scale(.4) rotate(-6deg); opacity: 0; } 70% { transform: scale(1) rotate(1deg); opacity: 1; } 100% { transform: none; } }
 @keyframes mtk-emo { 0% { transform: scale(0) rotate(-180deg); } 70% { transform: scale(1.25) rotate(10deg); } 100% { transform: none; } }
 @media (prefers-reduced-motion: reduce) { .mini-titelkarte.ankunft, .mini-titelkarte.ankunft .mtk-emo { animation: none; } }
@@ -1003,6 +1070,21 @@ svg.brett2d { display: block; width: 100%; height: auto; }
 .einst-zeile button.brett-wahl { flex: 1 1 140px; width: auto; display: block; margin: 0; min-width: 0; padding: 10px 8px; font-size: 15px; overflow-wrap: anywhere; }
 .einst-zeile button.brett-wahl small { display: block; font-size: 12px; font-weight: 700; opacity: .85; margin-top: 3px; }
 .einst-zeile button.brett-wahl.an { outline: 3px solid var(--gelb); }
+/* Grossumbau Runde 4: Karten */
+.brett2d .art-z circle { fill: #37c6e8; } .brett2d .zu circle { fill: #5b5f73; opacity: .55; }
+.brett3d.welt-hafen { background: radial-gradient(circle at 50% 30%, #1e5fa8, #081a33 75%); }
+.brett3d.welt-kaufhaus { background: radial-gradient(circle at 50% 30%, #3a2f63, #120e22 75%); }
+.brett-kartenlage { text-align: center; font-weight: 800; font-size: 14px; color: #e8ecff; background: #171a35; border: 2px solid var(--rand); border-radius: 12px; padding: 6px 10px; margin: 6px 0; overflow-wrap: anywhere; }
+.bsb3-kartenlage { color: #ffe27a; font-weight: 900; }
+.kartenwahl { margin: 12px 0; min-width: 0; }
+.kartenwahl p { margin: 0 0 8px; }
+.kartenwahl-liste { display: grid; gap: 8px; min-width: 0; }
+.kartenwahl-liste button.karten-knopf { display: flex; align-items: center; gap: 10px; text-align: left; width: 100%; min-width: 0; margin: 0; padding: 10px 12px; font-size: 16px; overflow-wrap: anywhere; }
+.karten-knopf .kw-emo { font-size: 30px; flex: none; }
+.karten-knopf .kw-text { min-width: 0; flex: 1 1 auto; }
+.karten-knopf .kw-text b { display: block; }
+.karten-knopf .kw-text small { display: block; font-size: 13px; font-weight: 700; opacity: .9; margin-top: 2px; line-height: 1.25; }
+.kartenwahl-runden { margin-top: 10px; justify-content: center; }
 .br-mini small { font-weight: 700; }
 .br-mini-kopf { margin-top: 18px; }
 /* Minispiele: Wischen, Neigen, neue Knopfraster */
@@ -1108,6 +1190,8 @@ button.bp-spiel small { display: block; font-size: 13px; font-weight: 600; opaci
 .bp-raster { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 0 8px; }
 .bp-raster button small { display: block; font-size: 12px; opacity: .75; }
 .bp-reihe { display: flex; flex-wrap: wrap; gap: 0 8px; } .bp-reihe button { flex: 1 1 150px; }
+.bm-pult .bp-kopf .bp-pause { width: auto; flex: 0 0 auto; margin: 0 10px 0 auto; min-height: 44px; padding: 4px 14px; }
+.bm-pult .sl-knoepfe button { margin: 0; } .bm-pult .pk-zeile { font-size: 15px; } .bm-pult .protokoll { max-height: none; }
 button.bp-schreck { display: block; width: 100%; font-size: 26px; min-height: 84px; }
 .bp-partie { background: #ffffff0d; border: 2px solid var(--rand); border-radius: 16px; padding: 10px 12px; margin: 0 0 10px; }
 .bp-partie.sammelt { border-color: var(--gelb); }
@@ -1243,8 +1327,8 @@ button.bm-fokus-knopf { font-size: max(14px, 1em); padding: .25em .8em; border-r
 .b3-karte { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 3; pointer-events: none; width: max-content; max-width: calc(100% - 20px);
   display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 10px; padding: 8px 14px; border-radius: 18px; box-sizing: border-box;
   background: linear-gradient(135deg, #1b1c2ef0, #2c2158f0); border: 2px solid #ffffff38; box-shadow: 0 6px 0 #0008, 0 0 24px #0008; font-size: 14px; color: #fff; }
-.b3-karte.rein { animation: b3k-rein .45s cubic-bezier(.2, 1.3, .4, 1) both; }
-.b3-karte.weg { animation: b3k-weg .35s ease-in both; }
+.b3-karte.rein { animation: b3k-rein calc(.45s * var(--brett-anim, 1)) cubic-bezier(.2, 1.3, .4, 1) both; }
+.b3-karte.weg { animation: b3k-weg calc(.35s * var(--brett-anim, 1)) ease-in both; }
 @keyframes b3k-rein { from { opacity: 0; transform: translate(-50%, 40%) scale(.7); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
 @keyframes b3k-weg { to { opacity: 0; transform: translate(-50%, 30%) scale(.9); } }
 .b3-karte.im-fluss { position: static; transform: none; width: auto; max-width: 100%; margin: 8px 0; pointer-events: auto; animation: none; }

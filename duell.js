@@ -662,6 +662,13 @@ function eintrag(du, schl, j) {
   return e;
 }
 const msVon = (e) => jetzt() - e.du.start;
+// Pause der Spielleitung (Runde B): die Duell-Uhr steht. Der Gastgeber schiebt den Start selbst; bis der neue Stand da ist,
+// rueckt hier die eigene Kopie nach, sonst waere das Duell im selben Augenblick abgelaufen.
+let pauseSeit = 0;
+export function pausieren(an) {
+  if (an && !pauseSeit) pauseSeit = Date.now();
+  if (!an && pauseSeit) { const um = Date.now() - pauseSeit; pauseSeit = 0; lok.forEach((e) => { if (e.du && e.du.start) e.du = { ...e.du, start: e.du.start + um }; }); }
+}
 function gegnerInfo(e, namen, ms) {
   const g = gegnerVon(e.du, e.j);
   return { name: (namen || e.namen || [])[g] || "Gegner", live: ms >= 0 ? anzeigeLive(e.du, g, ms) : null };
@@ -769,6 +776,7 @@ function starteTakt() {
   if (taktAn || typeof window === "undefined") return;
   taktAn = true;
   setInterval(() => {
+    if (pauseSeit) return;
     for (const [schl, e] of lok) {
       if (e.du.phase !== "spiel" || !finde(schl) && !e.senden) continue;
       const ms = msVon(e);

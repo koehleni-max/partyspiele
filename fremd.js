@@ -50,6 +50,11 @@ function fremdSpiel({ id, name, emoji, kurz, farben, M, regeln, gruppe, bot }) {
   const meta = M.LOGIK.getGameMetadata ? M.LOGIK.getGameMetadata() : { maxPlayers: 8 };
   return {
     id, name, emoji, kurz, farben, fremd: true,
+    // Wer ist am Zug (Vibration und Ton am Handy, app.js)? null = gerade niemand
+    dranVon(s) {
+      const t = s.st && s.st.turnState, i = t ? t.currentPlayerIndex : null;
+      return Number.isInteger(i) && (s.st.winner === null || s.st.winner === undefined) ? i : null;
+    },
     // Gesamtwertung: das Regelwerk traegt den Sieger in state.winner ein (Spieler-Nr. als Text, bei Gleichstand eine
     // Liste; Unentschieden = null)
     ergebnis(s) {

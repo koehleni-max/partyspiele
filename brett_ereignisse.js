@@ -156,6 +156,8 @@ export const nachId = (id) => L.find((x) => x.id === id);
 // gestrichene Minispiele stehen in derselben Liste als "m:<Kennung>"
 export const MINI_KENNUNGEN = [...R.ALT_IDS, ...R.NEU_IDS];
 const gueltig = new Set([...L.map((x) => x.id), ...MINI_KENNUNGEN.map((id) => `m:${id}`)]);
+const WARE = /^w:[a-z]+$/;   // abgeschaltete Gegenstaende (die Liste selbst steht in brett.js)
+const erlaubt = (id) => gueltig.has(id) || WARE.test(String(id));
 
 // ziehbar: nicht gestrichen und - ohne Trinken - keine Trink-Ereignisse
 export function ziehbar(weg, ohne) {
@@ -165,26 +167,31 @@ export function ziehbar(weg, ohne) {
 
 // Streichliste aendern (nur Spielleitung; app.js prueft die Rechte). -> true, wenn sich etwas geaendert hat
 export function streichAktion(raum, a) {
-  const weg = new Set(Array.isArray(raum.brettWeg) ? raum.brettWeg.filter((id) => gueltig.has(id)) : []);
+  const weg = new Set(Array.isArray(raum.brettWeg) ? raum.brettWeg.filter(erlaubt) : []);
   const vorher = weg.size;
   if (a.was === "streichen" && gueltig.has(a.id)) { if (weg.has(a.id)) weg.delete(a.id); else weg.add(a.id); }
   // Minispiele: einzeln oder alle wieder rein
   else if (a.was === "mini" && gueltig.has(`m:${a.id}`)) { const k = `m:${a.id}`; if (weg.has(k)) weg.delete(k); else weg.add(k); }
   else if (a.was === "minisauf") [...weg].forEach((k) => { if (k.startsWith("m:")) weg.delete(k); });
+  else if (a.was === "minisweg") MINI_KENNUNGEN.forEach((id) => weg.add(`m:${id}`));
+  // Gegenstaende (Hauptmenue): "w:<Kennung>", Liste und Alle-aus kommen von brett.js
+  else if (a.was === "ware" && WARE.test(`w:${a.id}`)) { const k = `w:${a.id}`; if (weg.has(k)) weg.delete(k); else weg.add(k); }
+  else if (a.was === "warenauf") [...weg].forEach((k) => { if (k.startsWith("w:")) weg.delete(k); });
+  else if (a.was === "warenweg" && Array.isArray(a.ids)) a.ids.forEach((id) => { if (WARE.test(`w:${id}`)) weg.add(`w:${id}`); });
   else if (a.was === "kat" && KATEGORIEN.some(([k]) => k === a.kat)) {
     const ids = L.filter((x) => x.kat === a.kat).map((x) => x.id);
     const alleWeg = ids.every((id) => weg.has(id));
     ids.forEach((id) => (alleWeg ? weg.delete(id) : weg.add(id)));
-  } else if (a.was === "alleauf") [...weg].forEach((k) => { if (!k.startsWith("m:")) weg.delete(k); });   // Ereignisse; Minispiele: "minisauf"
+  } else if (a.was === "alleauf") [...weg].forEach((k) => { if (!/^[mw]:/.test(k)) weg.delete(k); });   // Ereignisse; Minispiele: "minisauf"
   else return false;
   const neu = [...weg];
-  const anders = neu.length !== vorher || a.was === "streichen" || a.was === "kat" || a.was === "mini";
+  const anders = neu.length !== vorher || a.was === "streichen" || a.was === "kat" || a.was === "mini" || a.was === "ware";
   raum.brettWeg = neu;
   return anders;
 }
 // gemerkte Liste (Gastgeber-Geraet) uebernehmen - nur bekannte Kennungen
 export function merkUebernehmen(raum, liste) {
   if (!Array.isArray(liste)) return false;
-  raum.brettWeg = liste.filter((id) => gueltig.has(id));
+  raum.brettWeg = liste.filter(erlaubt);
   return true;
 }

@@ -3,6 +3,7 @@
 // am Handy des Nachbarn erkennt, wer gerade wirklich handelt. Erzaehler-Stimme optional auf dem Gastgeber-Handy.
 import { esc, knopf, zufall, mischen, name } from "./hilfe.js";
 import { still, nachtLeise } from "./ton.js";
+import { zaehlen, spiegeln, momentNeu, joker, zaehlerHTML } from "./trinken_geburtstag.js";
 
 const nachtMerk = {};   // dieses Geraet: fuer welchen Nachtschritt schon vibriert wurde
 
@@ -13,12 +14,22 @@ const ROLLEN = {
   amor: { name: "Amor", emoji: "💘", team: "dorf", text: "In der ersten Nacht verliebst du zwei Spieler. Stirbt einer, stirbt der andere vor Kummer." },
   jaeger: { name: "Jäger", emoji: "🏹", team: "dorf", text: "Wenn du stirbst, nimmst du mit einem letzten Schuss jemanden mit ins Grab." },
   waechter: { name: "Wächter", emoji: "🛡️", team: "dorf", text: "Jede Nacht beschützt du einen Spieler vor den Wölfen – nicht zweimal hintereinander denselben." },
+  // Geburtstags-Runde E (Vorschlag 67): gehoert zum Dorf, muss jede Nacht einen Schluck trinken - nur mit Trinken
+  partygast: { name: "Partygast", emoji: "🥳", team: "dorf", trinken: true, text: "Du gehörst zum Dorf, ohne Sonderkraft – aber du feierst zu viel: Jede Nacht trinkst du einen Schluck." },
   dorf: { name: "Dorfbewohner", emoji: "🧑‍🌾", team: "dorf", text: "Du hast keine Sonderkraft – aber deine Stimme entscheidet tagsüber, wer gehängt wird." },
 };
 
 function vorschlag(n) {
   const w = n >= 16 ? 4 : n >= 11 ? 3 : n >= 7 ? 2 : 1;
-  return { wolf: w, seherin: 1, hexe: n >= 6 ? 1 : 0, amor: n >= 8 ? 1 : 0, jaeger: n >= 7 ? 1 : 0, waechter: n >= 10 ? 1 : 0 };
+  return { wolf: w, seherin: 1, hexe: n >= 6 ? 1 : 0, amor: n >= 8 ? 1 : 0, jaeger: n >= 7 ? 1 : 0, waechter: n >= 10 ? 1 : 0, partygast: n >= 6 ? 1 : 0 };
+}
+// Ohne Trinken gibt es keine Trink-Rollen (Partygast wird dann zum Dorfbewohner)
+const rollenZahlen = (s) => Object.fromEntries(Object.entries(s.rollenZahl || {}).filter(([r]) => !(s.ohne && ROLLEN[r] && ROLLEN[r].trinken)));
+// Neue Nacht: jeder lebende Partygast bekommt seinen Schluck (Schluck-Zaehler, nur mit Trinken)
+function partygastTrinkt(s, namen) {
+  if (s.ohne || !namen) return;
+  mitRolle(s, "partygast").forEach((j) => zaehlen(s, j, 1, namen));
+  spiegeln(s, namen);
 }
 
 const lebt = (s, j) => !s.tot.includes(j);
@@ -109,20 +120,21 @@ export const werwolf = {
   aktion(s, i, a, namen) {
     const n = namen.length;
     if (a.typ === "neu") return Object.assign(s, werwolf.start(namen));
+    if (a.typ === "wasserjoker") { joker(s, i, namen); return; }
     if (s.phase === "einstellen") {
       if (i !== 0) return;
       if (a.typ === "plus" || a.typ === "minus") { const r = a.r; s.rollenZahl[r] = Math.max(r === "wolf" ? 1 : 0, (s.rollenZahl[r] || 0) + (a.typ === "plus" ? 1 : -1)); }
       if (a.typ === "stimme") s.stimme = !s.stimme;
       if (a.typ === "verteilen") {
         const karten = [];
-        for (const [r, z] of Object.entries(s.rollenZahl)) for (let k = 0; k < z; k++) karten.push(r);
+        for (const [r, z] of Object.entries(rollenZahlen(s))) for (let k = 0; k < z; k++) karten.push(r);
         if (karten.length > n) return;
         while (karten.length < n) karten.push("dorf");
         Object.assign(s, { phase: "rollen", rolle: mischen(karten), bereit: {}, tot: [], tode: [], nacht: 0, liebe: null, heiltrank: true, gifttrank: true, letzterSchutz: null, protokoll: [], zug: 0 });
       }
       return;
     }
-    if (s.phase === "rollen" && a.typ === "bereit") { s.bereit[i] = true; if (Object.keys(s.bereit).length >= n) { s.phase = "nacht"; s.nacht = 1; s.uebergang = "sonnenuntergang"; s.wolfZiel = null; s.giftZiel = null; s.geheilt = false; s.geschuetzt = null; s.zug++; naechsteNachtphase(s, 0); } return; }
+    if (s.phase === "rollen" && a.typ === "bereit") { s.bereit[i] = true; if (Object.keys(s.bereit).length >= n) { s.phase = "nacht"; s.nacht = 1; s.uebergang = "sonnenuntergang"; s.wolfZiel = null; s.giftZiel = null; s.geheilt = false; s.geschuetzt = null; s.zug++; momentNeu(s); partygastTrinkt(s, namen); naechsteNachtphase(s, 0); } return; }
     if (s.phase === "nacht") {
       const r = NACHT_REIHE[s.nachtSchritt];
       if (a.typ === "dummy") return;
@@ -157,7 +169,7 @@ export const werwolf = {
       }
       if (a.typ === "weiter" && s.jaegerOffen === null && !s.gewinner) {
         if (s.phase === "morgen") { s.phase = "tag"; s.stimmen = {}; s.uebergang = null; }
-        else { s.phase = "nacht"; s.nacht++; s.uebergang = "sonnenuntergang"; s.wolfZiel = null; s.giftZiel = null; s.geheilt = false; s.geschuetzt = null; s.zug++; naechsteNachtphase(s, 0); }
+        else { s.phase = "nacht"; s.nacht++; s.uebergang = "sonnenuntergang"; s.wolfZiel = null; s.giftZiel = null; s.geheilt = false; s.geschuetzt = null; s.zug++; momentNeu(s); partygastTrinkt(s, namen); naechsteNachtphase(s, 0); }
       }
       return;
     }
@@ -179,8 +191,8 @@ export const werwolf = {
   render(s, ich, namen) {
     const n = namen.length;
     if (s.phase === "einstellen") {
-      const summe = Object.values(s.rollenZahl).reduce((x, y) => x + y, 0);
-      const zeilen = Object.keys(ROLLEN).filter((r) => r !== "dorf").map((r) => `<div class="rollenzeile"><span>${ROLLEN[r].emoji} ${ROLLEN[r].name}</span>
+      const summe = Object.values(rollenZahlen(s)).reduce((x, y) => x + y, 0);
+      const zeilen = Object.keys(ROLLEN).filter((r) => r !== "dorf" && !(s.ohne && ROLLEN[r].trinken)).map((r) => `<div class="rollenzeile"><span>${ROLLEN[r].emoji} ${ROLLEN[r].name}</span>
         ${ich === 0 ? `${knopf("−", { typ: "minus", r }, "klein2")}<b>${s.rollenZahl[r] || 0}</b>${knopf("+", { typ: "plus", r }, "klein2")}` : `<b>${s.rollenZahl[r] || 0}</b>`}</div>`).join("");
       return `<div class="ww-himmel tag"><div class="ww-dorf"></div><div class="ww-titel">🐺 Werwolf</div></div>
         <p class="mitte">${n} Spieler. ${n < 5 ? "<b>Mit mindestens 5 macht es richtig Spaß – mit 8 bis 20 ist es perfekt.</b>" : ""}</p>
@@ -208,7 +220,8 @@ export const werwolf = {
       let inhalt;
       if (!aktiv) {
         inhalt = `<p class="nachttext">Das Dorf schläft … 😴<br><small>Damit niemand etwas merkt: tippe ein paar Sterne an.</small></p>
-          <div class="sternenfeld">${Array.from({ length: 9 }, (_, k) => `<button class="stern" data-a='{"typ":"dummy"}'>✦</button>`).join("")}</div>`;
+          <div class="sternenfeld">${Array.from({ length: 9 }, (_, k) => `<button class="stern" data-a='{"typ":"dummy"}'>✦</button>`).join("")}</div>
+          ${s.rolle[ich] === "partygast" && !tot && !s.ohne ? `<p class="nachttext ww-partygast">🥳 Partygast: Zeit für deinen Schluck – unauffällig!</p>${zaehlerHTML(s, ich)}` : ""}`;
       } else if (r === "amor") {
         inhalt = `<p class="nachttext">💘 Amor, wähle zwei Verliebte</p><div class="raster">${namen.map((nm, j) => `<button class="wahl amorwahl" data-amor="${j}">${esc(nm)}</button>`).join("")}</div>
           <button class="gross pink" id="amor-ok">💘 Verlieben</button>`;

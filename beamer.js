@@ -29,6 +29,13 @@ import * as G from "./gluecksrad.js";
 import { esc } from "./hilfe.js";
 import * as PULT from "./beamer_pult.js";
 import * as DU from "./duell.js";
+import { momenteRuhig } from "./brett3d.js";
+import * as K from "./konten.js";
+import * as C from "./controller.js";
+import * as HM from "./hauptmenue.js";
+import * as SL from "./spielleitung.js";
+import * as SH from "./show_geburtstag.js";   // Runde G: Zeugnisse und Ehrungen in der Abendwertung
+import * as ER from "./erklaer.js";   // Restpaket 3a: Erklaer-Einblendung nach "Los geht's"
 // Steuerpult am Beamer (Nico 31.10.2026): app.js fragt hier, welche Kennung ein Pult ist und was es darf
 export { istPult, pultErlaubt } from "./beamer_pult.js";
 
@@ -47,7 +54,7 @@ export const SEITEN = [
 export const seiteGueltig = (id) => SEITEN.some((s) => s.id === id);
 export const seiteName = (id) => { const s = SEITEN.find((x) => x.id === id); return s ? `${s.emo} ${s.name}` : ""; };
 // rad: Drehung + Ergebnis; laeuft noch eine Joker-Entscheidung, bleibt das Rad stehen, bis sie gefallen ist
-export const DAUER_EREIGNIS = { gruss: 7000, spiel: 10000, pokal: 16000, abend: 20000, schreck: 2600, rad: G.DREH + 9000, schub: 10000 };
+export const DAUER_EREIGNIS = { gruss: 7000, spiel: 10000, pokal: 16000, abend: 20000, schreck: 2600, rad: G.DREH + 9000, schub: 10000, plan: 12000 };
 const MED = { 1: "🥇", 2: "🥈", 3: "🥉" };
 const spiel = (id) => SPIELE.find((x) => x.id === id);
 
@@ -59,6 +66,8 @@ export function steuer(raum) {
     seite: seiteGueltig(b.seite) ? b.seite : null, seit: Number(b.seit) || 0,
     weg: Number(b.weg) || 0, schreck: Number(b.schreck) || 0,
     aus: Array.isArray(b.aus) ? b.aus.filter((x) => typeof x === "string").slice(-12) : [],
+    party: !!b.party, geteilt: !!b.geteilt,   // Partymodus; Wand geteilt: Spiel links, Abendwertung rechts (Runde B)
+    ruhig: !!b.ruhig,   // Runde C, Punkt 96: kein Bild-Wackeln und kein Blitz bei grossen Momenten am Partybrett
   };
 }
 
@@ -73,6 +82,11 @@ export function steuerAktion(raum, a, jetzt) {
     else return false;
   } else if (a.was === "weg") b.weg += 1;
   else if (a.was === "schreck") { if (raum.look !== "halloween") return false; b.schreck += 1; }
+  // Rueckgaengig: ein noch laufendes Bild verschwindet ("weg"), der Zaehler geht zurueck
+  else if (a.was === "schreckweg") { b.schreck = Math.max(0, b.schreck - 1); b.weg += 1; }
+  else if (a.was === "party") { b.party = !a.aus; if (b.party) { b.diashow = true; b.seite = null; b.seit = 0; } }
+  else if (a.was === "geteilt") b.geteilt = !b.geteilt;
+  else if (a.was === "ruhig") b.ruhig = !b.ruhig;
   else if (a.was === "spielaus" || a.was === "spielan") {
     // Spielansicht eines Spiels am Beamer aus- bzw. wieder einblenden (zurueck zur Diashow)
     const pid = String(a.pid || "");
@@ -102,6 +116,8 @@ function datenWertung(raum) {
   if (runde.length) return { titel: `Gesamtwertung · Runde ${w.runde.nr}`, liste: runde, w };
   const abend = W.stand(w, null).filter((x) => x.summe > 0);
   if (abend.length) return { titel: "Abendwertung bisher", liste: abend, w, hinweis: `Runde ${w.runde.nr} hat noch keine Punkte` };
+  // Partymodus: die Wertung steht von Anfang an in der Diashow, auch ohne Punkte
+  if (steuer(raum).party) return { titel: `Gesamtwertung · Runde ${w.runde.nr}`, liste: [], w, hinweis: "Noch keine Punkte – das erste Spiel bringt sie" };
   return null;
 }
 function datenPokal(raum) { const w = wertungVon(raum); return w && (w.pokal || w.runde.ende) ? w : null; }
@@ -148,6 +164,7 @@ export function marken(raum) {
     gast: Math.max(0, ...(raum.gruesse || []).map((g) => Number(g.nr) || 0)),
     schreck: st.schreck, weg: st.weg,
     rad: Number(raum.glueck && raum.glueck.nr) || 0, schub: Number(raum.glueck && raum.glueck.schub) || 0,
+    plan: Number(raum.planAnsage && raum.planAnsage.nr) || 0,
   };
 }
 // alt = Marken beim letzten Stand (null = erster Stand: nichts Altes nachholen)
@@ -163,6 +180,7 @@ export function ereignisse(alt, raum) {
   // Gluecksrad: neue Drehung (nur die aktuelle, alte nicht nachholen) und Weiterschieben per Joker
   if (neu.rad > (alt.rad || 0) && l && l.nr === neu.rad) liste.push({ art: "rad", nr: l.nr });
   if (neu.schub > (alt.schub || 0) && l && l.schub) liste.push({ art: "schub", nr: l.nr });
+  if (neu.plan > (alt.plan || 0) && raum.planAnsage) liste.push({ art: "plan", id: raum.planAnsage.id });
   return { liste, marken: neu, weg: neu.weg > alt.weg };
 }
 
@@ -171,6 +189,7 @@ const cd = (ende, jetzt) => `<b class="bm-cd" data-bcd="${ende}">${W.uhrText(end
 const namenText = (l) => l.map((n) => `<b>${esc(n)}</b>`).join(" &amp; ");
 
 function seiteWertung(d) {
+  if (!d.liste.length) return `<div class="bm-leer"><div class="bm-pokalbild">🏅</div><h2 class="bm-h">${esc(d.titel)}</h2><p class="bm-leise">${esc(d.hinweis)}</p></div>`;
   const top = d.liste.slice(0, 12), mehr = d.liste.length - top.length;
   const pokal = (n) => d.w.pokal && d.w.pokal.some((p) => p.toLocaleLowerCase("de") === n.toLocaleLowerCase("de"));
   return `<h2 class="bm-h">🏅 ${esc(d.titel)}</h2>${d.hinweis ? `<p class="bm-leise mitte">${esc(d.hinweis)}</p>` : ""}
@@ -263,11 +282,13 @@ function seiteGlueck(g, raum) {
 }
 
 function seiteMitmachen(raum) {
-  const da = (raum.spieler || []).filter((x) => x.online).length;
+  const leute = (raum.spieler || []).filter((x) => x.online), da = leute.length;
+  // Partymodus: die Seite ist zugleich die Lobby - wer da ist, steht an der Wand
+  const lobby = steuer(raum).party && da ? `<div class="bm-pillen bm-lobby">${leute.slice(0, 30).map((x) => `<span class="bm-pille">${esc(x.name)}</span>`).join("")}</div>` : "";
   return `<div class="bm-mitmachen"><div class="bm-qrgross" data-bqr></div>
     <div class="bm-mm-text"><h2 class="bm-h">📲 Mitspielen!</h2>
       <p class="bm-zeile">Handy-Kamera auf den Code halten</p><p class="bm-zeile">Namen eingeben – fertig</p>
-      <p class="bm-leise">${da} ${da === 1 ? "Gast ist" : "Gäste sind"} schon dabei · kein Konto, keine App</p></div></div>`;
+      <p class="bm-leise">${da} ${da === 1 ? "Gast ist" : "Gäste sind"} schon dabei · kein Konto, keine App</p>${lobby}</div></div>`;
 }
 
 const LEER = { wertung: "Noch keine Punkte – das erste Spiel bringt sie.", pokal: "Noch keine Runde gestartet.", pong: "Noch kein Turnier angelegt.",
@@ -316,13 +337,21 @@ export function ereignisHTML(raum, e, jetzt) {
     return `<div class="bm-e-box bm-e-rad"><div class="bm-rad-bild">${G.radLaufSVG(l, raum.look, jetzt, true)}</div>
       <div class="bm-rad-text"><p class="bm-e-klein">🎡 Glücksrad</p><div data-rad-erg>${G.ergebnisHTML(l, jetzt, true)}</div></div></div>`;
   }
+  if (e.art === "plan") {
+    const x = ((raum.plan) || []).find((y) => y.id === e.id);
+    if (!x) return "";
+    const min = Math.max(1, Math.ceil((x.t - jetzt) / 60000)), sp = x.spiel && spiel(x.spiel);
+    return `<div class="bm-e-box bm-e-plan"><div class="bm-e-emo">${sp ? sp.emoji : "⏰"}</div><p class="bm-e-klein">In ${min} ${min === 1 ? "Minute" : "Minuten"} um ${esc(x.zeit)}</p>
+      <p class="bm-e-gross">${esc(sp ? sp.name : x.text)}</p></div>`;
+  }
   if (e.art === "abend") {
     const w = wertungVon(raum);
     const tab = W.stand(w, null).filter((x) => x.summe > 0 && x.platz <= 3);
     const traeger = w.runden.filter((x) => x.sieger.length);
     return `<div class="bm-e-box bm-e-abend"><div class="tt-ehrungtitel">🌙 Abendwertung</div>
       ${tab.length ? `<div class="tt-podest">${tab.map((x) => `<div class="tt-rang r${x.platz}"><span>${MED[x.platz]}</span><span class="tt-rangnamen"><b>${esc(x.name)} (${x.summe})</b></span></div>`).join("")}</div>` : `<p class="bm-leise">Noch keine Punkte.</p>`}
-      ${traeger.length ? `<p class="bm-leise">🏆 Pokalträger: ${traeger.slice(-6).map((x) => `Runde ${x.nr}: ${esc(x.sieger.join(" & "))}`).join(" · ")}</p>` : ""}</div>`;
+      ${traeger.length ? `<p class="bm-leise">🏆 Pokalträger: ${traeger.slice(-6).map((x) => `Runde ${x.nr}: ${esc(x.sieger.join(" & "))}`).join(" · ")}</p>` : ""}
+      ${(SH.cssEinhaengen(), SH.beamerAbschluss(raum.tafel, (raum.spieler || []).filter((x) => !K.istTestkonto(raum, x.name)).map((x) => x.name)))}</div>`;
   }
   return "";
 }
@@ -370,11 +399,13 @@ export async function start(code, wurzel) {
     spiel: () => (spielKey ? spielKey.split(":")[0] : null), pfade: () => [...gelesen], roh: () => ({ ...teile }), id: () => meineId, fokus: () => fokus };
   app.innerHTML = `<div class="bm-effekte" aria-hidden="true"></div><div class="bm">
       <div class="bm-kopf"><span class="bm-titel">📽️ Beamer</span><span class="bm-rechts"><span class="bm-zeit"></span><button class="bm-pult-knopf" data-pult-auf>🛠️ Steuern</button></span></div>
-      <div class="bm-buehne"><div class="bm-inhalt"><div class="bm-leer"><div class="bm-pokalbild">⏳</div><p class="bm-leise">Raum wird geladen …</p></div></div><i class="bm-fortschritt"></i></div>
-      <div class="bm-fuss"><div class="bm-punkte"></div><div class="bm-modus"></div><div class="bm-qrklein" data-bqr title="Mitmachen"></div></div>
+      <div class="bm-buehne"><div class="bm-inhalt"><div class="bm-leer"><div class="bm-pokalbild">⏳</div><p class="bm-leise">Raum wird geladen …</p></div></div><i class="bm-fortschritt"></i><aside class="bm-abend" hidden></aside></div>
+      <div class="bm-fuss"><div class="bm-punkte"></div><div class="bm-plan"></div><div class="bm-modus"></div><div class="bm-qrklein" data-bqr title="Mitmachen"></div></div>
     </div>
     <div class="bm-ereignis" hidden></div>
+    <div class="bm-pause" hidden><div class="bm-pause-box"><div class="bm-pokalbild">⏸️</div><p class="bm-gross">Pause</p><p class="bm-leise">Gleich geht es weiter</p></div></div>
     <div class="bm-schreck" hidden></div>
+    <div class="bm-menue" hidden></div>
     <aside class="bm-pult" hidden></aside>
     <button class="bm-start" data-bm-start><span>▶️ Vollbild und Ton an</span><small>einmal klicken – danach läuft alles von selbst</small></button>`;
   document.querySelector("[data-bm-start]").addEventListener("click", vollbild);
@@ -400,8 +431,13 @@ export async function start(code, wurzel) {
     netz = await new Verbindung(code).start();
   } catch (e) { return fehler("Keine Verbindung zum Raum. Ist das Internet an? Dann die Seite neu laden."); }
   netz.anwesend(meineId, "📽️ Beamer");   // nur fuer die Anzeige "Beamer verbunden" - kein Spieler
+  netz.beiVerbindung = netzStreifen;
   PULT.start({ netz, id: meineId, code, raum: () => raum, jetzt: () => jetztG(), B: { SEITEN, DAUERN, steuer, modus, verfuegbar, seiteName },
-    fokus: fokusSetzen, fokusPid: () => fokus });
+    fokus: fokusSetzen, fokusPid: () => fokus, menueAuf: (pid) => { if (menueZu === pid) menueZu = null; menueZeichnen(); } });
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("[data-hm-zu]")) { const p = menuePartie(); menueZu = p ? p.pid : null; menueZeichnen(); }
+    else if (e.target.closest("[data-hm-pult]")) PULT.aufmachen();
+  });
   // drei Teile getrennt lesen; erst wenn alle einmal da sind, gilt der Stand (sonst kaemen alte Ereignisse als neue)
   ["lobby", "tafel", "beamer"].forEach((k) => {
     gelesen.add(`stand/${k}`);
@@ -412,6 +448,15 @@ export async function start(code, wurzel) {
   gelesen.add("stand/live");
   netz.beobachten("stand/live", DU.liveEmpfangen);
   setInterval(takt, 500);
+}
+
+// Verbindung weg: die Wand zeigt den letzten Stand weiter, der Streifen sagt warum sich nichts tut
+let warVerbunden = false;
+function netzStreifen(an) {
+  if (an) warVerbunden = true;
+  let el = document.getElementById("netz");
+  if (an || !warVerbunden) { if (el) el.remove(); return; }
+  if (!el) { el = document.createElement("div"); el.id = "netz"; el.className = "netzweg"; el.textContent = "📡 Verbindung weg – kommt gleich wieder"; document.body.appendChild(el); }
 }
 
 function fehler(text) {
@@ -457,7 +502,8 @@ function empfangen() {
   document.title = `📽️ ${A.titel(raum.anlass)} – Beamer`;
   const e = ereignisse(mk, raum);
   mk = e.marken;
-  if (e.weg) { schlange = []; ereignisEnde(); merke({ ereignis: "weg" }); }
+  if (e.weg) { schlange = []; ereignisEnde(); schreckEnde(); merke({ ereignis: "weg" }); }
+  pauseZeigen();
   e.liste.forEach((x) => {
     if (x.art === "schreck") schreck();
     // Gluecksrad drängelt vor: es erscheint sofort (auch mitten in einer Begruessung), Weiterschieben loest das Rad ab
@@ -469,6 +515,52 @@ function empfangen() {
   radErgebnis();
   takt(true);
   PULT.neu();
+  menueZeichnen();
+}
+
+// Pause der Spielleitung (Runde B): die Wand zeigt es gross, Musik und Spieluhren schweigen
+let pauseWar = false;
+function pauseZeigen() {
+  const an = SL.pausiert(raum), el = document.querySelector(".bm-pause");
+  if (el) el.hidden = !an;
+  if (an === pauseWar) return;
+  pauseWar = an;
+  DU.pausieren(an);
+  merke({ pause: an });
+  if (an) TON.musik(null);
+}
+
+// Hauptmenue des Partybretts an der Wand (Nico 06.11.2026, ersetzt das Pult beim Einstellen): erscheint, solange ein Partybrett
+// sammelt. Gekoppelt bedient es sich mit Maus oder Controller, sonst steht es zum Ansehen da (die Spielleitung stellt am Handy ein).
+let menueZu = null, menueSig = "";
+const menuePartie = () => (raum ? P.liste(raum).find((p) => p.spiel === "brett" && p.phase === "sammeln") : null);
+function menueZeichnen() {
+  const el = document.querySelector(".bm-menue");
+  if (!el) return;
+  const p = menuePartie();
+  if (!p || menueZu === p.pid) {
+    if (!el.hidden) { el.hidden = true; el.innerHTML = ""; menueSig = ""; document.body.classList.remove("hm-offen"); }
+    return;
+  }
+  const admin = K.istAdmin(raum, meineId), c = { p, raum, nm: P.namen(raum, p), meineId, leitet: admin, lesen: !admin, ort: "beamer", admin,
+    senden: (a) => { if (netz) netz.aktionSenden(meineId, { ...a, p: p.pid }).catch((e) => console.warn(e)); TON.spiele("klick"); }, neu: () => { menueSig = ""; menueZeichnen(); }, qr: qrFuellen };
+  const inhalt = HM.html(c);
+  el.hidden = false;
+  document.body.classList.add("hm-offen");
+  if (inhalt === menueSig) return;
+  menueSig = inhalt;
+  el.innerHTML = inhalt;
+  HM.nach(c);
+  C.fokusWiederherstellen();
+}
+// Controller am Geraet am Beamer: bedient das Menue (Steuerkreuz waehlt, A drueckt, Start = Los geht's) -> true, wenn verbraucht
+export function menueTaste(t) {
+  const el = document.querySelector(".bm-menue");
+  if (!el || el.hidden || !K.istAdmin(raum, meineId)) return false;
+  if (["hoch", "runter", "links", "rechts"].includes(t)) C.fokusBewegen(t);
+  else if (t === "a") C.druecken();
+  else if (t === "start") { const los = el.querySelector("#hm-los:not([disabled])"); if (los) los.click(); }
+  return true;
 }
 
 // Neuer Stand der Spiele: merken, und fuer das Spiel an der Wand Klaenge, Effekte und Erzaehler abspielen
@@ -524,6 +616,22 @@ function radErgebnis() {
   }
 }
 
+// Erklaer-Einblendung (Restpaket 3a): das neueste gerade gestartete Spiel erklaert sich gross ueber der Buehne
+let erklSig = "";
+function erklZeichnen(jetzt) {
+  const p = P.liste(raum).find((x) => ER.offen(x, jetzt));
+  const sp = p && SPIELE.find((x) => x.id === p.spiel);
+  let el = document.querySelector(".bm-erkl");
+  if (!sp) { if (el && !el.hidden) { el.hidden = true; el.innerHTML = ""; erklSig = ""; } return; }
+  if (!el) { el = document.createElement("div"); el.className = "bm-erkl"; document.body.appendChild(el); }
+  const html = ER.beamerHTML(sp, p, jetzt);
+  el.hidden = false;
+  if (html === erklSig) return;
+  erklSig = html; el.innerHTML = html; el.setAttribute("style", ER.beamerStil(sp));
+}
+
+let fwZuletzt = "";   // Runde G: Feuerwerk zur vollen Stunde, je Stunde einmal
+let erklWar = false;  // lief beim letzten Takt noch eine Erklaerung? (danach einmal neu zeichnen)
 function takt(stand) {
   if (!app) return;
   const z = app.querySelector(".bm-zeit");
@@ -543,15 +651,22 @@ function takt(stand) {
     // "X laeuft - mitmachen!" ist ueberholt, sobald genau dieses Spiel gross an der Wand steht
     if (g && laufend && laufend.art === "spiel" && laufend.pid === g.p.pid) { ereignisEnde(); naechstesEreignis(); }
   }
-  if (w.neu || stand === true || spielNeu) zeichnen(spielNeu || (!g && w.neu), g);
-  TON.musik(g && !g.vorbei ? BS.musik(g.p.spiel, g.d) : null);
-  app.querySelectorAll("[data-bcd]").forEach((el) => {
+  const erklJetzt = !!(g && ER.offen(g.p, jetzt)), erklAus = erklWar && !erklJetzt;
+  erklWar = erklJetzt;
+  if (w.neu || stand === true || spielNeu || erklAus) zeichnen(spielNeu || (!g && w.neu), g);
+  const pause = SL.pausiert(raum);
+  TON.musik(g && !g.vorbei && !pause ? BS.musik(g.p.spiel, g.d) : null);
+  if (!pause) app.querySelectorAll("[data-bcd]").forEach((el) => {
     const rest = Number(el.dataset.bcd) - jetzt, t = W.uhrText(rest);
     if (el.textContent !== t) { el.textContent = t; el.classList.toggle("knapp", rest <= 60000); }
   });
-  if (g && !laufend) BS.uhren(app, jetzt).forEach((x) => TON.spiele(x));
+  // Erklaer-Einblendung: Spieluhren an der Wand stehen bis dahin auf voller Zeit (ER.haltZeit), ohne Ticken
+  if (g && !laufend && !pause) BS.uhren(app, ER.haltZeit(g.p, jetzt)).forEach((x) => TON.spiele(x));
   radErgebnis();
+  erklZeichnen(jetzt);
   umgebung();
+  const fw = SH.feuerwerkFaellig(raum.tafel, new Date(), fwZuletzt, !!(g && !g.vorbei) || !!laufend || pause);
+  if (fw) { fwZuletzt = fw.key; SH.feuerwerk(document.body, fw.stunde); TON.spiele("techno"); }
 }
 
 function zeichnen(neueSeite, g = null) {
@@ -574,6 +689,9 @@ function zeichnen(neueSeite, g = null) {
   }
   const klein = app.querySelector(".bm-qrklein");
   if (klein) klein.hidden = !sp && zustand.seite === "mitmachen";
+  planZeile(jetzt);
+  abendSeite(st.geteilt && !!sp && !g.vorbei);
+  momenteRuhig(st.ruhig);   // brett3d.js: Wackeln und Blitz bei grossen Momenten aus (Runde C)
   // Inhalt erst nach Kopf und Fuss: erst dann steht fest, wie viel Platz die Buehne hat
   const html = sp ? BS.html(raum, g.p, g.d, bsMerk[g.p.pid], !!g.vorbei) : zustand.seite ? seiteHTML(raum, zustand.seite, jetzt) : "";
   const inhalt = app.querySelector(".bm-inhalt");
@@ -582,10 +700,31 @@ function zeichnen(neueSeite, g = null) {
     inhalt.dataset.seite = sp ? `spiel-${g.p.spiel}` : zustand.seite || "";
     if (neueSeite) { inhalt.classList.remove("bm-rein"); void inhalt.offsetWidth; inhalt.classList.add("bm-rein"); }
     gezeigt = html;
-    if (sp) BS.nach(inhalt, g.p, g.d, bsLokal, () => merke({ reaktion: "gruen" }));
+    // waehrend der Erklaerung startet an der Wand nichts (Reaktions-Uhr); takt() zeichnet danach einmal neu
+    if (sp && ER.offen(g.p, jetzt)) gezeigt = "";
+    else if (sp) BS.nach(inhalt, g.p, g.d, bsLokal, () => merke({ reaktion: "gruen" }));
     einpassen(inhalt, app.querySelector(".bm-buehne"), 1);
     qrFuellen();
   }
+}
+
+// Fusszeile: was laut Spielplan als Naechstes kommt
+function planZeile(jetzt) {
+  const el = app.querySelector(".bm-plan");
+  if (!el) return;
+  const e = SL.planNaechster(raum, jetzt), t = e ? `⏰ ${e.zeit} ${SL.planName(e, spiel)}` : "";
+  if (el.textContent !== t) el.textContent = t;
+}
+// Wand geteilt (Vorschlag 103): links das Spiel, rechts dauerhaft die Wertung des ganzen Abends
+function abendSeite(an) {
+  const el = app.querySelector(".bm-abend"), buehne = app.querySelector(".bm-buehne");
+  if (!el || !buehne) return;
+  buehne.classList.toggle("geteilt", an);
+  el.hidden = !an;
+  if (!an) { el.innerHTML = ""; return; }
+  const w = wertungVon(raum), tab = w ? W.stand(w, null).filter((x) => x.summe > 0) : [], zeig = tab.slice(0, 12);
+  const html = `<h3>🌙 Abendwertung</h3>${zeig.length ? `<ol class="bm-abend-liste">${zeig.map((x) => `<li><span>${MED[x.platz] || x.platz + "."}</span><b>${esc(x.name)}</b><i>${x.summe}</i></li>`).join("")}</ol>` : `<p class="bm-leise">Noch keine Punkte</p>`}${tab.length > zeig.length ? `<p class="bm-leise">+ ${tab.length - zeig.length} weitere</p>` : ""}`;
+  if (el.__h !== html) { el.innerHTML = html; el.__h = html; }
 }
 
 // Inhalt so skalieren, dass er ganz in den Kasten passt (nie abgeschnitten); hoechstens bis "max" vergroessern
@@ -620,10 +759,10 @@ function naechstesEreignis() {
   el.dataset.art = e.art;
   einpassen(el.querySelector(".bm-e-box"), el, e.art === "pokal" || e.art === "abend" ? 2.4 : 1);
   if (e.art === "gruss") { TON.spiele(TON.GRUSS_KLAENGE[Math.floor(Math.random() * TON.GRUSS_KLAENGE.length)]); effekt(raum.look, 60); }
-  else if (e.art === "spiel") TON.spiele(A.klang(raum.look, "meldung"));
+  else if (e.art === "spiel" || e.art === "plan") TON.spiele(A.klang(raum.look, "meldung"));
   else if (e.art === "rad") radAbspielen(e.nr);
   else if (e.art === "schub") { TON.spiele("troete"); effekt(raum.look, 90); }
-  else { TON.spiele("fanfare"); effekt(raum.look, 180); }
+  else { TON.spiele(SH.siegKlang(raum.tafel, e.art) || "fanfare"); effekt(raum.look, 180); }   // Runde G: eigener Siegerklang
   clearTimeout(laufTimer);
   laufTimer = setTimeout(ereignisAblauf, e.art === "rad" ? radRest(e.nr) : DAUER_EREIGNIS[e.art] || 8000);
 }
@@ -672,7 +811,12 @@ function schreck() {
   el.classList.remove("los"); void el.offsetWidth; el.classList.add("los");
   TON.spiele("schrei");
   clearTimeout(schreckTimer);
-  schreckTimer = setTimeout(() => { el.hidden = true; el.innerHTML = ""; el.classList.remove("los"); }, DAUER_EREIGNIS.schreck);
+  schreckTimer = setTimeout(schreckEnde, DAUER_EREIGNIS.schreck);
+}
+function schreckEnde() {
+  const el = document.querySelector(".bm-schreck");
+  clearTimeout(schreckTimer);
+  if (el) { el.hidden = true; el.innerHTML = ""; el.classList.remove("los"); }
 }
 
 // Grosse Effekte (nur am Beamer): Konfetti je Aussehen, im Halloween-Aussehen dazu Fledermaeuse. Sie fliegen nie ueber Text:

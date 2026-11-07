@@ -258,11 +258,17 @@ import { werwolf } from "./werwolf.js";
 import { FREMDSPIELE } from "./fremd.js";
 import { gduell } from "./duell.js";
 // gduell (Gluecksrad-Duell) steht in keiner Gruppe: es startet nur vom Gluecksrad aus (app.js)
-export const SPIELE = [brett, hindernis, werwolf, ...FRAGESPIELE, ...ELTERNSPIELE, farbchaos, klatschen, busfahrer, pferderennen, ...MINISPIELE, ...FREMDSPIELE, gduell];
+import { zaehlerDran, maexchen } from "./trinken_geburtstag.js";
+// zaehlerDran: Schluck-Zaehler/Wasser-Joker fuer die Trinkspiele (Geburtstags-Runde E, 07.11.2026)
+import { GRUPPENSPIELE } from "./gruppen_geburtstag.js";   // Geburtstags-Runde F: Millionaer, Wortkette, Activity, Bilderraetsel, Damals
+import { maedn } from "./maedn.js";   // Mensch aergere dich nicht bis 8 Spieler (Vorschlag 147, 07.11.2026)
+import { autoscooter } from "./autoscooter.js";   // Autoscooter am Beamer (Vorschlag 145, 07.11.2026)
+export const SPIELE = zaehlerDran([brett, hindernis, werwolf, ...FRAGESPIELE, ...ELTERNSPIELE, farbchaos, klatschen, busfahrer, pferderennen, maexchen, ...MINISPIELE, ...FREMDSPIELE, gduell, ...GRUPPENSPIELE, maedn, autoscooter]);
 export const GRUPPEN = [
   { titel: "🎲 Große Partyspiele", ids: ["brett", "fiesbau", "werwolf"] },
   { titel: "🧩 Gemeinsam spielen – ohne Alkohol", ids: ["begriffe", "pantomime", "quiz", "werbinich", "spion", "slf", "malen", "schaetzen", "reaktion"] },
-  { titel: "🍻 Fragen & Trinkspiele", ids: ["nochnie", "werwuerde", "wop", "lieber", "paranoia"] },
+  { titel: "🎉 Gruppenspiele", ids: ["millionaer", "wortkette", "activity", "bilder", "damals", "maedn", "autoscooter"] },
+  { titel: "🍻 Fragen & Trinkspiele", ids: ["nochnie", "werwuerde", "wop", "lieber", "paranoia", "maexchen"] },
   { titel: "🃏 Kartenspiele", ids: ["farbchaos", "klatschen", "busfahrer", "pferde"] },
   { titel: "📦 Fertige Spiele (aus dem Netz)", ids: ["f-wuerfel", "f-vier", "f-schiffe", "f-dame", "f-ttt"] },
 ];

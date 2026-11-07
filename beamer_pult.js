@@ -13,11 +13,13 @@ import * as G from "./gluecksrad.js";
 import * as BS from "./beamer_spiele.js";
 import * as TON from "./ton.js";
 import * as KOPPLUNG from "./kopplung.js";
+import { Wache } from "./netzwache.js";
 import { esc } from "./hilfe.js";
+import * as SL from "./spielleitung.js";
 
 export const istPult = (id) => /^beamer-[a-z0-9]{6,20}$/.test(String(id || ""));
-const RAUM_PULT = new Set(["_beamer", "_alle", "_spielwahl", "_look", "_ab18", "_trink", "_testkonten", "_adminweg"]);
-const SPIEL_PULT = new Set(["_los", "_zurueck", "_ohne", "_neuauf", "_botneu", "_botweg"]);
+const RAUM_PULT = new Set(["_beamer", "_alle", "_spielwahl", "_look", "_ab18", "_trink", "_testkonten", "_adminweg", "_brettweg", "_pause", "_party", "_plan", "_rueck", "_brettladen"]);
+const SPIEL_PULT = new Set(["_los", "_zurueck", "_ohne", "_neuauf", "_botneu", "_botweg", "_karte", "_hm", "_figur", "_brettende", "_retten", "_brettspeichern", "_einlassen"]);
 const GLUECK_PULT = new Set(["frei", "fuer", "joker", "feld", "trinkaus"]);   // nie selbst drehen/schieben - das Pult ist kein Gast
 // Was der Gastgeber vom Pult annimmt (zusaetzlich muss die Kennung freigeschaltet sein)
 export function pultErlaubt(a) {
@@ -27,8 +29,8 @@ export function pultErlaubt(a) {
 }
 
 export const REITER = [
-  { id: "spiele", name: "🎮 Spiel starten" }, { id: "laufend", name: "▶️ Laufend" }, { id: "beamer", name: "📽️ Beamer" },
-  { id: "rad", name: "🎡 Glücksrad" }, { id: "raum", name: "⚙️ Einstellungen" },
+  { id: "spiele", name: "🎮 Spiel starten" }, { id: "laufend", name: "▶️ Laufend" }, { id: "gaeste", name: "🚦 Gäste" }, { id: "beamer", name: "📽️ Beamer" },
+  { id: "rad", name: "🎡 Glücksrad" }, { id: "leitung", name: "🧭 Ablauf" }, { id: "raum", name: "⚙️ Einstellungen" },
 ];
 const spiel = (id) => SPIELE.find((x) => x.id === id);
 const knopf = (text, a, kl = "", extra = "") => `<button class="${kl}" data-pa='${JSON.stringify(a).replace(/'/g, "&#39;")}' ${extra}>${text}</button>`;
@@ -36,6 +38,8 @@ const knopf = (text, a, kl = "", extra = "") => `<button class="${kl}" data-pa='
 // ctx = {netz, id, code, raum(), jetzt(), B (beamer.js: SEITEN, steuer, modus, verfuegbar, DAUERN, seiteName), fokus(pid), fokusPid()}
 let ctx = null, el = null, knopfEl = null;
 let offen = false, reiter = "spiele", kat = 0, eingabe = "", meldung = "", pruefe = false, endeFrage = null, zuletztBeweis = 0;
+let wache = null, rettenFrage = null;   // Netzwache: erst mit Steuerrechten. Meldungen erscheinen hier nur im Pult, nie an der Wand
+let rueckFrage = false;                 // Sicherheitsfrage zu "Rueckgaengig" steht offen
 
 export function start(c) {
   ctx = c;
@@ -52,8 +56,12 @@ export function start(c) {
     else if (e.key === "Backspace") { taste("weg"); e.preventDefault(); }
     else if (e.key === "Enter") { taste("ok"); e.preventDefault(); }
   });
-  window.__pult = { offen: () => offen, reiter: () => reiter, admin: () => istAdmin(), meldung: () => meldung, zahl: () => kopplungsZahl() };
+  window.__pult = { offen: () => offen, reiter: () => reiter, admin: () => istAdmin(), meldung: () => meldung, zahl: () => kopplungsZahl(), wache: () => wache };
+  setInterval(() => { if (wache && offen && reiter === "gaeste") wache.auffrischen(el); }, 2000);
 }
+// Hauptmenue am Beamer: "Steuern" oeffnet das Pult darueber, ein gestartetes Partybrett macht es zu (das Menue uebernimmt)
+export const aufmachen = () => { if (!offen && el) auf(); };
+export const zumachen = () => { if (offen) zu(); };
 
 const istAdmin = () => { const r = ctx && ctx.raum(); return !!(r && K.istAdmin(r, ctx.id)); };
 
@@ -67,6 +75,10 @@ export function neu() {
   if (K.meinSchluessel() && !istAdmin() && Date.now() - zuletztBeweis > 8000) beweisSenden();
   if (knopfEl) knopfEl.classList.toggle("frei", istAdmin());
   if (istAdmin()) {
+    if (!wache) {
+      wache = new Wache(ctx.netz, { beiNeu: () => { if (offen) zeichnen(); } });
+      wache.namen = () => Object.fromEntries(((ctx.raum() || {}).spieler || []).map((x) => [x.id, x.name]));
+    }
     // freigeschaltet: Kopplungszahl wird nicht mehr gebraucht; kam der Beamer gerade per Kopplung, Pult einmal aufklappen
     if (kopplung && kopplung.ende) { kopplung.ende(); kopplung = null; }
     let frisch = false;
@@ -122,14 +134,25 @@ function klick(e) {
   if (t.hasAttribute("data-p-zu")) return zu();
   if (t.dataset.pf !== undefined) { ctx.fokus(t.dataset.pf || null); zu(); return; }
   if (t.dataset.pende !== undefined) { endeFrage = t.dataset.pende || null; return zeichnen(); }
+  if (t.dataset.pMenue) { zu(); ctx.menueAuf(t.dataset.pMenue); return; }
+  if (t.dataset.pMeldungOk) { if (wache) wache.erledigen(t.dataset.pMeldungOk); return; }
+  if (t.dataset.pRetten !== undefined) { rettenFrage = t.dataset.pRetten || null; return zeichnen(); }
+  if (t.dataset.pRueck !== undefined) { rueckFrage = !!t.dataset.pRueck; return zeichnen(); }
   if (t.dataset.pa) {
     let a;
     try { a = JSON.parse(t.dataset.pa); } catch (x) { return; }
     if (a.typ === "_adminweg") { K.schluesselMerken(null); meldung = ""; }
+    if (t.dataset.felder) a.werte = t.dataset.felder.split(",").map((id) => { const f = document.getElementById(id); return f ? f.value : ""; });
+    if (a.typ === "_plan" && a.was === "dazu") {
+      if (!a.werte[0] || (!a.werte[1] && !a.werte[2].trim())) { meldung = "Bitte Uhrzeit und Spiel oder Text angeben."; return zeichnen(); }
+      meldung = ""; a.werte.forEach((_, i) => { const f = document.getElementById(t.dataset.felder.split(",")[i]); if (f) f.value = ""; });
+    }
+    if (a.typ === "_rueck") rueckFrage = false;
     senden(a);
     t.classList.add("gesendet"); setTimeout(() => t.classList.remove("gesendet"), 600);
-    if (a.typ === "_alle") { reiter = "laufend"; setTimeout(zeichnen, 50); }
+    if (a.typ === "_alle") { reiter = "laufend"; setTimeout(zeichnen, 50); if (a.wert === "brett") zu(); }
     if (a.typ === "_zurueck") endeFrage = null;
+    if (a.typ === "_retten") { rettenFrage = null; setTimeout(zeichnen, 50); }
     if (a.typ === "_beamer" && a.was === "schreck") zu();   // Schreck soll man sehen, nicht das Pult
   }
 }
@@ -137,16 +160,30 @@ function klick(e) {
 // ---------------------------------------------------------------- Zeichnen
 function zeichnen() {
   if (!el || !offen) return;
+  if (el.contains(document.activeElement) && /^(INPUT|SELECT)$/.test(document.activeElement.tagName)) return;   // tippt gerade (Spielplan)
   const r = ctx.raum();
-  const kopf = `<div class="bp-kopf"><b>🛠️ Steuerpult</b><button class="bp-zu" data-p-zu aria-label="Schließen">✕</button></div>`;
+  const kopf = `<div class="bp-kopf"><b>🛠️ Steuerpult</b>${r && istAdmin() ? knopf(SL.pausiert(r) ? "▶️ Weiter" : "⏸️ Pause", { typ: "_pause" }, `bp-pause ${SL.pausiert(r) ? "gruen" : "gelb"}`) : ""}<button class="bp-zu" data-p-zu aria-label="Schließen">✕</button></div>`;
   if (!r) { el.innerHTML = `${kopf}<p class="bp-leise">Raum wird geladen …</p>`; return; }
   if (!istAdmin()) { el.innerHTML = kopf + sperre(); return; }
+  // halb getippte Eingaben (Spielplan) ueberstehen das Neuzeichnen
+  const felder = [...el.querySelectorAll("input[id],select[id]")].map((f) => [f.id, f.value]);
   const n = Object.keys(r.partien || {}).length;
-  const tabs = `<div class="bp-reiter">${REITER.map((x) => `<button data-pr="${x.id}" class="${x.id === reiter ? "an" : ""}">${x.name}${x.id === "laufend" && n ? ` <i>${n}</i>` : ""}</button>`).join("")}</div>`;
-  const inhalt = { spiele: spieleBild, laufend: laufendBild, beamer: beamerBild, rad: radBild, raum: raumBild }[reiter] || spieleBild;
+  const mld = wache ? wache.offen().length : 0;
+  const tabs = `<div class="bp-reiter">${REITER.map((x) => `<button data-pr="${x.id}" class="${x.id === reiter ? "an" : ""}">${x.name}${x.id === "laufend" && n ? ` <i>${n}</i>` : ""}${x.id === "gaeste" && mld ? ` <i class="bp-alarm">${mld}</i>` : ""}</button>`).join("")}</div>`;
+  const inhalt = { spiele: spieleBild, laufend: laufendBild, gaeste: gaesteBild, beamer: beamerBild, rad: radBild, leitung: leitungBild, raum: raumBild }[reiter] || spieleBild;
   let html = "";
   try { html = inhalt(r); } catch (x) { console.error(x); html = `<p class="bp-leise">Fehler beim Anzeigen.</p>`; }
   el.innerHTML = `${kopf}${tabs}<div class="bp-inhalt" data-reiter="${reiter}">${html}</div>`;
+  felder.forEach(([id, wert]) => { const f = document.getElementById(id); if (f && wert) f.value = wert; });
+}
+
+// Ablauf: Partymodus, Rueckgaengig, Spielplan, Protokoll - dasselbe wie auf der Steuerseite am Handy
+function leitungBild(r) {
+  const spiele = GRUPPEN.flatMap((g) => g.ids).map(spiel).filter(Boolean);
+  return `${SL.schnellHTML(r, ctx.id, knopf, { frageAttr: "data-p-rueck", frage: rueckFrage })}
+    ${meldung ? `<p class="bp-meldung" role="status">${esc(meldung)}</p>` : ""}
+    <h3>⏰ Spielplan</h3>${SL.planHTML(r, knopf, spiele, spiel)}
+    <h3>📜 Protokoll</h3>${wache ? SL.protokollHTML(wache.protokollListe()) : `<p class="bp-leise">Wird geladen …</p>`}`;
 }
 
 // Gesperrt (Runde 3, Plan 3.16): vorn steht die Kopplungszahl - die Spielleitung koppelt vom Handy, am Beamer wird nichts
@@ -203,13 +240,17 @@ function laufendBild(r) {
     const sammelt = p.phase === "sammeln";
     const ohne = P.ohneTrinken(r, p);
     const knoepfe = [];
-    if (sammelt) {
+    if (sammelt && p.spiel === "brett") knoepfe.push(`<button data-p-menue="${esc(p.pid)}" class="gruen gross">🎲 Hauptmenü öffnen</button>`);
+    else if (sammelt) {
       knoepfe.push(knopf(`▶️ Los geht's (${p.mit.length} Spieler)`, { typ: "_los", p: p.pid }, "gruen gross", p.mit.length ? "" : "disabled"));
       if (sp.bot) knoepfe.push(knopf("🤖 Computer dazu", { typ: "_botneu", p: p.pid }, "zweit"));
       knoepfe.push(knopf(ohne ? "🧃 Ohne Trinken (umschalten)" : "🍺 Mit Trinken (umschalten)", { typ: "_ohne", p: p.pid, ohne: !ohne }, "zweit"));
     } else if (p.bm) {
       knoepfe.push(fokus === p.pid ? `<button data-pf="" class="zweit">↩️ Großbild beenden</button>` : `<button data-pf="${esc(p.pid)}" class="gruen">👁️ Groß am Beamer zeigen</button>`);
+      // Partybrett ohne Rundenende: hier laesst es sich auswerten (statt nur abbrechen)
+      if (p.spiel === "brett" && p.runden === 0) knoepfe.push(knopf("🏁 Jetzt auswerten", { typ: "_brettende", p: p.pid }, "zweit"));
     }
+    if (!sammelt && p.spiel === "brett") knoepfe.push(knopf("💾 Speichern", { typ: "_brettspeichern", p: p.pid }, "zweit"));
     knoepfe.push(endeFrage === p.pid
       ? `${knopf("Ja, beenden", { typ: "_zurueck", p: p.pid }, "rot")}<button data-pende="" class="zweit">Doch nicht</button>`
       : `<button data-pende="${esc(p.pid)}" class="zweit">⏹️ Beenden</button>`);
@@ -219,6 +260,26 @@ function laufendBild(r) {
         <div class="bp-namen">${nm.length ? nm.slice(0, 16).map((n) => `<span>${esc(n)}</span>`).join("") + (nm.length > 16 ? `<span>+ ${nm.length - 16}</span>` : "") : `<span class="bp-leise">noch niemand dabei</span>`}</div>
         <div class="bp-knoepfe">${knoepfe.join("")}</div></div>`;
   }).join("");
+}
+
+// Wer ist wie verbunden, wer meldet "Geht nicht", welches Spiel braucht den Notfall-Knopf. Hier steht es gross fuer die
+// Spielleitung; Gaeste ohne Handy legt die Spielleitung am Handy an (Steuerseite), das Pult spielt nie mit.
+function gaesteBild(r) {
+  if (!wache) return `<p class="bp-leise">Wird geladen …</p>`;
+  const laufend = P.liste(r).filter((p) => p.phase === "laeuft");
+  const gr = r.rettung;
+  return `${wache.meldungenHTML("data-p-meldung-ok")}
+    ${wache.gaesteHTML(r)}
+    <p class="bp-leise">Grün: gut verbunden. Gelb: wackelt. Rot: weg. Den Akku zeigen nur manche Handys.</p>
+    ${laufend.length ? `<h3>🛟 Spiel retten</h3><p class="bp-leise">Hängt ein Spiel, geht es zum letzten funktionierenden Stand zurück.</p>` : ""}
+    ${laufend.map((p) => {
+      const sp = spiel(p.spiel);
+      if (!sp) return "";
+      return `<div class="bp-reihe" data-pid="${esc(p.pid)}">${rettenFrage === p.pid
+        ? `${knopf(`Ja, ${esc(sp.name)} zurücksetzen`, { typ: "_retten", p: p.pid }, "rot")}<button class="zweit" data-p-retten="">Doch nicht</button>`
+        : `<button class="zweit" data-p-retten="${esc(p.pid)}">🛟 ${sp.emoji} ${esc(sp.name)} retten</button>`}</div>`;
+    }).join("")}
+    ${gr ? `<p class="bp-leise" data-p-gerettet>${gr.leer ? "Kein älterer Stand gesichert." : `${esc(gr.name)} ist zurück auf dem Stand von vor ${gr.sek} Sekunden.`}</p>` : ""}`;
 }
 
 function beamerBild(r) {
@@ -234,6 +295,9 @@ function beamerBild(r) {
     <div class="bp-reihe">${knopf(st.diashow ? "⏸️ Diashow anhalten" : "▶️ Diashow an", bm("diashow"), st.diashow ? "zweit" : "gruen")}
       ${m.art === "fest" ? knopf("▶️ Zurück zur Diashow", bm("seite", { seite: null }), "gruen") : ""}${knopf("✋ Ereignis ausblenden", bm("weg"), "zweit")}</div>
     <div class="bp-reihe">${B.DAUERN.map((s) => knopf(`${s} s je Seite`, bm("dauer", { s }), st.dauer === s ? "an" : "zweit")).join("")}</div>
+    <h3>Wand teilen</h3>
+    ${knopf(st.geteilt ? "◧ Geteilt: an – Spiel links, Abendwertung rechts" : "◧ Geteilt: aus – Spiel über die ganze Wand", bm("geteilt"), st.geteilt ? "an bp-geteilt" : "zweit bp-geteilt")}
+    ${knopf(st.ruhig ? "📳 Wackeln und Blitz am Brett: aus" : "📳 Wackeln und Blitz am Brett: an (Sternkauf, Diebstahl, Ausbruch, Bank)", bm("ruhig"), st.ruhig ? "zweit bp-ruhig" : "an bp-ruhig")}
     <h3>Seite zeigen <small class="bp-leise">(bleibt 30 Min. stehen)</small></h3>
     <div class="bp-raster">${B.SEITEN.map((s) => knopf(`${s.emo} ${esc(s.name)}${da.includes(s.id) ? "" : "<small>noch leer</small>"}`, bm("seite", { seite: s.id }), m.art === "fest" && m.seite === s.id ? "an" : "zweit")).join("")}</div>`;
 }

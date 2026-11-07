@@ -418,6 +418,12 @@ function eintrag(m, key, j) {
   return e;
 }
 const zeit = (e) => performance.now() - e.t0 - VORLAUF;
+// Pause der Spielleitung (Runde B): die Uhr des Minispiels steht, danach geht es mit der Restzeit weiter
+let pauseSeit = 0;
+export function pausieren(an) {
+  if (an && !pauseSeit) pauseSeit = performance.now();
+  if (!an && pauseSeit) { const um = performance.now() - pauseSeit; pauseSeit = 0; lokal.forEach((e) => { e.t0 += um; }); }
+}
 function uhrText(e) {
   const ms = zeit(e);
   if (e.gesendet) return "";
@@ -518,6 +524,7 @@ function starteTakt() {
   if (taktAn) return;
   taktAn = true;
   setInterval(() => {
+    if (pauseSeit) return;
     for (const [key, e] of lokal) {
       if (e.gesendet) continue;
       const ms = zeit(e);

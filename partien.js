@@ -72,6 +72,7 @@ export function starten(p, sp, raum) {
   p.s = sp.start(namen(raum, p), raum);
   p.s.anzahl = p.mit.length;
   p.s.ohne = ohneTrinken(raum, p);   // die Spiele lesen es selbst (Aufgaben statt Schlucke, Trinkkarten weglassen)
+  if (sp.vorStart) sp.vorStart(p.s, p, raum);   // Wahl beim Sammeln (Partybrett: alles aus dem Hauptmenue)
   p.phase = "laeuft";
   p.zuletzt = null;
 }
@@ -109,8 +110,42 @@ export function idErsetzen(raum, alt, neu) {
     p.mit = p.mit.map((x) => (x === alt ? neu : x));
     p.wartend = p.wartend.map((x) => (x === alt ? neu : x));
     if (p.von === alt) p.von = neu;
+    // Partybrett: Figur und Team aus dem Hauptmenue gehen mit
+    if (p.hm) ["fig", "team"].forEach((k) => { if (p.hm[k] && alt in p.hm[k]) { p.hm[k][neu] = p.hm[k][alt]; delete p.hm[k][alt]; } });
   });
   if (raum.meldung && raum.meldung.von === alt) raum.meldung.von = neu;
+}
+
+// Platz uebergeben (Vorschlag 7): wer geht, gibt seinen Sitz an einen Gast, der noch nicht mitspielt. Punkte, Figur und Zug
+// haengen an der Spieler-Nummer und gehen mit; die Gesamtwertung zaehlt nach Namen, bisherige Siege bleiben also beim alten.
+export function platzGeben(raum, p, alt, neu) {
+  if (!alt || !neu || alt === neu || istBot(alt) || !p.mit.includes(alt) || p.mit.includes(neu)) return false;
+  if (!raum.spieler.some((x) => x.id === neu)) return false;
+  p.mit = p.mit.map((x) => (x === alt ? neu : x));
+  p.wartend = p.wartend.filter((x) => x !== neu);
+  if (p.von === alt) p.von = neu;
+  if (p.hm) ["fig", "team"].forEach((k) => { if (p.hm[k] && alt in p.hm[k]) { p.hm[k][neu] = p.hm[k][alt]; delete p.hm[k][alt]; } });
+  return true;
+}
+
+// Spiel retten (Vorschlag 124): was der Notfall-Knopf sichert und zurueckholt. Kennungen bleiben draussen - wer inzwischen den
+// Platz gewechselt hat, behaelt ihn.
+export const rettungStand = (p) => ({ s: p.s, phase: p.phase, runde: p.runde, n: p.mit.length });
+// Absolute Zeiten im Stand (Fristen, Startzeiten) laufen um "vor"; sonst waere jede Frist sofort abgelaufen
+export function zeitenSchieben(o, von, um) {
+  if (Array.isArray(o)) return o.map((x) => zeitenSchieben(x, von, um));
+  if (o && typeof o === "object") return Object.fromEntries(Object.entries(o).map(([k, x]) => [k, zeitenSchieben(x, von, um)]));
+  return typeof o === "number" && Math.abs(o - von) < 86400000 ? o + um : o;
+}
+export function standZurueck(p, stand, gesichert, jetzt) {
+  p.s = zeitenSchieben(stand.s, gesichert, jetzt - gesichert);
+  p.phase = stand.phase;
+  p.runde = stand.runde;
+  // spaeter Dazugekommene hatten damals noch keinen Sitz: sie warten auf die naechste Runde
+  if (p.mit.length > stand.n) { p.wartend = [...p.wartend, ...p.mit.slice(stand.n).filter((id) => !istBot(id))]; p.mit = p.mit.slice(0, stand.n); }
+  if (p.s) p.s.anzahl = p.mit.length;
+  p.v = (p.v || 0) + 1;
+  p.wv = 0;
 }
 
 // Uebersicht: laufende Spiele, neueste zuerst

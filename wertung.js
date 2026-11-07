@@ -38,6 +38,7 @@ export const APP_WERTE = [
   ["gduell", "Glücksrad-Duell", "⚔️", 2, "je Sieg"],
   ["reaktion", "Blitzreaktion", "⚡", 1, "je Runde"], ["schaetzen", "Schätzmeister", "🎯", 1, "je Frage"], ["malen", "Malen & Raten", "🎨", 1, "Maler und Rater"],
   ["pferde", "Pferderennen", "🏇", 1, "richtige Wette"],
+  ["brettwette", "Partybrett-Wette", "🔮", 2, "richtige Wette (Zuschauer)"],   // Runde C, Punkt 36
 ];
 const ST_WERT = { pong: 3, punkte: 3, rennen: 3 };
 const RENN_BEST = 4;
@@ -88,6 +89,9 @@ export function stand(w, nr, namen = []) {
   liste.forEach((x, i) => { x.platz = i > 0 && x.summe === liste[i - 1].summe ? liste[i - 1].platz : i + 1; });
   return liste;
 }
+
+// Abendsummen je Name (Spielprotokoll: Punkte vorher/nachher)
+export const summen = (w) => Object.fromEntries(stand(w, null).map((x) => [x.name, x.summe]));
 
 export const offenFuer = (w, name) => (name ? w.buchungen.filter((b) => b.info.status === "offen" && b.gegner.some((g) => gleich(g, name))) : []);
 const wartetVon = (w, name) => (name ? w.buchungen.filter((b) => b.info.status === "offen" && gleich(b.info.von, name) && !b.gegner.some((g) => gleich(g, name))) : []);
@@ -203,6 +207,9 @@ export function aktion(t, a, { gastgeber, wer = "", jetzt = Date.now(), intern =
     if (!w.runde.start) w.runde.start = jetzt;
     w.runde.ende = ende;
     w.runde.dauer = dauer || ende - jetzt;
+  } else if (a.was === "w_party") {
+    // Partymodus: die Runde laeuft ab jetzt (ohne Zeitlimit); eine schon gestartete bleibt, wie sie ist
+    if (!w.runde.start) w.runde.start = jetzt;
   } else if (a.was === "w_auto") {
     w.auto = !w.auto;
   } else if (a.was === "w_ende" || (a.was === "w_ablauf" && faellig(w, jetzt))) {

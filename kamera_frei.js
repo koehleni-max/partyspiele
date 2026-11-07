@@ -10,8 +10,14 @@
 // Zustand K: an (Freiflug aktiv), x/z = Blickpunkt auf dem Brett, a = Abstand, d = Drehung um die Hochachse (Bogenmass),
 // quelle: "ich" (dieses Geraet am Zug), "lokal" (Beamer-Maus), "fern" (von der Leitung).
 
-export const RAND = 13;            // Blickpunkt bleibt ueber der Insel (Radius der Grasdecke 14,6)
-export const NAH = 4.5, FERN = 42;
+// Grenzen haengen seit Runde 4 an der Karte (welt): Blickpunkt bleibt ueber der Insel, weiter Abstand reicht fuers ganze Brett
+export const NAH = 4.5;
+let randMax = 13, fernMax = 42;    // kleine Karte: Radius der Grasdecke 14,6
+export const grenze = () => ({ rand: randMax, fern: fernMax });
+export function welt(radius) {
+  const r = radius || 14.6;
+  randMax = r * 0.89; fernMax = Math.max(42, r * 3.6);
+}
 export const HOEHE = 0.89;         // feste Neigung (wie die Folge-Kamera, ~51 Grad): die Kamera bleibt immer ueber dem Brett
 export const SENDE_ABSTAND = 125;  // hoechstens 8 Lagen pro Sekunde
 const PAD_TOT = 0.2;
@@ -33,8 +39,8 @@ export function steuerung(r) {
 
 const klemmen = () => {
   const r = Math.hypot(K.x, K.z);
-  if (r > RAND) { K.x *= RAND / r; K.z *= RAND / r; }
-  K.a = Math.max(NAH, Math.min(FERN, K.a));
+  if (r > randMax) { K.x *= randMax / r; K.z *= randMax / r; }
+  K.a = Math.max(NAH, Math.min(fernMax, K.a));
   K.d = Math.atan2(Math.sin(K.d), Math.cos(K.d));
 };
 
@@ -182,5 +188,5 @@ export function pose() {
 // aus einer Kamera (Ort p, Blick l) die Werte fuer K (beim Anfassen)
 export function ausKamera(p, l) {
   const dx = p.x - l.x, dz = p.z - l.z, dy = p.y - l.y;
-  return { x: l.x, z: l.z, a: Math.max(NAH, Math.min(FERN, Math.hypot(dx, dy, dz))), d: Math.atan2(dx, dz) };
+  return { x: l.x, z: l.z, a: Math.max(NAH, Math.min(fernMax, Math.hypot(dx, dy, dz))), d: Math.atan2(dx, dz) };
 }

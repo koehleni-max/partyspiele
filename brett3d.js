@@ -22,9 +22,15 @@
 // - Auftritt je Gewinn/Verlust (s.bilanz aus brett.js): Kamera faehrt heran, Muenzen/Herzen/Sterne fliegen sichtbar in die
 //   Figur hinein oder heraus, grosse Zahl "+3 🪙" ueber dem Kopf, echter Ton, Ereigniskarte mit Symbol im Bild, dann zurueck
 // - freie Kamera fuer den Spieler am Zug (kamera_frei.js), am Beamer die Stufe "beamer" und die Maus der Spielleitung
+// Runde 5 (Nico 06.11.2026: "keine platzhalter", fremde Modelle erlaubt): die einfachen Formen hier sind nur noch der Rueckfallweg.
+// Sobald die Modelle der Karte geladen sind, setzt brett_schmuck.js die echten ein und blendet die einfachen aus; Texturen, Himmel und
+// Tageslicht ebenfalls dort. Leuchten (Nachbearbeitung) nur auf "hoch" und "beamer". ?fps in der Adresse zeigt die Bildrate.
 import { spiele as klang } from "./ton.js";
 import * as THREE from "./vendor/three.module.js";
 import * as KF from "./kamera_frei.js";
+import * as M from "./brett_menue.js";
+import * as MD from "./modelle.js";
+import * as SC from "./brett_schmuck.js";
 import { esc } from "./hilfe.js";
 
 // gleiche Farben wie die Namenspunkte: die 20 festen Spielerfarben --s0 ... --s19 aus style.css (eine Quelle, 31.10.2026)
@@ -38,8 +44,9 @@ function spielerFarbenLesen() {
   });
 }
 // Teil 4b: s = Stachelfeld, h = Heilquelle, k = Truhe, p = Portal, g = Glutfeld
-const FELDFARBE = { m: 0x2fbf62, v: 0xe0464e, t: 0xf39c2b, a: 0xf39c2b, e: 0x4a7dff, d: 0xa84bff, l: 0x18b6b0, s: 0x8a2433, h: 0xff6fb8, k: 0xc8901e, p: 0x7b3bd1, g: 0xff4d00 };
-const SYMBOL = { m: "🪙", v: "💸", t: "🍺", a: "🎯", e: "❓", d: "⚔️", l: "🛒", s: "🌵", h: "💖", k: "🧰", p: "🌀", g: "🔥" };   // a = Aufgabenfeld (Trinkfeld ohne Trinken)
+// Runde 4: z = Aufzug, x = gerade gesperrt (Sandbank bei Flut, Lavaweg ohne Kruste)
+const FELDFARBE = { m: 0x2fbf62, v: 0xe0464e, t: 0xf39c2b, a: 0xf39c2b, e: 0x4a7dff, d: 0xa84bff, l: 0x18b6b0, s: 0x8a2433, h: 0xff6fb8, k: 0xc8901e, p: 0x7b3bd1, g: 0xff4d00, z: 0x37c6e8, b: 0xe6b422, x: 0x5b5f73 };
+const SYMBOL = { m: "🪙", v: "💸", t: "🍺", a: "🎯", e: "❓", d: "⚔️", l: "🛒", s: "🌵", h: "💖", k: "🧰", p: "🌀", g: "🔥", z: "🛗", b: "🏦", x: "🚫" };   // a = Aufgabenfeld (Trinkfeld ohne Trinken)
 const LP_MAX = 30;
 
 let g = null;   // die eine Szene (bleibt ueber Neuzeichnungen erhalten)
@@ -50,18 +57,20 @@ const lsSchreiben = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { 
 const zufallFest = (k) => { const x = Math.sin(k * 91.7 + 13.1) * 43758.5453; return x - Math.floor(x); };
 const sanft = (u) => (u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2);
 const FELD_OBEN = 0.19;          // Oberkante der Feldplatten
-const PODEST = V(2.5, 0, 2.1);   // Siegertreppchen (frei von Feldern und Wegen, vor der Burg)
-const BURG = V(1.6, 0, -1.4);
+// Grossumbau Runde 4: Groesse der Welt, Burg und Siegertreppchen kommen von der Karte (brett_karten.js); Felder haben eine Hoehe.
+// Vorgabe ist die kleine Insel (Radius 14,6, Burg 1,6/-1,4, Treppchen 2,5/2,1)
+const WELT_KLEIN = 14.6;
+const TEICH_EBBE = -0.08, TEICH_FLUT = 0.34;   // Wasserstand der Teiche: Flut liegt ueber den Sandbank-Feldern
 
 // ---------------------------------------------------------------- Qualitaetsstufen
 // "beamer" (Runde 3, Plan 3.1 G/H): grosses Bild am Ally - Schatten 2048, alle Lichter, volle Partikel, scharfe Pixel;
 // faellt die Bildrate, geht es wie ueberall eine Stufe herunter (bildrateMessen)
 const STUFEN = ["niedrig", "mittel", "hoch", "beamer"];
 const STUFE = {
-  beamer: { pr: 1.5, schatten: 2048, lichter: 3, partikel: 1 },
-  hoch: { pr: 2, schatten: 2048, lichter: 3, partikel: 1 },
-  mittel: { pr: 1.5, schatten: 1024, lichter: 2, partikel: 0.6 },
-  niedrig: { pr: 1, schatten: 0, lichter: 0, partikel: 0.3 },
+  beamer: { pr: 1.5, schatten: 2048, lichter: 3, partikel: 1, leuchten: true, ziel: 46 },
+  hoch: { pr: 2, schatten: 2048, lichter: 3, partikel: 1, leuchten: true, ziel: 46 },
+  mittel: { pr: 1.5, schatten: 1024, lichter: 2, partikel: 0.6, leuchten: false, ziel: 38 },
+  niedrig: { pr: 1, schatten: 0, lichter: 0, partikel: 0.3, leuchten: false, ziel: 38 },
 };
 function startStufe(beamer = false) {
   const vor = (typeof globalThis !== "undefined" && globalThis.__brettQualitaet) || lsLesen("pa_brett_qualitaet");
@@ -75,14 +84,17 @@ const wenigBewegung = () => !!(window.matchMedia && window.matchMedia("(prefers-
 // ---------------------------------------------------------------- Aussehen je Anlass
 const LOOKS = {
   halloween: { nebel: 0x170d22, hemi: [0x9d8cff, 0x2a1206, 0.75], licht: [0xc4ccff, 1.7], lichtPos: [-8, 17, 6], gras: 0x3a5a2e, erde: 0x3b2416,
-    wasser: 0x140c26, weg: 0x7a6650, krone: 0x1f3d2c, nacht: true, belichtung: 1.2 },
+    wasser: 0x140c26, weg: 0x7a6650, krone: 0x1f3d2c, nacht: true, belichtung: 1.2, himmel: "nacht" },
   edel: { nebel: 0x120c08, hemi: [0xffe2b0, 0x2a1a10, 0.95], licht: [0xffd9a0, 2.1], lichtPos: [9, 15, 5], gras: 0x2f6b45, erde: 0x5a3a22,
-    wasser: 0x10243a, weg: 0xd8c39a, krone: 0x2a7a46, nacht: false, belichtung: 1.0 },
-  normal: { nebel: 0x0d0e1a, hemi: [0xbfd4ff, 0x2a1840, 1.1], licht: [0xfff1dd, 2.3], lichtPos: [8, 16, 6], gras: 0x3f9a4a, erde: 0x6b4426,
-    wasser: 0x1b4f8a, weg: 0xe8d9b0, krone: 0x2f9e4f, nacht: false, belichtung: 1.0 },
+    wasser: 0x10243a, weg: 0xd8c39a, krone: 0x2a7a46, nacht: false, belichtung: 1.0, himmel: "abend" },
+  normal: { nebel: 0xcde9fa, hemi: [0xdff0ff, 0x6a8a55, 0.75], licht: [0xfff1dd, 2.5], lichtPos: [8, 16, 6], gras: 0x4fae4e, erde: 0x6b4426,
+    wasser: 0x1f7fc4, weg: 0xe8d9b0, krone: 0x2f9e4f, nacht: false, belichtung: 1.0, himmel: "tag" },
   // zweites Brett (Teil 4b): Vulkaninsel - Asche, Basalt, Lavameer, glimmende Steine; gilt unabhaengig vom Anlass
   vulkan: { nebel: 0x1c0c08, hemi: [0xffc29a, 0x2a0a05, 0.85], licht: [0xffd2a8, 1.9], lichtPos: [-7, 16, 7], gras: 0x5a4a44, erde: 0x2b1d19,
-    wasser: 0x5a1600, weg: 0xb39472, krone: 0x3d5a2a, nacht: true, belichtung: 1.15, lava: true },
+    wasser: 0x5a1600, weg: 0xb39472, krone: 0x3d5a2a, nacht: true, belichtung: 1.15, lava: true, himmel: "glut" },
+  // Glitzerpassage (Runde 4): heller Steinboden, abends leuchtendes Kaufhaus; gilt unabhaengig vom Anlass
+  kaufhaus: { nebel: 0x14101f, hemi: [0xfff0e0, 0x3a2f55, 1.25], licht: [0xfff4e6, 2.0], lichtPos: [6, 18, 7], gras: 0xd8d2e6, erde: 0x4a4560,
+    wasser: 0x171228, weg: 0xf0d9a8, krone: 0x2f9e4f, nacht: true, belichtung: 1.0, innen: true, himmel: "nacht" },
 };
 const lookVon = () => { const l = document.body && document.body.dataset.look; return LOOKS[l] ? l : "normal"; };
 
@@ -196,19 +208,23 @@ const SPRUNG = 1.25;                // Spruenge (Tausch, Rohr, Portal) je Sekund
 export const AUFTRITT = { pause: 0.5, hin: 0.75, halten: 2.6, zurueck: 0.65 };
 export const AUFTRITT_DAUER = AUFTRITT.pause + AUFTRITT.hin + AUFTRITT.halten + AUFTRITT.zurueck;
 const UEBERFLUG = 3.6;              // Rundenbeginn: Ueberflug, Stern, Figur (Summe der Fahrt "runde")
+// Hauptmenue (Nico 06.11.2026): alle Zeiten des Bretts haengen an den Tempo-Stufen (brett_menue.js). Pausen und Stehzeiten am
+// Spieltempo (pause), Fahrten an kamera, Wurf an wuerfel, Laufen an figuren. Zeiten auf diesem Geraet: tempoVon(s); im Bild: g.tempo.
+const tempoVon = (s) => ({ pause: M.faktor(s, "pause"), figuren: M.faktor(s, "figuren"), wuerfel: M.faktor(s, "wuerfel"), kamera: M.faktor(s, "kamera") });
+const auftrittZeiten = (t) => ({ pause: AUFTRITT.pause * t.pause, hin: AUFTRITT.hin / t.kamera, halten: AUFTRITT.halten * t.pause, zurueck: AUFTRITT.zurueck / t.kamera });
 // Wie lange das Brett nach diesem Stand noch vorfuehrt (Sekunden): Wurf, Laufen, Auftritt - brett.js sperrt so lange
 // "Weiter" und laesst die Computer-Spieler warten (Tempo, Nico 01.11.2026)
 export function vorfuehrDauer(s) {
   if (!s || s.ende || s.phase === "mini" || s.phase === "dkampf" || s.phase === "bonus") return 0;
   let t = 0;
-  const frisch = s.bilanz && s.bilanz.zug === s.zug;
+  const frisch = s.bilanz && s.bilanz.zug === s.zug, f = tempoVon(s);
   if (s.wurf && s.spur && s.spur.j === s.dran && s.phase !== "wuerfeln") {
     const schritte = Math.max(0, (s.spur.felder || []).length - 1);
-    t += (s.spur.sprung ? 0 : WURF.los) + (s.spur.sprung ? 1 / SPRUNG : schritte / LAUF) + 0.2;
+    t += (s.spur.sprung ? 0 : WURF.los / f.wuerfel) + (s.spur.sprung ? 1 / (SPRUNG * f.figuren) : schritte / (LAUF * f.figuren)) + 0.2 * f.pause;
   }
-  if (s.phase === "wuerfeln" && !s.wurf && s.rundeZug === s.zug) t += UEBERFLUG;
-  if (frisch) t += AUFTRITT_DAUER;
-  return Math.min(11, t);
+  if (s.phase === "wuerfeln" && !s.wurf && s.rundeZug === s.zug) t += UEBERFLUG / f.kamera;
+  if (frisch) { const a = auftrittZeiten(f); t += a.pause + a.hin + a.halten + a.zurueck; }
+  return Math.min(11 * Math.max(f.pause, 1 / f.kamera, 1 / f.figuren, 1 / f.wuerfel), t);
 }
 
 // ---------------------------------------------------------------- Gruppen aus vielen gleichen Teilen (ein Zeichenaufruf)
@@ -227,7 +243,8 @@ function instanzen(geo, mat, liste, schatten = true) {
 }
 
 // ---------------------------------------------------------------- Figur
-function figurBauen(farbe, look) {
+// hutArt aus dem Hauptmenue (brett_menue.js: HUT_IDS); ohne Wahl wie bisher Hexenhut zu Halloween, sonst Partyhut
+function figurBauen(farbe, look, hutArt = null) {
   const fig = new THREE.Group();
   const k = new THREE.Group(); fig.add(k);                    // innen: Stauchen, Neigen
   const mat = new THREE.MeshStandardMaterial({ color: farbe, roughness: 0.4, metalness: 0.05, emissive: farbe, emissiveIntensity: look === "halloween" ? 0.2 : 0.1 });
@@ -253,14 +270,44 @@ function figurBauen(farbe, look) {
     gelenk.add(arm); gelenk.rotation.z = sx * 0.25; return gelenk;
   });
   const fuesse = [-0.17, 0.17].map((sx) => { const f = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 8), schwarz); f.scale.set(1, 0.55, 1.35); f.position.set(sx, 0.07, 0.05); return f; });
-  // Hut: zu Halloween ein Hexenhut mit Band in Spielerfarbe, sonst ein Partyhut
+  // Hut: Hexenhut mit Band in Spielerfarbe, Partyhut, Krone, Zylinder, Kappe oder Helm
   const hut = new THREE.Group();
-  if (look === "halloween") {
+  const art = hutArt || (look === "halloween" ? "hexe" : "party");
+  if (art === "hexe") {
     const dunkel = new THREE.MeshStandardMaterial({ color: 0x251a36, roughness: 0.7 });
     const krempe = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.44, 0.04, 24), dunkel); krempe.position.y = 1.16;
     const band = new THREE.Mesh(new THREE.CylinderGeometry(0.29, 0.3, 0.09, 20), mat); band.position.y = 1.23;
     const spitze = new THREE.Mesh(new THREE.ConeGeometry(0.29, 0.66, 18), dunkel); spitze.position.set(0.03, 1.53, 0); spitze.rotation.z = -0.22;
     hut.add(krempe, band, spitze);
+  } else if (art === "krone") {
+    const gold = new THREE.MeshStandardMaterial({ color: 0xffc800, metalness: 0.6, roughness: 0.3, emissive: 0x5a4300, emissiveIntensity: 0.3 });
+    const reif = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.25, 0.14, 20, 1, true), gold); reif.material.side = THREE.DoubleSide; reif.position.y = 1.2;
+    hut.add(reif);
+    for (let k = 0; k < 5; k++) {
+      const w = (k / 5) * Math.PI * 2, zacke = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.2, 8), gold);
+      zacke.position.set(Math.sin(w) * 0.26, 1.35, Math.cos(w) * 0.26); hut.add(zacke);
+    }
+    const stein = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), new THREE.MeshStandardMaterial({ color: 0xff4b4b, roughness: 0.2 })); stein.position.set(0, 1.2, 0.27); hut.add(stein);
+  } else if (art === "zylinder") {
+    const dunkel = new THREE.MeshStandardMaterial({ color: 0x24243a, roughness: 0.5 });
+    const krempe = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.04, 24), dunkel); krempe.position.y = 1.15;
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.27, 0.1, 20), mat); band.position.y = 1.22;
+    const rohr = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.26, 0.42, 20), dunkel); rohr.position.y = 1.47;
+    hut.add(krempe, band, rohr);
+  } else if (art === "kappe") {
+    const haube = new THREE.Mesh(new THREE.SphereGeometry(0.33, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 })); haube.position.y = 1.1; haube.scale.y = 0.8;
+    const streifen = new THREE.Mesh(new THREE.SphereGeometry(0.335, 18, 10, -0.35, 0.7, 0, Math.PI / 2), mat); streifen.position.y = 1.1; streifen.scale.y = 0.8;
+    const schirm = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.035, 18, 1, false, -Math.PI / 2, Math.PI), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 })); schirm.position.set(0, 1.13, 0.22); schirm.scale.z = 1.2;
+    hut.add(haube, streifen, schirm);
+  } else if (art === "helm") {
+    const stahl = new THREE.MeshStandardMaterial({ color: 0x9aa0c7, metalness: 0.55, roughness: 0.35 });
+    const haube = new THREE.Mesh(new THREE.SphereGeometry(0.35, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), stahl); haube.position.y = 1.08;
+    const rand = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.07, 22), new THREE.MeshStandardMaterial({ color: 0x6d7196, metalness: 0.5, roughness: 0.4 })); rand.position.y = 1.09;
+    hut.add(haube, rand);
+    [-1, 1].forEach((sx) => {
+      const horn = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.34, 10), new THREE.MeshStandardMaterial({ color: 0xfff3d6, roughness: 0.5 }));
+      horn.position.set(sx * 0.4, 1.3, 0); horn.rotation.z = -sx * 0.55; hut.add(horn);
+    });
   } else {
     const party = new THREE.Mesh(new THREE.ConeGeometry(0.21, 0.44, 16), new THREE.MeshStandardMaterial({ map: streifenTextur("#ffffff", hex(farbe)), roughness: 0.5 }));
     party.position.y = 1.36; party.rotation.z = 0.15;
@@ -274,8 +321,13 @@ function figurBauen(farbe, look) {
 
 // ---------------------------------------------------------------- Aufbau der Welt
 function aufbauen(muster, anzahlSpieler, brett) {
-  const look = lookVon(), vulkan = brett.welt === "vulkan", L = LOOKS[vulkan ? "vulkan" : look];
+  const aufbauStart = performance.now();
+  const look = lookVon(), vulkan = brett.welt === "vulkan", kaufhaus = brett.welt === "kaufhaus", hafen = brett.welt === "hafen";
+  const L = LOOKS[vulkan ? "vulkan" : kaufhaus ? "kaufhaus" : look];
   const nh = brett.nh || 36;   // Felder der Hauptrunde (danach Abkuerzung/Umweg)
+  const R = brett.radius || WELT_KLEIN, W = R / WELT_KLEIN;   // Inselradius und Massstab der Welt
+  const [bx, bz, bh = 0] = brett.burg || [1.6, -1.4], [px, pz, ph = 0] = brett.podest || [2.5, 2.1];
+  const BURG = V(bx, bh, bz), PODEST = V(px, ph, pz), GR = brett.burgGroesse || 1;
   const st = startStufe(!!brett.beamer), Q = STUFE[st.stufe];
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "default" });
   renderer.setPixelRatio(Math.min(Q.pr, window.devicePixelRatio || 1));
@@ -285,16 +337,15 @@ function aufbauen(muster, anzahlSpieler, brett) {
   renderer.toneMappingExposure = L.belichtung;
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(L.nebel, 28, 52);
-  const camera = new THREE.PerspectiveCamera(42, 1 / 0.82, 0.1, 240);
-  const mess = new THREE.PerspectiveCamera(42, 1 / 0.82, 0.1, 240);   // nur zum Rechnen (passt etwas ins Bild?)
-  scene.add(new THREE.HemisphereLight(...L.hemi));
+  const camera = new THREE.PerspectiveCamera(42, 1 / 0.82, 0.1, 240 * W);
+  const mess = new THREE.PerspectiveCamera(42, 1 / 0.82, 0.1, 240 * W);   // nur zum Rechnen (passt etwas ins Bild?)
+  const hemi = new THREE.HemisphereLight(...L.hemi); scene.add(hemi);
   const sonne = new THREE.DirectionalLight(L.licht[0], L.licht[1]);
   sonne.position.set(...L.lichtPos);
   sonne.castShadow = Q.schatten > 0;
   sonne.shadow.mapSize.set(Q.schatten || 1024, Q.schatten || 1024);
-  Object.assign(sonne.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16, near: 1, far: 60 });
   sonne.shadow.bias = -0.0006; sonne.shadow.normalBias = 0.03;
-  scene.add(sonne);
+  scene.add(sonne, sonne.target);   // der Schattenbereich folgt der Kamera (schattenFolgen)
 
   // ---- Insel: Grasdecke mit welligem Rand, felsige Erde darunter, Wasser mit Brandung
   const wellig = (geo, fels) => {
@@ -310,18 +361,39 @@ function aufbauen(muster, anzahlSpieler, brett) {
     geo.computeVertexNormals();
     return geo;
   };
-  const gras = new THREE.Mesh(wellig(new THREE.CylinderGeometry(14.6, 13.6, 1.0, 96, 1)), new THREE.MeshStandardMaterial({ color: L.gras, roughness: 0.95 }));
+  const gras = new THREE.Mesh(wellig(new THREE.CylinderGeometry(R, R - 1, 1.0, 96, 1)), [SC.felsMaterial(L.erde, 3), SC.bodenMaterial(L, R), SC.felsMaterial(L.erde, 3)]);
+  // Texturlage aus der Draufsicht: die Kappe ist ein Faecher, ihre eigenen Koordinaten verziehen das Muster an der welligen Kante
+  { const p = gras.geometry.attributes.position, uv = gras.geometry.attributes.uv; for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / (2 * R) + 0.5, p.getZ(i) / (2 * R) + 0.5); }
   gras.position.y = -0.62; gras.receiveShadow = true; scene.add(gras);
-  const erde = new THREE.Mesh(wellig(new THREE.CylinderGeometry(13.3, 8.6, 3.4, 40, 3), true), new THREE.MeshStandardMaterial({ color: L.erde, roughness: 1, flatShading: true }));
+  const erde = new THREE.Mesh(wellig(new THREE.CylinderGeometry(R - 1.3, R * 0.59, 3.4, 40, 3), true), SC.felsMaterial(L.erde, 6));
   erde.position.y = -2.82; scene.add(erde);
-  const wasser = new THREE.Mesh(new THREE.CircleGeometry(90, 64), L.lava
-    ? new THREE.MeshStandardMaterial({ color: L.wasser, roughness: 0.6, emissive: 0xff3a00, emissiveIntensity: 0.55 })
-    : new THREE.MeshStandardMaterial({ color: L.wasser, roughness: 0.18, metalness: 0.35, transparent: true, opacity: 0.9 }));
+  // Ufer: die Insel laeuft als Strand (Vulkan: Fels, Kaufhaus: Sockel) ins Wasser aus, statt als Scheibe darueber zu schweben
+  const ufer = new THREE.Mesh(wellig(new THREE.CylinderGeometry(R - 0.05, R + 2.1, 2.2, 96, 1, true)), L.lava ? SC.felsMaterial(0x3a2a26, 8) : L.innen ? SC.felsMaterial(0x9a92b4, 8) : SC.sandMaterial());
+  ufer.position.y = -1.22; ufer.receiveShadow = true; scene.add(ufer);
+  const wasserMat = L.lava ? SC.lavaMaterial(90 * W, 1.5) : L.innen ? new THREE.MeshStandardMaterial({ color: L.wasser, roughness: 0.3 }) : SC.wasserMaterial(L.wasser, 90 * W);
+  const wasser = new THREE.Mesh(new THREE.CircleGeometry(90 * W, 64), wasserMat);
   wasser.rotation.x = -Math.PI / 2; wasser.position.y = -2.2; scene.add(wasser);
-  const brandung = new THREE.Mesh(new THREE.RingGeometry(11.7, 13.0, 96), new THREE.MeshBasicMaterial({ color: L.lava ? 0xffb000 : 0xffffff, transparent: true, opacity: 0.16, depthWrite: false }));
+  const fliess = [...(wasserMat.userData.fliess || [])];
+  const brandung = new THREE.Mesh(new THREE.RingGeometry(R * 0.8, R * 0.89, 96), new THREE.MeshBasicMaterial({ color: L.lava ? 0xffb000 : 0xffffff, transparent: true, opacity: 0.16, depthWrite: false }));
   brandung.rotation.x = -Math.PI / 2; brandung.position.y = -2.17; scene.add(brandung);
+  // Hafeninsel: Teiche mitten in der Insel; bei Flut steigt das Wasser ueber die Sandbaenke (bildTakt: flutTakt)
+  const teichMat = (brett.teiche || []).length ? SC.wasserMaterial(0x2a8ad0, 12) : null;
+  if (teichMat) fliess.push(...teichMat.userData.fliess);
+  const teiche = (brett.teiche || []).map((t) => {
+    const m = new THREE.Mesh(new THREE.CircleGeometry(t.r, 48), teichMat);
+    m.rotation.x = -Math.PI / 2; m.position.set(t.x, TEICH_EBBE, t.z); scene.add(m); return m;
+  });
+  // Glitzerpassage: die oberen Etagen sind Terrassen, von oben ist jedes Feld zu sehen
+  (brett.etagen || []).forEach((e) => {
+    const dach = SC.bodenMaterial({ ...L, gras: e.h > 4 ? 0xf1e3ff : 0xe4dcf4 }, e.r);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(e.r, e.r, e.h, 72, 1), [SC.schaufensterMaterial(e.r), dach, dach]);
+    m.position.y = e.h / 2 - 0.12; m.castShadow = true; m.receiveShadow = true; scene.add(m);
+    const kante = new THREE.Mesh(new THREE.TorusGeometry(e.r, 0.07, 8, 96), new THREE.MeshStandardMaterial({ color: 0xffd27a, emissive: 0xffa53a, emissiveIntensity: 0.9 }));
+    kante.rotation.x = Math.PI / 2; kante.position.y = e.h - 0.12; scene.add(kante);
+  });
 
-  const lage = brett.lage.map((p) => V(p.x, 0, p.z));
+  const lage = brett.lage.map((p) => V(p.x, p.h || 0, p.z));
+  const aufzug = new Set(brett.aufzug || []);
   const kanten = [];
   brett.next.forEach((nx, i) => nx.forEach((j) => kanten.push([i, j, nx.length > 1 || i >= nh])));
   const abstandWeg = (x, z) => {
@@ -333,7 +405,9 @@ function aufbauen(muster, anzahlSpieler, brett) {
     }
     return d;
   };
-  const frei = (x, z, abst) => abstandWeg(x, z) > abst && Math.hypot(x - BURG.x, z - BURG.z) > 2.7 && Math.hypot(x - PODEST.x, z - PODEST.z) > 2.1;
+  const LEUCHTTURM = V(5.2, 0, 10);
+  const frei = (x, z, abst) => abstandWeg(x, z) > abst && Math.hypot(x - BURG.x, z - BURG.z) > 2.7 * GR && Math.hypot(x - PODEST.x, z - PODEST.z) > 2.1
+    && (brett.teiche || []).every((t) => Math.hypot(x - t.x, z - t.z) > t.r + 0.5) && !(hafen && Math.hypot(x - LEUCHTTURM.x, z - LEUCHTTURM.z) < 1.8);
 
   // ---- Felder: Sockel in dunkler Feldfarbe, Platte mit Symbol (leuchtet nachts etwas)
   const n = muster.length;
@@ -347,38 +421,52 @@ function aufbauen(muster, anzahlSpieler, brett) {
   const felder = [];
   for (let i = 0; i < n; i++) {
     const p = lage[i], art = muster[i], fm = feldMat(art);
-    const gr = new THREE.Group(); gr.position.set(p.x, 0, p.z);
+    const gr = new THREE.Group(); gr.position.copy(p);
     // Sockel ohne Deckel (die Platte ist der Deckel - zwei Flaechen uebereinander flimmern aus der Ferne)
     const sockel = new THREE.Mesh(sockelGeo, fm.sockel); sockel.position.y = FELD_OBEN - 0.15; sockel.castShadow = true; sockel.receiveShadow = true;
     const deckel = new THREE.Mesh(deckelGeo, fm.deckel); deckel.position.y = FELD_OBEN; deckel.receiveShadow = true;
     gr.add(sockel, deckel); scene.add(gr);
-    felder.push({ gr, p, art, plopp: 0 });
+    felder.push({ gr, p, art, jetzt: art, sockel, deckel, plopp: 0 });
   }
   // ---- Wege: Erdband unter den Feldern, Trittsteine auf langen Stuecken; Abkuerzung und Umweg golden
   const band = [], bandNeben = [], tritt = [];
+  // Rolltreppen und Aufzug: Stege zwischen den Etagen (Rolltreppe metallisch, Aufzug als leuchtende Glasroehre)
+  const rolltreppeMat = SC.rolltreppeMaterial();
+  const handlauf = new THREE.MeshStandardMaterial({ color: 0x20222e, roughness: 0.5 });
+  const aufzugMat = new THREE.MeshStandardMaterial({ color: 0x8fe9ff, emissive: 0x37c6e8, emissiveIntensity: 0.8, transparent: true, opacity: 0.55 });
+  const steg = (a, b, breite, mat) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(breite, 0.14, a.distanceTo(b)), mat);
+    m.position.copy(a).add(b).multiplyScalar(0.5).add(V(0, 0.02, 0)); m.lookAt(b.x, b.y + 0.02, b.z); m.castShadow = true; scene.add(m);
+    if (mat === rolltreppeMat) [-1, 1].forEach((sx) => { const h = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.32, a.distanceTo(b)), handlauf); h.position.set(sx * breite / 2, 0.2, 0); h.castShadow = true; m.add(h); });
+  };
   for (const [i, j, neben] of kanten) {
     const a = lage[i], b = lage[j], len = a.distanceTo(b), mitte = a.clone().add(b).multiplyScalar(0.5);
-    (neben ? bandNeben : band).push({ p: V(mitte.x, -0.09, mitte.z), ry: -Math.atan2(b.z - a.z, b.x - a.x), s: V(len, 1, 1) });
+    if (a.y !== b.y) {
+      if (!aufzug.has(i) || !aufzug.has(j)) steg(a, b, 1.15, rolltreppeMat);
+      else if (i < j && Math.abs(a.y - b.y) < 4) steg(a, b, 0.7, aufzugMat);
+      continue;
+    }
+    (neben ? bandNeben : band).push({ p: V(mitte.x, a.y - 0.09, mitte.z), ry: -Math.atan2(b.z - a.z, b.x - a.x), s: V(len, 1, 1) });
     const stuecke = Math.floor((len - 1.6) / 0.55);
     for (let k = 1; k <= stuecke; k++) {
       const t = 0.8 / len + ((len - 1.6) / len) * (k / (stuecke + 1));
-      tritt.push({ p: V(a.x + (b.x - a.x) * t, -0.02, a.z + (b.z - a.z) * t), ry: k * 1.3, s: 0.8 + zufallFest(i * 7 + k) * 0.3 });
+      tritt.push({ p: V(a.x + (b.x - a.x) * t, a.y - 0.02, a.z + (b.z - a.z) * t), ry: k * 1.3, s: 0.8 + zufallFest(i * 7 + k) * 0.3 });
     }
   }
   const bandGeo = new THREE.BoxGeometry(1, 0.06, 0.78);
-  const wegMat = new THREE.MeshStandardMaterial({ color: L.weg, roughness: 1 });
+  const wegMat = SC.wegMaterial(L.weg);
   const nebenMat = new THREE.MeshStandardMaterial({ color: 0xffd27a, roughness: 0.9, emissive: 0x6b4a00, emissiveIntensity: L.nacht ? 0.55 : 0.25 });
   [instanzen(bandGeo, wegMat, band, false), instanzen(bandGeo, nebenMat, bandNeben, false),
     instanzen(new THREE.CylinderGeometry(0.2, 0.24, 0.08, 9), new THREE.MeshStandardMaterial({ color: 0xbdb3a2, roughness: 1, flatShading: true }), tritt, false)]
     .forEach((x) => x && scene.add(x));
   // ---- Wegweiser an den Abzweigungen: Pfosten mit zwei Pfeilbrettern in die beiden Richtungen
-  const holz = new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 0.9 });
+  const holz = SC.holzMaterial();
   const gold = new THREE.MeshStandardMaterial({ color: 0xffcf5a, roughness: 0.5, emissive: 0x6b4a00, emissiveIntensity: 0.4 });
   brett.next.forEach((nx, i) => {
     if (nx.length < 2) return;
     // im Zwickel zwischen den beiden Wegen (nicht vor der Figur)
     const p = lage[i], zwickel = nx.reduce((a, z) => a.add(lage[z].clone().sub(p).normalize()), V()).normalize();
-    const pos = p.clone().addScaledVector(zwickel, 1.4);
+    const pos = p.clone().addScaledVector(zwickel, 1.4).setY(p.y);
     const schild = new THREE.Group(); schild.position.copy(pos);
     const pfahl = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 1.5, 6), holz); pfahl.position.y = 0.6; schild.add(pfahl);
     nx.forEach((z, k) => {
@@ -394,19 +482,20 @@ function aufbauen(muster, anzahlSpieler, brett) {
   // ---- Ladenstaende neben den Ladenfeldern (Theke mit gestreiftem Dach)
   const markise = new THREE.MeshStandardMaterial({ map: streifenTextur("#ffffff", look === "halloween" ? "#7b3bd1" : "#18b6b0"), roughness: 0.6 });
   const theke = new THREE.MeshStandardMaterial({ color: 0x9a6a3e, roughness: 0.8 });
+  const staende = [], stachelOrte = [], kristalle = [];
   felder.forEach((f, i) => {
     if (f.art !== "l") return;
     const nx = lage[brett.next[i][0]], vr = lage[(brett.next.findIndex((x) => x.includes(i)) + n) % n] || f.p;
     const dir = V(nx.x - vr.x, 0, nx.z - vr.z).normalize();
     let quer = V(-dir.z, 0, dir.x); if (quer.dot(V(f.p.x, 0, f.p.z)) < 0) quer.negate();
     const pos = f.p.clone().addScaledVector(quer, 1.35);
-    const stand = new THREE.Group(); stand.position.copy(pos); stand.lookAt(f.p.x, 0, f.p.z);
+    const stand = new THREE.Group(); stand.position.copy(pos); stand.lookAt(f.p.x, f.p.y, f.p.z);
     const t = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.42, 0.38), theke); t.position.y = 0.21;
     const dach = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.06, 0.62), markise); dach.position.set(0, 0.98, 0.08); dach.rotation.x = 0.25;
     const ps = [-0.44, 0.44].map((x) => { const pf = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.95, 6), holz); pf.position.set(x, 0.48, -0.12); return pf; });
     const korb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), new THREE.MeshStandardMaterial({ color: 0xffd23f, emissive: 0xffa000, emissiveIntensity: 0.4 })); korb.position.set(0.2, 0.5, 0.05);
     stand.add(t, dach, ...ps, korb); stand.traverse((o) => { o.castShadow = true; });
-    scene.add(stand);
+    scene.add(stand); staende.push(stand);
   });
   // ---- Teil 4b: Beiwerk der neuen Felder - Truhe neben dem Truhenfeld, Leuchtring ums Portal, Kristall an der Heilquelle,
   //      Stacheln am Stachelfeld, Glutschein am Glutfeld (alles neben bzw. um das Feld, nie darauf)
@@ -420,7 +509,7 @@ function aufbauen(muster, anzahlSpieler, brett) {
   felder.forEach((f) => {
     const raus = aussenVon(f);
     if (f.art === "k") {
-      const t = new THREE.Group(); t.position.copy(f.p).addScaledVector(raus, 1.15); t.lookAt(f.p.x, 0, f.p.z);
+      const t = new THREE.Group(); t.position.copy(f.p).addScaledVector(raus, 1.15); t.lookAt(f.p.x, f.p.y, f.p.z);
       const kasten = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.36, 0.42), truheHolz); kasten.position.y = 0.18;
       const deckel = new THREE.Group(); deckel.position.set(0, 0.36, -0.21);
       const d = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.21, 0.62, 12, 1, false, 0, Math.PI), truheHolz); d.rotation.z = Math.PI / 2; d.position.z = 0.21; deckel.add(d);
@@ -429,39 +518,43 @@ function aufbauen(muster, anzahlSpieler, brett) {
       t.add(kasten, deckel, band, schloss); t.traverse((o) => { o.castShadow = true; });
       scene.add(t); truhen.push({ t, deckel, feld: felder.indexOf(f), auf: 0 });
     } else if (f.art === "p") {
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.07, 10, 40), portalMat); ring.rotation.x = -Math.PI / 2; ring.position.set(f.p.x, FELD_OBEN + 0.06, f.p.z);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.07, 10, 40), portalMat); ring.rotation.x = -Math.PI / 2; ring.position.set(f.p.x, f.p.y + FELD_OBEN + 0.06, f.p.z);
       scene.add(ring); portale.push(ring);
     } else if (f.art === "h") {
-      const k = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), kristallMat); k.scale.set(1, 1.7, 1); k.position.copy(f.p).addScaledVector(raus, 1.05).setY(0.45);
-      k.castShadow = true; scene.add(k); portale.push(k);
+      const k = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), kristallMat); k.scale.set(1, 1.7, 1); k.position.copy(f.p).addScaledVector(raus, 1.05).setY(f.p.y + 0.45);
+      k.castShadow = true; scene.add(k); portale.push(k); kristalle.push(k);
     } else if (f.art === "s") {
+      const alt = [];
       for (let x = -1; x <= 1; x++) {
         const st = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.42, 6), stachelMat);
         const quer = V(-raus.z, 0, raus.x);
-        st.position.copy(f.p).addScaledVector(raus, 0.98).addScaledVector(quer, x * 0.28).setY(0.21); st.castShadow = true; scene.add(st);
+        st.position.copy(f.p).addScaledVector(raus, 0.98).addScaledVector(quer, x * 0.28).setY(f.p.y + 0.21); st.castShadow = true; scene.add(st); alt.push(st);
       }
+      stachelOrte.push({ p: f.p.clone().addScaledVector(raus, 1.1), ry: Math.atan2(raus.x, raus.z), alt });
     } else if (f.art === "g" && Q.lichter > 0) {
-      const l = new THREE.PointLight(0xff5a00, 3.5, 3.2, 1.6); l.position.set(f.p.x, 0.5, f.p.z); scene.add(l);
+      const l = new THREE.PointLight(0xff5a00, 3.5, 3.2, 1.6); l.position.set(f.p.x, f.p.y + 0.5, f.p.z); scene.add(l);
     }
   });
 
   // ---- Deko (nie auf Feldern oder Wegen), je Aussehen
-  const halloween = look === "halloween" && !vulkan;
+  const halloween = look === "halloween" && !vulkan && !kaufhaus;
   const liste = { tanne: [], laub: [], kahl: [], grab: [], kuerbis: [], stein: [], busch: [], pilz: [], blume: [], glut: [] };
-  for (let k = 0; k < 120; k++) {
-    const a = k * 2.399, r = 2.2 + (k % 13) * 0.93;
+  // gleiche Dichte wie auf der kleinen Insel: Anzahl waechst mit der Flaeche
+  for (let k = 0; k < Math.round(120 * W * W); k++) {
+    const a = k * 2.399, r = (2.2 + (k % 13) * 0.93) * W + (W > 1 ? zufallFest(k + 40) * 0.9 : 0);
     const x = Math.cos(a) * r * 1.05, z = Math.sin(a) * r * 0.86;
-    if (Math.hypot(x / 13.4, z / 12.2) > 1 || !frei(x, z, 1.25)) continue;
+    if (Math.hypot(x / (13.4 * W), z / (12.2 * W)) > 1 || !frei(x, z, 1.25)) continue;
+    if (kaufhaus && Math.hypot(x, z) < R * 0.84) continue;   // im Kaufhaus nur Kuebelpflanzen am Rand
     const rnd = zufallFest(k), s = 0.8 + rnd * 0.45, p = V(x, 0, z), ry = rnd * 6.28;
-    let typ = vulkan ? ["stein", "kahl", "glut", "stein", "busch", "kahl", "glut"][k % 7]
+    let typ = kaufhaus ? "busch" : vulkan ? ["stein", "kahl", "glut", "stein", "busch", "kahl", "glut"][k % 7]
       : halloween ? ["grab", "kuerbis", "tanne", "grab", "kahl", "stein", "pilz"][k % 7] : ["tanne", "laub", "tanne", "stein", "busch", "laub", "blume"][k % 7];
     // hohe Baeume mit mehr Abstand zum Weg (sie verdecken sonst bei Nahaufnahmen die Figur) - dort lieber etwas Kleines
     if (["tanne", "laub", "kahl"].includes(typ) && !frei(x, z, 2.0)) typ = halloween ? "grab" : vulkan ? "glut" : "busch";
-    if (vulkan && Math.hypot(x - BURG.x, z - BURG.z) < 3.4) continue;   // Vulkanfuss frei lassen
+    if (vulkan && Math.hypot(x - BURG.x, z - BURG.z) < 3.4 * GR) continue;   // Vulkanfuss frei lassen
     liste[typ].push({ p, s, ry: typ === "kuerbis" ? (rnd - 0.5) * 0.9 : typ === "grab" ? (rnd - 0.5) * 0.6 : ry, rz: typ === "grab" ? (rnd - 0.5) * 0.18 : 0 });
   }
   // Kuerbislaternen (bzw. Blumen) am Wegrand, jedes fuenfte Feld
-  for (let i = 0; i < Math.min(n, nh); i += 5) {
+  for (let i = 0; i < Math.min(n, nh) && !kaufhaus; i += 5) {
     const p = lage[i], aussen = V(p.x, 0, p.z).normalize(), q = p.clone().addScaledVector(aussen, 1.25);
     if (abstandWeg(q.x, q.z) > 0.9) liste[vulkan ? "glut" : halloween ? "kuerbis" : "blume"].push({ p: q, s: 1, ry: (zufallFest(i) - 0.5) * 0.6 });
   }
@@ -511,27 +604,28 @@ function aufbauen(muster, anzahlSpieler, brett) {
     const bl = liste.blume.flatMap((b, i) => [0, 1, 2, 3].map((k) => ({ p: b.p.clone().add(V(Math.cos(k * 1.7 + i) * 0.28, 0, Math.sin(k * 1.7 + i) * 0.28)), s: 1, farbe: [0xff5fae, 0xffd23f, 0xffffff, 0xa84bff][(i + k) % 4] })));
     teile.push([mitY(new THREE.IcosahedronGeometry(0.09, 0), 0.12), bluete, bl]);
   }
-  teile.forEach(([geo, mat, l]) => { const im = instanzen(geo, mat, l); if (im) scene.add(im); });
+  const deko = [];
+  teile.forEach(([geo, mat, l]) => { const im = instanzen(geo, mat, l); if (im) { scene.add(im); deko.push(im); } });
   // warme Lichter an einigen Kuerbissen (zu Halloween), Anzahl je Qualitaet
   const lichter = [];
   const lichtOrte = halloween ? liste.kuerbis.slice(0, 3).map((x) => x.p) : [];
   lichtOrte.forEach((p, k) => { const l = new THREE.PointLight(0xff8a2a, 7, 5.5, 1.6); l.position.set(p.x, 0.7, p.z); l.visible = k < Q.lichter; scene.add(l); lichter.push(l); });
 
   // ---- in der Mitte: Spukhaus (Halloween) oder Burg
-  const mitte = new THREE.Group(); mitte.position.copy(BURG);
+  const mitte = new THREE.Group(); mitte.position.copy(BURG); mitte.scale.setScalar(GR);
   const fensterMat = new THREE.MeshStandardMaterial({ color: 0xffb347, emissive: 0xff9a2a, emissiveIntensity: 1.6 });
   const fenster = (x, y, z, ry = 0, w = 0.3, h = 0.4) => { const f = new THREE.Mesh(new THREE.PlaneGeometry(w, h), fensterMat); f.position.set(x, y, z); f.rotation.y = ry; return f; };
   let geist = null, krater = null;
   const rauch = [];
   if (vulkan) {
     // Vulkan: Felskegel mit glühendem Kratersee, drei Lavastroeme die Flanke hinunter, Rauch steigt auf (Schleife)
-    const fels = new THREE.MeshStandardMaterial({ color: 0x3b2a24, roughness: 1, flatShading: true });
+    const fels = SC.felsMaterial(0x4a3530, 3); fels.flatShading = true;
     const kegelGeo = new THREE.CylinderGeometry(0.85, 2.6, 3.0, 14, 4);
     const kp = kegelGeo.attributes.position;
     for (let i = 0; i < kp.count; i++) { const y = kp.getY(i); if (y > -1.49 && y < 1.49) { const f = 1 + 0.08 * Math.sin(i * 2.3) ; kp.setX(i, kp.getX(i) * f); kp.setZ(i, kp.getZ(i) * f); } }
     kegelGeo.computeVertexNormals();
     const kegel = new THREE.Mesh(kegelGeo, fels); kegel.position.y = 1.5;
-    const glutMat = new THREE.MeshStandardMaterial({ color: 0xff6a00, emissive: 0xff4a00, emissiveIntensity: 1.8, roughness: 0.6 });
+    const glutMat = SC.lavaMaterial(9, 3.2); fliess.push(...glutMat.userData.fliess);
     const see = new THREE.Mesh(new THREE.CircleGeometry(0.74, 20), glutMat); see.rotation.x = -Math.PI / 2; see.position.y = 2.97;
     mitte.add(kegel, see);
     [0.3, 2.4, 4.4].forEach((a) => {
@@ -539,12 +633,19 @@ function aufbauen(muster, anzahlSpieler, brett) {
       const strom = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3.4, 0.05), glutMat); strom.position.set(0, 1.5, 1.76); strom.rotation.x = -0.53;
       arm.add(strom); mitte.add(arm);
     });
-    const licht = new THREE.PointLight(0xff5a00, 14, 10, 1.5); licht.position.y = 3.7; mitte.add(licht);
+    const licht = new THREE.PointLight(0xff5a00, 14, 10 * GR, 1.5); licht.position.y = 3.7; mitte.add(licht);
     for (let k = 0; k < 6; k++) {
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: weichTextur(), color: 0x6b5a55, transparent: true, opacity: 0.35, depthWrite: false }));
-      sp.position.set(BURG.x, 3.2, BURG.z); scene.add(sp); rauch.push({ sp, t: k / 6 });
+      sp.position.set(BURG.x, 3.2 * GR, BURG.z); scene.add(sp); rauch.push({ sp, t: k / 6 });
     }
-    krater = { see, licht, pos: BURG.clone().setY(3.1) };
+    krater = { see, licht, pos: BURG.clone().setY(3.1 * GR) };
+  } else if (kaufhaus) {
+    // Lichthof ganz oben: Brunnen mit goldener Kugel
+    const becken = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.8, 0.5, 28), new THREE.MeshStandardMaterial({ color: 0xcfc4e8, roughness: 0.3 })); becken.position.y = 0.25;
+    const wasserFlaeche = new THREE.Mesh(new THREE.CircleGeometry(1.4, 28), new THREE.MeshStandardMaterial({ color: 0x57c7ff, emissive: 0x2a90e0, emissiveIntensity: 0.6, roughness: 0.15 })); wasserFlaeche.rotation.x = -Math.PI / 2; wasserFlaeche.position.y = 0.51;
+    const saeule2 = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 1.6, 12), new THREE.MeshStandardMaterial({ color: 0xffd27a, metalness: 0.6, roughness: 0.3 })); saeule2.position.y = 1.1;
+    const kugel = new THREE.Mesh(new THREE.SphereGeometry(0.5, 24, 16), new THREE.MeshStandardMaterial({ color: 0xffd23f, emissive: 0xffa500, emissiveIntensity: 1, metalness: 0.5, roughness: 0.25 })); kugel.position.y = 2.2;
+    mitte.add(becken, wasserFlaeche, saeule2, kugel);
   } else if (halloween) {
     const wand = new THREE.MeshStandardMaterial({ color: 0x433a52, roughness: 0.9 });
     const dachM = new THREE.MeshStandardMaterial({ color: 0x1d1729, roughness: 0.8 });
@@ -578,6 +679,19 @@ function aufbauen(muster, anzahlSpieler, brett) {
   }
   mitte.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   scene.add(mitte);
+  // Hafeninsel: Leuchtturm neben der Hafenstadt
+  let leuchtturm = null;
+  if (hafen) {
+    const turm = new THREE.Group(); turm.position.copy(LEUCHTTURM); leuchtturm = turm;
+    const streifen = new THREE.MeshStandardMaterial({ map: streifenTextur("#ffffff", "#e0464e"), roughness: 0.6 });
+    const leib = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.95, 4.2, 18), streifen); leib.position.y = 2.1;
+    const kanzel = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.16, 18), new THREE.MeshStandardMaterial({ color: 0x3a3f55, roughness: 0.5 })); kanzel.position.y = 4.25;
+    const lampe = new THREE.Mesh(new THREE.SphereGeometry(0.42, 18, 12), new THREE.MeshStandardMaterial({ color: 0xfff2b0, emissive: 0xffd76a, emissiveIntensity: 1.6 })); lampe.position.y = 4.7;
+    const dachT = new THREE.Mesh(new THREE.ConeGeometry(0.62, 0.6, 18), new THREE.MeshStandardMaterial({ color: 0xc33a42, roughness: 0.5 })); dachT.position.y = 5.3;
+    turm.add(leib, kanzel, lampe, dachT);
+    turm.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    scene.add(turm);
+  }
 
   // ---- Himmel und Stimmung: Mond, Fledermaeuse, Irrlichter/Gluehwuermchen, Nebelschwaden
   if (halloween) {
@@ -597,13 +711,13 @@ function aufbauen(muster, anzahlSpieler, brett) {
       const l = new THREE.Mesh(fg, fm), r = new THREE.Mesh(fg, fm); r.scale.x = -1;
       const lg = new THREE.Group(), rg = new THREE.Group(); lg.add(l); rg.add(r);
       b.add(rumpf, lg, rg); scene.add(b);
-      flederm.push({ b, lg, rg, r: 4 + k * 1.3, h: 4.5 + (k % 3) * 0.9, v: 0.35 + (k % 2) * 0.2, ph: k * 1.1 });
+      flederm.push({ b, lg, rg, r: (4 + k * 1.3) * W, h: 4.5 + (k % 3) * 0.9, v: 0.35 + (k % 2) * 0.2, ph: k * 1.1 });
     }
   }
   const lichtN = 70;
   const lichtPos = new Float32Array(lichtN * 3), lichtBasis = [];
   for (let k = 0; k < lichtN; k++) {
-    const a = zufallFest(k + 300) * 6.28, r = 2 + zufallFest(k + 400) * 11;
+    const a = zufallFest(k + 300) * 6.28, r = (2 + zufallFest(k + 400) * 11) * W;
     lichtBasis.push([Math.cos(a) * r, 0.5 + zufallFest(k + 500) * 2.2, Math.sin(a) * r * 0.86, zufallFest(k + 600) * 6.28]);
   }
   const irrlichter = new THREE.Points(new THREE.BufferGeometry().setAttribute("position", new THREE.BufferAttribute(lichtPos, 3)),
@@ -612,8 +726,9 @@ function aufbauen(muster, anzahlSpieler, brett) {
   const nebel = [];
   if (halloween) {
     for (let k = 0; k < 9; k++) {
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: weichTextur(), color: 0xc9b8ff, transparent: true, opacity: 0.1, depthWrite: false }));
-      const a = (k / 9) * 6.28; sp.scale.set(7, 2.6, 1); sp.position.set(Math.cos(a) * 12, 0.3, Math.sin(a) * 10.5);
+      // ohne Tiefenpruefung: sonst schneidet der Boden die Schwaden als gerade Kante ab
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: weichTextur(), color: 0xc9b8ff, transparent: true, opacity: 0.08, depthWrite: false, depthTest: false }));
+      const a = (k / 9) * 6.28; sp.scale.set(7 * W, 2.6, 1); sp.position.set(Math.cos(a) * 12 * W, 0.3, Math.sin(a) * 10.5 * W);
       scene.add(sp); nebel.push({ sp, a, v: 0.03 + (k % 3) * 0.01 });
     }
   }
@@ -624,7 +739,7 @@ function aufbauen(muster, anzahlSpieler, brett) {
   const sternGeo = new THREE.ExtrudeGeometry(sternForm, { depth: 0.25, bevelEnabled: true, bevelSize: 0.06, bevelThickness: 0.06 }); sternGeo.center();
   const stern = new THREE.Mesh(sternGeo, new THREE.MeshStandardMaterial({ color: 0xffd23f, emissive: 0xffb300, emissiveIntensity: 0.9, metalness: 0.3, roughness: 0.3 }));
   stern.castShadow = true; scene.add(stern);
-  const sternLicht = new THREE.PointLight(0xffd23f, 16, 6); scene.add(sternLicht);
+  const sternLicht = new THREE.PointLight(0xffd23f, 7, 6); scene.add(sternLicht);
   const saeule = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.75, 7, 18, 1, true), new THREE.MeshBasicMaterial({ color: 0xffe27a, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide }));
   scene.add(saeule);
 
@@ -636,7 +751,8 @@ function aufbauen(muster, anzahlSpieler, brett) {
   spielerFarbenLesen();
   const figuren = [];
   for (let j = 0; j < anzahlSpieler; j++) {
-    const f = figurBauen(FARBEN_SP[j % FARBEN_SP.length], look);
+    const wahl = brett.fig && brett.fig[j];
+    const f = figurBauen(FARBEN_SP[(wahl ? wahl.farbe : j) % FARBEN_SP.length], look, wahl ? wahl.hut : null);
     f.obj.scale.setScalar(0.9);
     scene.add(f.obj);
     Object.assign(f, { anzeige: 0, pfad: [], huepfen: 0, blick: 0, startIn: 0, gefuehl: null, blinzel: 2 + j * 0.7, richtung: V(), boden: V() });
@@ -692,39 +808,107 @@ function aufbauen(muster, anzahlSpieler, brett) {
 
   g = { renderer, scene, camera, mess, sonne, lichter, felder, figuren, stern, sternLicht, saeule, ring, wuerfel, wuerfelMat, zaehler, funken, funkenNr: 0,
     muenzen, herzen, feierStern, auftritte: [], auftritt: null, auftrittZahl: 0, grossZahlen: [], karteHTML: "", zaehlerMax: 0, beamer: !!brett.beamer, kam: null,
-    blase, rohre, podest, PODEST_STUFE, geist, flederm, irrlichter, lichtBasis, nebel, brandung, n, lage, look,
-    welt: vulkan ? "vulkan" : "insel", krater, rauch, portale, truhen, blitze, geschosse: [], marker: {}, wackelBis: 0, muenzGeo, muenzMat,
+    blase, rohre, podest, PODEST_STUFE, geist, flederm, irrlichter, lichtBasis, nebel, brandung, n, lage, look, R, W, GR, burg: BURG, podestOrt: PODEST, feldMat, teiche, flut: false, randPunkte: randPunkteBauen(R, brett.etagen),
+    sonnePos: V(...L.lichtPos).normalize(), schattenHalb: 0, zustandSig: "",
+    welt: brett.welt || "insel", krater, rauch, portale, truhen, blitze, geschosse: [], marker: {}, wackelBis: 0, muenzGeo, muenzMat,
     stufe: st.stufe, stufeFest: st.fest, mess_dt: [], wurfSchluessel: null, wurf: null, uhr: new THREE.Clock(), container: null, aktiv: 0, laeuft: false,
     schweber: [], fallenObj: {}, schnapp: [], effektNr: null, nachLanden: [], fahrt: null, phase: "", sieger: null, hoehe: 0.82,
     folgen: lsLesen("pa_brett_kamera") !== "uebersicht" && !wenigBewegung(), sternFlug: null, sternPos: V(), wuerfelZahl: 1, wuerfelKlein: false,
     kamP: V(0, 23.5, 20), kamL: V(0, 0, 0.8), uebersichtCache: {}, bilder: 0 };
   camera.position.copy(g.kamP); camera.lookAt(g.kamL);
+  Object.assign(g, { fliess, hemi, hemiBasis: L.hemi[2], sonneBasis: L.licht[1], basisHimmel: L.himmel });
+  SC.himmelSetzen(g, L.himmel);
+  // Runde 5: echte Modelle kommen dazu, sobald die Dateien da sind (im Hauptmenue meist schon vorgeladen); bis dahin und falls sie
+  // fehlen, bleibt die einfache Form sichtbar. Jede Szene baut nur ihre eigenen Modelle ein (g kann inzwischen eine neue sein)
+  const dieseSzene = g, weltName = halloween ? "halloween" : (vulkan || kaufhaus || hafen) ? brett.welt : "insel";
+  const platzSuchen = (anzahl, abstand) => {
+    const orte = [];
+    for (let k = 0; k < 900 && orte.length < anzahl; k++) {
+      const a = k * 2.399, r = (0.3 + 0.62 * zufallFest(k + 70)) * R, x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (frei(x, z, abstand) && orte.every((q) => Math.hypot(q.x - x, q.z - z) > 2)) orte.push(V(x, -0.12, z));
+    }
+    return orte;
+  };
+  const mitteArt = vulkan ? "vulkan" : kaufhaus ? "brunnen" : halloween ? "spuk" : "burg";
+  MD.vorladen(weltName, anzahlSpieler).then((da) => {
+    if (!da || g !== dieseSzene) return;
+    SC.schmuecken(dieseSzene, { scene, liste, deko, mitte, mitteArt, BURG, GR, R, W, frei, platzSuchen, hafen, vulkan, kaufhaus, gruen: !vulkan && !kaufhaus && !halloween, leuchtturm, LEUCHTTURM, staende, stacheln: stachelOrte, kristalle, etagen: brett.etagen });
+    figuren.forEach((f, j) => { const wahl = brett.fig && brett.fig[j]; SC.figurTauschen(f, j % Math.max(1, MD.figurenAnzahl()), FARBEN_SP[(wahl ? wahl.farbe : j) % FARBEN_SP.length]); });
+    g.modelleDa = true;
+  }).catch((e) => { console.warn("Modelle nicht eingesetzt", e); });
+  MD.nachbearbeitungModule().then((N) => {
+    if (!N || g !== dieseSzene) return;
+    const ziel = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: 4 });
+    const c = new N.EffectComposer(renderer, ziel);
+    c.addPass(new N.RenderPass(scene, camera));
+    c.addPass(new N.UnrealBloomPass(new THREE.Vector2(256, 256), 0.32, 0.55, 1.25));   // hohe Schwelle: nur was heller als Weiss ist, leuchtet
+    c.addPass(new N.OutputPass());
+    g.composer = c; groesseAnwenden();
+  }).catch((e) => { console.warn("Nachbearbeitung aus", e); });
   // ein Tipp aufs Bild ueberspringt die laufende Kamerafahrt (auch den Auftritt); wer am Zug ist, fuehrt die Kamera
   // mit Finger, Maus oder Controller (kamera_frei.js)
   renderer.domElement.addEventListener("pointerdown", () => { if (g && g.fahrt) g.fahrt = null; if (g && g.auftritt && g.auftritt.stufe === "zeigen") g.auftritt.weg = true; });
   KF.binden(renderer.domElement, { beiAenderung: () => { if (g) { g.fahrt = null; freiKnopfZeigen(); } } });
   qualitaetAnwenden();
+  g.aufbauMs = Math.round(performance.now() - aufbauStart);
 }
 
 // Stufe auf Renderer und Szene uebertragen (beim Aufbau und wenn die Bildrate faellt)
 function qualitaetAnwenden() {
   const Q = STUFE[g.stufe];
   g.renderer.setPixelRatio(Math.min(Q.pr, window.devicePixelRatio || 1));
-  if (g.groesse) g.renderer.setSize(g.groesse[0], g.groesse[1], false);
+  groesseAnwenden();
   g.sonne.castShadow = Q.schatten > 0;
   g.lichter.forEach((l, k) => { l.visible = k < Q.lichter; });
   g.irrlichter.geometry.setDrawRange(0, Math.round(70 * Q.partikel));
   g.nebel.forEach((x) => { x.sp.visible = Q.partikel >= 0.5; });
   g.flederm.forEach((x, k) => { x.b.visible = k < Math.max(2, Math.round(6 * Q.partikel)); });
 }
+function groesseAnwenden() {
+  if (!g.groesse) return;
+  g.renderer.setSize(g.groesse[0], g.groesse[1], false);
+  if (g.composer) { g.composer.setPixelRatio(g.renderer.getPixelRatio()); g.composer.setSize(g.groesse[0], g.groesse[1]); }
+}
 function bildrateMessen(dt) {
+  // ?fps: Anzeige fuer die Probe am Ally (Bilder je Sekunde, Stufe); die Zahl steht auch in grafikStand()
+  g.fpsZeit = (g.fpsZeit || 0) + dt; g.fpsBilder = (g.fpsBilder || 0) + 1;
+  if (g.fpsZeit >= 1) {
+    g.fps = Math.round(g.fpsBilder / g.fpsZeit); g.fpsZeit = 0; g.fpsBilder = 0;
+    if (/[?&]fps\b/.test(location.search) && g.container) {
+      let el = g.container.querySelector(".brett3d-fps");
+      if (!el) { el = document.createElement("span"); el.className = "brett3d-fps"; el.style.cssText = "position:absolute;left:6px;top:6px;z-index:5;padding:2px 6px;background:#000a;color:#fff;font:12px monospace;border-radius:4px;pointer-events:none"; g.container.appendChild(el); }
+      el.textContent = `${g.fps} Bilder/s · ${g.stufe}`;
+    }
+  }
   if (g.stufeFest || g.stufe === "niedrig" || document.hidden) return;
   if (g.bilder < 30) return;   // die ersten Bilder (Shader bauen) zaehlen nicht
   g.mess_dt.push(dt);
   if (g.mess_dt.length < 90) return;
   const schnitt = g.mess_dt.reduce((a, b) => a + b, 0) / g.mess_dt.length;
   g.mess_dt = [];
-  if (schnitt > 1 / 38) { g.stufe = STUFEN[STUFEN.indexOf(g.stufe) - 1]; qualitaetAnwenden(); }
+  if (schnitt > 1 / STUFE[g.stufe].ziel) { g.stufe = STUFEN[STUFEN.indexOf(g.stufe) - 1]; qualitaetAnwenden(); }
+}
+// Tageslicht (Plan 3.1 H): die Sonne wandert mit den Runden, die letzten drei Runden Abendrot, die Schlussrunde Nacht.
+// Nur auf Karten mit Tag; Spuknacht, Vulkan und Kaufhaus behalten ihr Licht. Ohne Rundenende bleibt es Tag.
+const TAG = { tag: { hemi: 1, sonne: 1, farbe: 0xfff1dd }, abend: { hemi: 0.7, sonne: 0.9, farbe: 0xffa868 }, nacht: { hemi: 0.42, sonne: 0.4, farbe: 0x9db4ff } };
+function tageslicht(s) {
+  if (g.basisHimmel !== "tag") return;
+  const rest = s.runden ? s.runden - s.runde : 99, art = rest <= 0 ? "nacht" : rest <= 2 ? "abend" : "tag", d = TAG[art];
+  const u = s.runden ? Math.min(1, (s.runde - 1) / Math.max(1, s.runden - 1)) : 0.35, a = -1.1 + u * 2.2;
+  g.sonnePos.set(Math.sin(a) * 0.75, art === "tag" ? 0.82 : 0.42, 0.42).normalize();
+  g.sonne.color.setHex(d.farbe); g.sonne.intensity = g.sonneBasis * d.sonne; g.hemi.intensity = g.hemiBasis * d.hemi;
+  SC.himmelSetzen(g, art);
+}
+export function grafikStand() {
+  if (!g) return null;
+  const grundformen = {}, modelle = new Set();
+  g.scene.traverseVisible((o) => {
+    if (o.userData && o.userData.modell) modelle.add(o.userData.modell);
+    if (!o.isMesh || o.material === SC.UNSICHTBAR) return;
+    const typ = o.geometry && o.geometry.type;
+    if (typ && typ !== "BufferGeometry") { const n = o.userData.grundform || typ; grundformen[n] = (grundformen[n] || 0) + 1; }
+  });
+  return { modelleDa: !!g.modelleDa, aufbauMs: g.aufbauMs, leuchten: !!(g.composer && STUFE[g.stufe].leuchten), fps: g.fps || 0, stufe: g.stufe, himmel: g.himmelArt, zeichnungen: g.renderer.info.render.calls, dreiecke: g.renderer.info.render.triangles, modelle: [...modelle].sort(), grundformen, laden: MD.standLesen() };
 }
 
 // ---------------------------------------------------------------- Effekte
@@ -760,7 +944,9 @@ function muenzenFliegen(von, nach, anzahl, art) {
     x.m.visible = false; x.m.scale.setScalar(1);
   });
 }
-const figurPos = (j) => (g.figuren[j] ? g.figuren[j].obj.position.clone().setY(FELD_OBEN) : V());
+const figurPos = (j) => (g.figuren[j] ? g.figuren[j].obj.position.clone().setY(g.figuren[j].boden.y + FELD_OBEN) : V());
+// Punkt y ueber dem Feld, auf dem die Figur steht (Felder haben seit Runde 4 eine Hoehe)
+const figurAuf = (j, y) => (g.figuren[j] ? figurPos(j).setY(g.figuren[j].boden.y + y) : V(0, y, 0));
 function gefuehl(j, art, dauer = 1.8) { const f = g.figuren[j]; if (f) f.gefuehl = { art, bis: g.uhr.elapsedTime + dauer }; }
 // erst ausloesen, wenn die Figur angekommen ist (sonst nach spaetestens 7 s)
 function nachDerLandung(j, fn) { g.nachLanden.push({ j, fn, bis: g.uhr.elapsedTime + 7 }); }
@@ -771,11 +957,15 @@ function effektZeigen(e) {
   const p = figurPos(e.j);
   if (e.art === "muenzen") {
     if (e.von !== undefined && g.figuren[e.von] && e.wert > 0) {   // Muenzmagnet: vom Bestohlenen zum Dieb
-      muenzenFliegen(figurPos(e.von).setY(1.4), p.clone().setY(1.4), e.wert, "bogen");
+      muenzenFliegen(figurAuf(e.von, 1.4), figurAuf(e.j, 1.4), e.wert, "bogen");
       gefuehl(e.j, "jubel"); gefuehl(e.von, "trauer");
+      grosserMoment(0.4);   // Diebstahl
     } else gefuehl(e.j, e.wert > 0 ? "jubel" : "trauer", 1.5);
+    if (e.bank) grosserMoment(0.6);   // Bank geknackt
   } else if (e.art === "stern") {
     gefuehl(e.j, "jubel", 2.4);
+    grosserMoment(0.45);
+    zeitlupeFahrt(e.j);
   } else if (e.art === "ereignis") {
     funkenAn(p, 0.62); schweben("❓", "#9fb8ff", p);
     zoomFahrt(e.j, "ereignis");
@@ -790,7 +980,7 @@ function effektZeigen(e) {
   } else if (e.art === "schaden") {
     const treffer = () => { funkenAn(figurPos(e.j), 0.0, 0.5); gefuehl(e.j, "trauer", 1.6); };
     const q = e.quelle;
-    if (q && q.von !== undefined && g.figuren[q.von]) { gefuehl(q.von, "jubel", 1.2); geschoss(figurPos(q.von).setY(1.2), () => figurPos(e.j).setY(1.0), q.art === "faust" ? "🥊" : "🏹", treffer); }
+    if (q && q.von !== undefined && g.figuren[q.von]) { gefuehl(q.von, "jubel", 1.2); geschoss(figurAuf(q.von, 1.2), () => figurAuf(e.j, 1.0), q.art === "faust" ? "🥊" : "🏹", treffer); }
     else treffer();
   } else if (e.art === "heilen") {
     funkenAn(p, 0.92, 0.6); gefuehl(e.j, "jubel", 1.2);
@@ -802,7 +992,7 @@ function effektZeigen(e) {
   } else if (e.art === "flaeche") {
     // mehrere Getroffene auf einmal: Blitz, Bombe, Gift, Vulkanausbruch
     const ziele = e.ziele || [];
-    if (e.quelle === "ausbruch" && g.krater) { funkenAn(g.krater.pos.clone().setY(2.2), 0.06, 2); funkenAn(g.krater.pos.clone().setY(2.2), 0.02, 1.5); g.krater.ausbruch = 1; wackeln(1.4); }
+    if (e.quelle === "ausbruch" && g.krater) { funkenAn(g.krater.pos.clone().setY(2.2 * g.GR), 0.06, 2); funkenAn(g.krater.pos.clone().setY(2.2 * g.GR), 0.02, 1.5); g.krater.ausbruch = 1; wackeln(1.4); grosserMoment(1.4); }
     if (e.quelle === "bombe") wackeln(0.8);
     ziele.forEach((z, k) => {
       const zeig = () => {
@@ -812,9 +1002,9 @@ function effektZeigen(e) {
         if (z.ko) schweben("K.O. 💫", "#ffffff", q);
         gefuehl(z.j, "trauer", 1.6);
       };
-      if (e.quelle === "blitz") { blitz(figurPos(z.j)); setTimeout(zeig, 120 + k * 60); }
-      else if (e.quelle === "ausbruch" && g.krater) geschoss(g.krater.pos.clone(), () => figurPos(z.j).setY(0.8), "🔥", zeig, 1.1 + k * 0.12);
-      else setTimeout(zeig, k * 90);
+      if (e.quelle === "blitz") { blitz(figurPos(z.j)); setTimeout(zeig, (120 + k * 60) * g.tempo.pause); }
+      else if (e.quelle === "ausbruch" && g.krater) geschoss(g.krater.pos.clone(), () => figurAuf(z.j, 0.8), "🔥", zeig, 1.1 + k * 0.12);
+      else setTimeout(zeig, k * 90 * g.tempo.pause);
     });
     if (!ziele.length && e.quelle === "blitz") blitz(p.clone().add(V(1.5, 0, 0)));
   } else if (e.art === "rakete") {
@@ -829,7 +1019,7 @@ function effektZeigen(e) {
   } else if (e.art === "gift" || e.art === "fluch") {
     funkenAn(p, e.art === "gift" ? 0.33 : 0.5, 0.6); schweben(e.art === "gift" ? "🧪" : "🐌", e.art === "gift" ? "#7dff8a" : "#ffd27a", p); gefuehl(e.j, "trauer", 1.4);
   } else if (e.art === "handschuh") {
-    if (e.von !== undefined && g.figuren[e.von]) geschoss(figurPos(e.von).setY(1.2), () => figurPos(e.j).setY(1.2), "🧤", () => { schweben("🧤", "#ffffff", p); gefuehl(e.j, "jubel", 1.2); gefuehl(e.von, "trauer", 1.2); });
+    if (e.von !== undefined && g.figuren[e.von]) geschoss(figurAuf(e.von, 1.2), () => figurAuf(e.j, 1.2), "🧤", () => { schweben("🧤", "#ffffff", p); gefuehl(e.j, "jubel", 1.2); gefuehl(e.von, "trauer", 1.2); grosserMoment(0.4); });
   } else if (e.art === "wunder") {
     funkenAn(p); schweben("🎁", "#ffffff", p); gefuehl(e.j, "jubel", 1.4);
   } else if (e.art === "bombe" || e.art === "sperre") {
@@ -838,10 +1028,29 @@ function effektZeigen(e) {
 }
 // Kamera wackelt (Explosion, Ausbruch, K.O.)
 function wackeln(dauer) { if (!wenigBewegung()) g.wackelBis = Math.max(g.wackelBis, g.uhr.elapsedTime + dauer); }
+// Grosse Momente (Runde C, Punkt 96): Sternkauf, Diebstahl, Vulkanausbruch, Bankraub - am Beamer kurz Bild-Wackeln und ein
+// heller Blitz ueber dem Bild. Abschaltbar ueber das Pult ("Wackeln am Beamer", raum.beamer.ruhig -> momenteRuhig).
+let ruhig = false;
+export function momenteRuhig(an) { ruhig = !!an; }
+export const momentZaehler = { n: 0 };   // fuer Tests: wie oft ein grosser Moment ausgeloest wurde
+function grosserMoment(staerke = 0.5) {
+  if (!g || !g.beamer || ruhig || wenigBewegung()) return;
+  momentZaehler.n++;
+  wackeln(staerke);
+  const box = g.renderer && g.renderer.domElement && g.renderer.domElement.parentElement;
+  if (!box) return;
+  const f = document.createElement("div");
+  f.className = "b3-blitzlicht";
+  f.style.cssText = "position:absolute;inset:0;background:#fff;opacity:.65;pointer-events:none;transition:opacity .45s ease-out;z-index:5";
+  if (getComputedStyle(box).position === "static") box.style.position = "relative";
+  box.appendChild(f);
+  requestAnimationFrame(() => requestAnimationFrame(() => { f.style.opacity = "0"; }));
+  setTimeout(() => f.remove(), 700);
+}
 // Blitz aus dem Himmel auf einen Punkt
 function blitz(ziel) {
   const b = g.blitze.find((x) => x.t > 0.4) || g.blitze[0];
-  b.t = 0; b.b.position.set(ziel.x, 6.2, ziel.z); b.b.rotation.set((Math.random() - 0.5) * 0.18, 0, (Math.random() - 0.5) * 0.18); b.b.visible = true;
+  b.t = 0; b.b.position.set(ziel.x, ziel.y + 6, ziel.z); b.b.rotation.set((Math.random() - 0.5) * 0.18, 0, (Math.random() - 0.5) * 0.18); b.b.visible = true;
   funkenAn(ziel, 0.15, 0.4);
 }
 // fliegendes Ding im Bogen (Pfeil, Boxhandschuh, Lavabrocken); nach() liefert das Ziel (Figur bewegt sich evtl. noch)
@@ -879,12 +1088,13 @@ function markerAbgleichen(s) {
     if (g.marker[k] || !g.felder[f]) return;
     const art = k.split(":")[0], o = markerBauen(art), p = g.felder[f].p;
     const ver = { bombe: [-0.4, 0.3], sperre: [0, 0], haufen: [0.35, 0.35] }[art];
-    o.position.set(p.x + ver[0], FELD_OBEN, p.z + ver[1]);
-    if (art === "sperre") { const nx = g.lage[(g.next[f] || [f])[0]] || p; o.lookAt(nx.x, FELD_OBEN, nx.z); }   // Balken quer zum Weg
+    o.position.set(p.x + ver[0], p.y + FELD_OBEN, p.z + ver[1]);
+    if (art === "sperre") { const nx = g.lage[(g.next[f] || [f])[0]] || p; o.lookAt(nx.x, p.y + FELD_OBEN, nx.z); }   // Balken quer zum Weg
     o.userData.art = art; g.scene.add(o); g.marker[k] = o;
   });
 }
 
+const farbeVon = (j) => (g.fig && g.fig[j] ? g.fig[j].farbe : j);   // Spielerfarbe aus dem Hauptmenue
 // ---------------------------------------------------------------- Auftritt: Gewinn und Verlust gross zeigen (Runde 3)
 // b = s.bilanz aus brett.js: { nr, zug, emo, titel, text, liste: [{ j, m, st, lp }] } (m Muenzen, st Sterne, lp Lebenspunkte)
 function auftrittPlanen(b, namen) {
@@ -897,34 +1107,34 @@ function auftrittTakt(dt) {
   let a = g.auftritt;
   if (!a && g.auftritte.length) { a = g.auftritt = g.auftritte.shift(); g.auftrittZahl++; }
   if (!a) return;
-  const wer = a.b.liste.map((x) => x.j).filter((j) => g.figuren[j]);
+  const wer = a.b.liste.map((x) => x.j).filter((j) => g.figuren[j]), z = auftrittZeiten(g.tempo);
   if (a.stufe === "warten") {
     a.gewartet += dt;
     const warten = (wer.some(istUnterwegs) || istUnterwegs(g.aktiv) || (g.fahrt && g.fahrt.name === "runde")) && a.gewartet < 12;
     if (warten) { a.t = 0; return; }
     a.t += dt;
-    if (a.t < AUFTRITT.pause) return;
+    if (a.t < z.pause) return;
     a.stufe = "zeigen"; a.t = 0; a.gezeigt = false;
     karteZeigen(a.b, a.namen);
-    if (!KF.K.an) fahrtStarten("auftritt", [{ ziel: () => auftrittPose(wer), dauer: AUFTRITT.hin, halten: AUFTRITT.halten }, { ziel: () => ruhePose(), dauer: AUFTRITT.zurueck }]);
+    if (!KF.K.an) fahrtStarten("auftritt", [{ ziel: () => auftrittPose(wer), dauer: z.hin, halten: z.halten, fest: true }, { ziel: () => ruhePose(), dauer: z.zurueck, fest: true }]);
   }
   a.t += dt;
   const fahrt = g.fahrt && g.fahrt.name === "auftritt";
-  if (!a.gezeigt && (a.t >= AUFTRITT.hin * 0.85 || !fahrt)) { a.gezeigt = true; zahlenZeigen(a.b); }
+  if (!a.gezeigt && (a.t >= z.hin * 0.85 || !fahrt)) { a.gezeigt = true; zahlenZeigen(a.b); }
   if (a.weg && g.fahrt && g.fahrt.name === "auftritt") g.fahrt = null;
-  if (a.t >= AUFTRITT.hin + AUFTRITT.halten + (a.weg ? 0 : AUFTRITT.zurueck) || (a.weg && a.gezeigt && a.t > 0.3)) { karteWeg(); g.auftritt = null; }
+  if (a.t >= z.hin + z.halten + (a.weg ? 0 : z.zurueck) || (a.weg && a.gezeigt && a.t > 0.3)) { karteWeg(); g.auftritt = null; }
 }
 // Kamera: eine Figur nah von vorn (Zahl ueber dem Kopf noch im Bild), mehrere Figuren gemeinsam im Bild
 function auftrittPose(wer) {
   if (wer.length <= 1) {
     const f = g.figuren[wer.length ? wer[0] : g.aktiv];
     if (!f) return ruhePose();
-    const l = f.boden.clone().setY(1.5);
+    const l = f.boden.clone().add(V(0, 1.5, 0));
     return pose(l.clone().addScaledVector(NAH_RICHTUNG, 6.6), l);
   }
-  const punkte = wer.flatMap((j) => { const b = g.figuren[j].boden; return [b.clone().setY(0), b.clone().setY(3.4)]; });
-  const l = punkte.reduce((x, y) => x.add(y.clone()), V()).multiplyScalar(1 / punkte.length).setY(1.2);
-  const d = passendAbstand(l, NAH_RICHTUNG, punkte, 5, 48, 0.72);
+  const punkte = wer.flatMap((j) => { const b = g.figuren[j].boden; return [b.clone(), b.clone().add(V(0, 3.4, 0))]; });
+  const l = punkte.reduce((x, y) => x.add(y.clone()), V()).multiplyScalar(1 / punkte.length).add(V(0, -0.5, 0));
+  const d = passendAbstand(l, NAH_RICHTUNG, punkte, 5, 48 * g.W, 0.72);
   return pose(l.clone().addScaledVector(NAH_RICHTUNG, d), l);
 }
 const vz = (x) => (x > 0 ? "+" : "−") + Math.abs(x);
@@ -942,7 +1152,7 @@ function zahlenZeigen(b) {
     if (e.lp) { herzenStrom(e.j, e.lp, k * 0.1); herz += e.lp; }
     const gut = (e.st || 0) * 20 + (e.m || 0) + (e.lp || 0) * 0.3;
     summe += gut;
-    gefuehl(e.j, gut >= 0 ? "jubel" : "trauer", AUFTRITT.halten);
+    gefuehl(e.j, gut >= 0 ? "jubel" : "trauer", auftrittZeiten(g.tempo).halten);
     if (gut > 0) funkenAn(figurPos(e.j), e.st > 0 ? 0.14 : 0.13, 0.5);
   });
   if (b.liste.length > 1 || Math.abs(summe) > 9) wackeln(0.25);
@@ -950,7 +1160,7 @@ function zahlenZeigen(b) {
   const erst = stern ? "stern" : muenz ? "muenzen" : herz < 0 ? "aua" : herz > 0 ? "magie" : null;
   if (erst) klang(erst);
   const dann = stern ? "fanfare" : summe > 0 ? "richtig" : summe < 0 ? "falsch" : null;
-  if (dann) setTimeout(() => klang(dann), 420);
+  if (dann) setTimeout(() => klang(dann), 420 * g.tempo.pause);
 }
 // grosse schwebende Zahl ueber der Figur (zeile 0 = unten); springt auf, bleibt stehen, verblasst am Ende
 function grosseZahl(text, farbe, j, zeile, verz = 0) {
@@ -962,13 +1172,13 @@ function grosseZahl(text, farbe, j, zeile, verz = 0) {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false, depthTest: false }));
   sp.renderOrder = 10; sp.scale.set(0.01, 0.01, 1); g.scene.add(sp);
-  g.grossZahlen.push({ sp, j, zeile, t: -verz, dauer: AUFTRITT.halten + 0.35 });
+  g.grossZahlen.push({ sp, j, zeile, t: -verz, dauer: auftrittZeiten(g.tempo).halten + 0.35 });
 }
 // Muenzen: Gewinn = aus einem Kranz ueber der Figur hinein in den Bauch; Verlust = aus dem Bauch heraus, fallen zu Boden
 function muenzenStrom(j, d, verz = 0) {
   const n = Math.max(3, Math.min(12, Math.abs(d)));
   const frei = g.muenzen.filter((x) => x.t >= x.dauer).slice(0, n);
-  const mitte = figurPos(j).setY(1.0);
+  const mitte = figurAuf(j, 1.0);
   frei.forEach((x, k) => {
     const w = k * 2.4 + Math.random() * 0.4;
     x.t = -verz - k * 0.09; x.dauer = d > 0 ? 0.62 : 0.95; x.art = d > 0 ? "rein" : "raus"; x.j = j;
@@ -996,7 +1206,7 @@ function flugTeil(x, u) {
 function herzenStrom(j, d, verz = 0) {
   const n = Math.max(2, Math.min(8, Math.round(Math.abs(d) / 2)));
   const frei = g.herzen.filter((x) => x.t >= x.dauer).slice(0, n);
-  const mitte = figurPos(j).setY(1.0);
+  const mitte = figurAuf(j, 1.0);
   frei.forEach((x, k) => {
     const w = k * 2.1 + 0.5;
     x.t = -verz - k * 0.11; x.dauer = d > 0 ? 0.7 : 1.0; x.art = d > 0 ? "rein" : "raus"; x.j = j;
@@ -1015,7 +1225,7 @@ function karteZeigen(b, namen) {
   const chips = b.liste.map((e) => {
     const teile = [e.st ? `${vz(e.st)} ⭐` : "", e.m ? `${vz(e.m)} 🪙` : "", e.lp ? `${vz(e.lp)} ❤️` : ""].filter(Boolean);
     const gut = (e.st || 0) * 20 + (e.m || 0) + (e.lp || 0) * 0.3;
-    return `<span class="b3k-chip ${gut >= 0 ? "gut" : "schlecht"}"><i class="farbe f${e.j % 20}"></i>${esc(namen[e.j] || "")} <b>${teile.join(" ")}</b></span>`;
+    return `<span class="b3k-chip ${gut >= 0 ? "gut" : "schlecht"}"><i class="farbe f${farbeVon(e.j) % 20}"></i>${esc(namen[e.j] || "")} <b>${teile.join(" ")}</b></span>`;
   }).join("");
   g.karteHTML = `<span class="b3k-emo">${esc(b.emo || "✨")}</span><span class="b3k-text">${b.titel ? `<b>${esc(b.titel)}</b>` : ""}${b.text ? `<small>${esc(b.text)}</small>` : ""}</span>${chips ? `<span class="b3k-chips">${chips}</span>` : ""}`;
   karteSetzen(true);
@@ -1032,7 +1242,7 @@ function karteSetzen(neu = false) {
 function karteWeg() {
   g.karteHTML = "";
   const el = g.container && g.container.querySelector(".b3-karte");
-  if (el) { el.classList.add("weg"); setTimeout(() => { if (!g || !g.karteHTML) el.remove(); }, 380); }
+  if (el) { el.classList.add("weg"); setTimeout(() => { if (!g || !g.karteHTML) el.remove(); }, 380 / g.tempo.kamera); }
 }
 
 // ---------------------------------------------------------------- Kamera-Regie
@@ -1045,24 +1255,24 @@ function folgePose(j, abstand = 11.5, richtung = FOLGE_RICHTUNG) {
   const f = g.figuren[j];
   if (!f) return uebersichtPose();
   // bei Spruengen (Tausch, Rohr) gleich aufs Zielfeld schauen - sonst fliegt die Figur an der Kamera vorbei
-  const l = f.sprung && f.pfad.length ? g.lage[f.pfad[f.pfad.length - 1]].clone().add(versatz(j, g.figuren.length)).setY(0.7)
-    : f.boden.clone().setY(0.7).addScaledVector(f.richtung, 0.9);
+  const l = (f.sprung && f.pfad.length ? g.lage[f.pfad[f.pfad.length - 1]].clone().add(versatz(j, g.figuren.length))
+    : f.boden.clone().addScaledVector(f.richtung, 0.9)).add(V(0, 0.7, 0));
   return pose(l.clone().addScaledVector(richtung, abstand), l);
 }
 const nahPose = (j) => folgePose(j, 6.8, NAH_RICHTUNG);
-function sternPose() { const l = g.sternPos.clone().setY(1.0); return pose(l.clone().addScaledVector(NAH_RICHTUNG, 8), l); }
+function sternPose() { const l = g.sternPos.clone().add(V(0, 1, 0)); return pose(l.clone().addScaledVector(NAH_RICHTUNG, 8), l); }
 // Abzweigung: beide Wege drei Felder weit ins Bild nehmen
 function wegPose(j) {
   const f = g.figuren[j], start = f.anzeige, punkte = [g.lage[start]];
   (g.next[start] || []).forEach((z) => { let x = z; for (let k = 0; k < 3; k++) { punkte.push(g.lage[x]); x = (g.next[x] || [x])[0]; } });
-  const l = punkte.reduce((a, b) => a.add(b.clone()), V()).multiplyScalar(1 / punkte.length).setY(0.5);
+  const l = punkte.reduce((a, b) => a.add(b.clone()), V()).multiplyScalar(1 / punkte.length).add(V(0, 0.5, 0));
   // die Figur selbst (Fuesse bis Hutspitze) muss mit ins Bild
-  const fig = [f.boden.clone().setY(0), f.boden.clone().setY(2.1)];
-  const d = passendAbstand(l, FOLGE_RICHTUNG, [...punkte.map((q) => q.clone().setY(0.6)), ...fig], 6, 30, 0.74);
+  const fig = [f.boden.clone(), f.boden.clone().add(V(0, 2.1, 0))];
+  const d = passendAbstand(l, FOLGE_RICHTUNG, [...punkte.map((q) => q.clone().add(V(0, 0.6, 0))), ...fig], 6, 30 * g.W, 0.74);
   return pose(l.clone().addScaledVector(FOLGE_RICHTUNG, d), l);
 }
 function siegerPose() {
-  const l = PODEST.clone().add(V(0, 1.15, 0.6));
+  const PODEST = g.podestOrt, l = PODEST.clone().add(V(0, 1.15, 0.6));
   const neben = g.sieger ? Object.values(g.sieger.platz).reduce((m, x) => Math.max(m, x.stufe ? 1.3 : Math.abs(x.x) + 0.5), 1.3) : 1.3;
   const punkte = [V(-1.6, 2.4, 0), V(1.6, 2.4, 0), V(0, 3.1, 0), V(-neben, 0, 0.8), V(neben, 0, 0.8), V(-neben, 1.7, 0.35), V(neben, 1.7, 0.35)].map((q) => q.add(PODEST));
   const d = passendAbstand(l, NAH_RICHTUNG, punkte, 3, 30, 0.86);
@@ -1075,14 +1285,18 @@ function bahnPose(u) {
 }
 
 // Punkte am Rand der Insel (Oberkante, Unterkante der Erde, Baumspitzen am Rand) - die muessen in der Uebersicht ins Bild
-const RAND_PUNKTE = [];
-for (let k = 0; k < 48; k++) {
-  const a = (k / 48) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
-  RAND_PUNKTE.push(V(c * 14.6, -0.1, s * 14.6), V(c * 13, -1.5, s * 13), V(c * 9.5, -4.5, s * 9.5), V(c * 13.2, 1.9, s * 13.2));
+function randPunkteBauen(R, etagen) {
+  const liste = [], W = R / WELT_KLEIN;
+  for (let k = 0; k < 48; k++) {
+    const a = (k / 48) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+    liste.push(V(c * R, -0.1, s * R), V(c * 13 * W, -1.5, s * 13 * W), V(c * 9.5 * W, -4.5, s * 9.5 * W), V(c * 13.2 * W, 1.9, s * 13.2 * W));
+    (etagen || []).forEach((e) => liste.push(V(c * e.r, e.h + 2, s * e.r)));
+  }
+  return liste;
 }
 const RAND_NDC = 0.96;   // etwas Luft zum Rand des Bildes
 const _p = V();
-function randWert(cam, punkte = RAND_PUNKTE) {
+function randWert(cam, punkte = g.randPunkte) {
   cam.updateMatrixWorld(); cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
   let m = 0;
   for (const q of punkte) { _p.copy(q).project(cam); m = Math.max(m, Math.abs(_p.x), Math.abs(_p.y)); }
@@ -1104,12 +1318,12 @@ function uebersichtPose() {
   const key = g.camera.aspect.toFixed(3);
   if (!g.uebersichtCache[key]) {
     const l = V(0, 0, 0.8);
-    g.uebersichtCache[key] = pose(l.clone().addScaledVector(KAM_RICHTUNG, passendAbstand(l, KAM_RICHTUNG, RAND_PUNKTE, 18, 90)), l);
+    g.uebersichtCache[key] = pose(l.clone().addScaledVector(KAM_RICHTUNG, passendAbstand(l, KAM_RICHTUNG, g.randPunkte, 18, 90 * g.W)), l);
   }
   const x = g.uebersichtCache[key];
   return pose(x.p.clone(), x.l.clone());
 }
-const fahrtenAn = () => g.folgen && !(typeof globalThis !== "undefined" && globalThis.__brettKamera === "uebersicht");
+const fahrtenAn = () => g.folgen && !g.vorschau && !(typeof globalThis !== "undefined" && globalThis.__brettKamera === "uebersicht");
 // Ruhelage ohne Fahrt: je nach Lage im Zug
 function ruhePose() {
   if (g.sieger) return siegerPose();
@@ -1124,9 +1338,24 @@ function ruhePose() {
 }
 function fahrtStarten(name, schritte) {
   if (!fahrtenAn() || g.sieger || KF.K.an) return;
+  // Animationstempo: Fahrten laufen schneller oder langsamer; fest = Zeiten sind schon gerechnet (Auftritt, dort haelt die Pause mit)
+  const k = g.tempo.kamera;
+  schritte = schritte.map((x) => (x.fest ? x : { ...x, dauer: x.dauer / k, halten: (x.halten || 0) / k }));
   g.fahrt = { name, schritte, i: 0, t: 0, von: pose(g.kamP.clone(), g.kamL.clone()) };
   g.fahrtenListe = [...(g.fahrtenListe || []), name].slice(-8);   // fuer die Tests: welche Fahrten zuletzt liefen
   g.nahMin = 99;   // naechster Kameraabstand dieser Fahrt (fuer die Tests: Fotos halten das Zeichnen an)
+}
+// Sternkauf am Beamer (Runde C, Punkt 34): Zeitlupe und eine Kamerafahrt einmal um die Figur. Dauer und Zeitlupe richten
+// sich nach dem Animationstempo aus dem Hauptmenue (fahrtStarten teilt durch g.tempo.kamera).
+const ZEITLUPE = 0.35, UMLAUF = 4, UMLAUF_SCHRITT = 0.75;
+function zeitlupeFahrt(j) {
+  if (!g.beamer || !fahrtenAn() || g.sieger || KF.K.an || !g.figuren[j]) return;
+  const dreh = (w) => NAH_RICHTUNG.clone().applyAxisAngle(V(0, 1, 0), w);
+  const schritte = [];
+  for (let k = 1; k <= UMLAUF; k++) schritte.push({ ziel: () => folgePose(j, 6.2, dreh((k / UMLAUF) * Math.PI * 2)), dauer: UMLAUF_SCHRITT });
+  schritte.push({ ziel: () => folgePose(j), dauer: 0.6 });
+  fahrtStarten("zeitlupe", schritte);
+  g.zeitlupeBis = g.uhr.elapsedTime + (UMLAUF * UMLAUF_SCHRITT) / g.tempo.kamera;
 }
 function zoomFahrt(j, name) {
   if (g.fahrt && g.fahrt.name === "runde") return;
@@ -1156,7 +1385,35 @@ function kameraBewegen(dt) {
   g.camera.position.copy(g.kamP); g.camera.lookAt(g.kamL); g.camera.updateMatrixWorld();
   // Nebel wandert mit dem Abstand (beginnt kurz vor dem Blickpunkt)
   const d = g.kamP.distanceTo(g.kamL);
-  if (g.scene.fog) { g.scene.fog.near = d - 2.3 + (g.look === "halloween" ? -1.5 : 0); g.scene.fog.far = d + 21.7; }
+  if (g.scene.fog) { g.scene.fog.near = d + 8 * g.W + (g.look === "halloween" ? -6 : 0); g.scene.fog.far = d + 48 * g.W; }
+  schattenFolgen(d);
+}
+// Der Schattenbereich folgt der Kamera (Runde 4, Plan 3.1 E): er liegt um den Blickpunkt und waechst mit dem Abstand, bis er
+// die ganze Insel fasst. Der Mittelpunkt rastet auf einem Raster ein, sonst flimmern die Schattenkanten beim Fahren.
+function schattenFolgen(d) {
+  const s = g.sonne, halb = Math.max(16, Math.min(g.R * 1.25, d * 1.05));
+  if (Math.abs(halb - g.schattenHalb) > 1) {
+    g.schattenHalb = halb;
+    Object.assign(s.shadow.camera, { left: -halb, right: halb, top: halb, bottom: -halb, near: 1, far: halb * 3 + 40 });
+    s.shadow.camera.updateProjectionMatrix();
+  }
+  const raster = Math.max(1, halb / 8), x = Math.round(g.kamL.x / raster) * raster, z = Math.round(g.kamL.z / raster) * raster;
+  s.target.position.set(x, 0, z); s.target.updateMatrixWorld();
+  s.position.set(x, 0, z).addScaledVector(g.sonnePos, halb * 1.4 + 18);
+}
+// Was die Karte gerade macht: gesperrte Felder, Lavafelder, Flut (Zeichnen ohne Neuaufbau)
+function zustandAnwenden(z) {
+  if (!z) return;
+  const sig = JSON.stringify(z);
+  if (sig === g.zustandSig) return;
+  g.zustandSig = sig; g.flut = !!z.flut;
+  const zu = new Set(z.gesperrt || []), lava = new Set(z.lava || []);
+  g.felder.forEach((f, i) => {
+    const art = zu.has(i) ? "x" : lava.has(i) ? "g" : f.art;
+    if (f.jetzt === art) return;
+    f.jetzt = art;
+    const m = g.feldMat(art); f.sockel.material = m.sockel; f.deckel.material = m.deckel;
+  });
 }
 
 // ---------------------------------------------------------------- Bild fuer Bild
@@ -1167,12 +1424,17 @@ function schleife(gen) {
   requestAnimationFrame(() => schleife(gen));
   if (!g.container || !g.container.isConnected) return;
   // bis 10 Bilder/s laeuft die Spielzeit mit der echten Uhr (die Weiter-Sperre in brett.js rechnet in echter Zeit)
-  const dt = Math.min(0.1, g.uhr.getDelta());
+  const dtEcht = Math.min(0.1, g.uhr.getDelta());
   const t = g.uhr.elapsedTime;
+  // Zeitlupe beim Sternkauf (nur Beamer): alles ausser der Kamera laeuft langsamer
+  const dt = g.zeitlupeBis > t ? dtEcht * ZEITLUPE : dtEcht;
+  // Vorschau im Hauptmenue: dort bewegt sich kaum etwas, also nur jedes sechste Bild zeichnen (schont Handy und Ally)
+  if (g.vorschau && ++g.vorschauTakt % 6) return;
   g.bilder++;
   bildrateMessen(dt);
   const jetzt = performance.now();
-  const w = g.wurf ? (jetzt - g.wurf.t0) / 1000 : 99;
+  const w = g.wurf ? ((jetzt - g.wurf.t0) / 1000) * g.tempo.wuerfel : 99;
+  const dtE = dt / g.tempo.pause;   // Effekte des Auftritts gehen mit den Stehzeiten mit
 
   // ---- Figuren
   g.figuren.forEach((f, j) => {
@@ -1180,14 +1442,14 @@ function schleife(gen) {
     const platz = g.sieger && g.sieger.platz[j];
     if (g.sieger) {
       const [x, h] = platz && platz.stufe ? g.PODEST_STUFE[platz.stufe] : [platz ? platz.x : 0, 0];
-      pos = PODEST.clone().add(V(platz && platz.stufe ? x + platz.dx : platz.x, h, platz && platz.stufe ? 0 : 0.35));
+      pos = g.podestOrt.clone().add(V(platz && platz.stufe ? x + platz.dx : platz.x, h, platz && platz.stufe ? 0 : 0.35));
       f.pfad = []; f.startIn = 0;
     } else {
       if (f.startIn > 0) f.startIn -= dt;
       const laufend = f.pfad.length > 0 && f.startIn <= 0;
       let a = g.lage[f.anzeige], b = laufend ? g.lage[f.pfad[0]] : a;
       if (laufend) {
-        f.huepfen += dt * (f.sprung ? SPRUNG : LAUF);
+        f.huepfen += dt * (f.sprung ? SPRUNG : LAUF) * g.tempo.figuren;
         if (f.huepfen >= 1) {
           f.huepfen = 0; f.anzeige = f.pfad.shift(); klang("schritt");
           a = g.lage[f.anzeige]; b = f.pfad.length ? g.lage[f.pfad[0]] : a;
@@ -1202,7 +1464,7 @@ function schleife(gen) {
       if (f.pfad.length && f.startIn <= 0) { const r = b.clone().sub(a); if (r.lengthSq() > 0.01) f.richtung.lerp(r.normalize(), Math.min(1, dt * 8)); }
       else f.richtung.multiplyScalar(Math.max(0, 1 - dt * 3));
     }
-    f.boden.copy(pos).setY(0);
+    f.boden.copy(pos);
     const laeuft = !g.sieger && f.pfad.length > 0 && f.startIn <= 0;
     const gf = f.gefuehl && f.gefuehl.bis > t ? f.gefuehl.art : (g.sieger && platz ? platz.gefuehl : null);
     // Sprung gegen den Wuerfelblock
@@ -1242,7 +1504,14 @@ function schleife(gen) {
     const ziel = j === g.aktiv && !g.sieger ? 1.05 : 0.9;
     f.obj.scale.setScalar(f.obj.scale.x + (ziel - f.obj.scale.x) * Math.min(1, dt * 6));
     if (!f.pfad.length) f.sprung = false;
+    // echte Figur: Bewegungen aus dem Modell statt der Knubbel-Arme
+    if (f.modell) {
+      SC.figurAktion(f, gf === "jubel" ? "emote-yes" : gf === "trauer" ? "emote-no" : wurfSprung > 0 || f.sprung ? "jump" : laeuft ? "walk" : "idle", laeuft ? 1.5 * g.tempo.figuren : 1);
+      f.modell.mixer.update(dt);
+    }
   });
+  SC.fliessen(g, dt);
+  (g.schiffe || []).forEach((sch, k) => { sch.rotation.z = Math.sin(t * 0.8 + k) * 0.03; sch.position.y = -2.25 + Math.sin(t * 0.7 + k * 2) * 0.05; });
   // Effekte, die auf die Landung gewartet haben
   g.nachLanden = g.nachLanden.filter((x) => {
     const f = g.figuren[x.j];
@@ -1251,31 +1520,33 @@ function schleife(gen) {
     return false;
   });
   // Felder ploppen kurz, wenn jemand landet
-  g.felder.forEach((fe) => { if (fe.plopp > 0) { fe.plopp = Math.max(0, fe.plopp - dt * 3); fe.gr.position.y = -Math.sin(fe.plopp * Math.PI) * 0.09; } });
+  g.felder.forEach((fe) => { if (fe.plopp > 0) { fe.plopp = Math.max(0, fe.plopp - dt * 3); fe.gr.position.y = fe.p.y - Math.sin(fe.plopp * Math.PI) * 0.09; } });
+  // Hafeninsel: das Wasser steigt und faellt langsam
+  g.teiche.forEach((m) => { const ziel = g.flut ? TEICH_FLUT : TEICH_EBBE; m.position.y += (ziel - m.position.y) * Math.min(1, dt * 1.4); });
 
   // ---- Ring unter dem Aktiven
   const akt = g.figuren[g.aktiv];
   g.ring.visible = !!akt && !g.sieger;
-  if (akt) { g.ring.position.set(akt.obj.position.x, FELD_OBEN + 0.03, akt.obj.position.z); g.ring.scale.setScalar(1 + Math.sin(t * 4) * 0.08); g.ring.material.color.setHex(FARBEN_SP[g.aktiv % FARBEN_SP.length]); }
+  if (akt) { g.ring.position.set(akt.obj.position.x, akt.boden.y + FELD_OBEN + 0.03, akt.obj.position.z); g.ring.scale.setScalar(1 + Math.sin(t * 4) * 0.08); g.ring.material.color.setHex(FARBEN_SP[farbeVon(g.aktiv) % FARBEN_SP.length]); }
 
   // ---- Stern: dreht sich, fliegt im Bogen zu seinem neuen Platz, Lichtsaeule pulsiert
   if (g.sternFlug) {
-    g.sternFlug.t += dt / 1.1;
+    g.sternFlug.t += (dt * g.tempo.kamera) / 1.1;
     const u = sanft(Math.min(1, g.sternFlug.t));
     g.sternPos.lerpVectors(g.sternFlug.von, g.sternFlug.nach, u);
-    g.sternPos.y = Math.sin(u * Math.PI) * 4;
-    if (g.sternFlug.t >= 1) { g.sternFlug = null; g.sternPos.y = 0; }
+    g.sternPos.y += Math.sin(u * Math.PI) * 4;
+    if (g.sternFlug.t >= 1) { g.sternPos.copy(g.sternFlug.nach); g.sternFlug = null; }
   }
   g.stern.visible = !g.sieger;
   g.stern.rotation.y += dt * 1.6;
   g.stern.position.set(g.sternPos.x, 1.6 + g.sternPos.y + Math.sin(t * 2) * 0.15, g.sternPos.z);
   g.sternLicht.position.copy(g.stern.position).y += 0.6;
   g.saeule.visible = !g.sieger && !g.sternFlug;
-  g.saeule.position.set(g.sternPos.x, 3.5, g.sternPos.z);
+  g.saeule.position.set(g.sternPos.x, g.sternPos.y + 3.5, g.sternPos.z);
   g.saeule.material.opacity = 0.12 + Math.sin(t * 2.4) * 0.05;
 
   // ---- Fallen wippen; zugeschnappte Fallen klappen zu und verschwinden
-  Object.values(g.fallenObj).forEach((o, k) => { o.rotation.y += dt * 0.6; o.position.y = FELD_OBEN + 0.02 + Math.abs(Math.sin(t * 3 + k)) * 0.03; });
+  Object.values(g.fallenObj).forEach((o, k) => { o.rotation.y += dt * 0.6; o.position.y = (o.userData.y || 0) + FELD_OBEN + 0.02 + Math.abs(Math.sin(t * 3 + k)) * 0.03; });
   g.schnapp = g.schnapp.filter((x) => {
     x.t += dt;
     x.o.children.forEach((c) => { if (c.userData.zahn) c.rotation.x = Math.min(1, x.t * 6) * 0.9 * c.userData.zahn; });
@@ -1315,8 +1586,7 @@ function schleife(gen) {
   });
   if (g.wurf && !g.wurf.getroffen && w >= WURF.treffer) {
     g.wurf.getroffen = true;
-    const kp = g.figuren[g.wurf.j] ? g.figuren[g.wurf.j].obj.position.clone().setY(1.6) : V();
-    funkenAn(kp, 0.12, 0.45);
+    funkenAn(figurAuf(g.wurf.j, 1.6), 0.12, 0.45);
   }
   // Schrittzaehler waehrend des Laufens
   const lf = g.wurf && g.figuren[g.wurf.j];
@@ -1338,7 +1608,7 @@ function schleife(gen) {
   });
   g.muenzen.forEach((x) => {
     if (x.t >= x.dauer) { x.m.visible = false; return; }
-    x.t += dt;
+    x.t += dtE;
     if (x.t < 0) return;
     const u = Math.min(1, x.t / x.dauer);
     x.m.visible = u < 1;
@@ -1351,7 +1621,7 @@ function schleife(gen) {
   // Auftritt: Herzen, Feierstern, grosse Zahlen
   g.herzen.forEach((x) => {
     if (x.t >= x.dauer) { x.m.visible = false; return; }
-    x.t += dt;
+    x.t += dtE;
     if (x.t < 0) return;
     const u = Math.min(1, x.t / x.dauer);
     x.m.visible = u < 1;
@@ -1359,7 +1629,7 @@ function schleife(gen) {
   });
   const fs = g.feierStern, fd = fs.userData;
   if (fd && fd.dauer && fd.t < fd.dauer) {
-    fd.t += dt;
+    fd.t += dtE;
     const u = Math.min(1, fd.t / fd.dauer), f = g.figuren[fd.j];
     fs.visible = u < 1 && !!f;
     if (f) {
@@ -1368,7 +1638,7 @@ function schleife(gen) {
       if (!fd.rein) fs.position.x += k * 2.5;
       fs.rotation.set(0.3, fd.t * 9, 0);
       fs.scale.setScalar(fd.rein ? 1.35 - k * 0.9 : 1 - k * 0.5);
-      if (fd.rein && u >= 1 && !fd.platzt) { fd.platzt = true; funkenAn(p.clone().setY(FELD_OBEN), 0.14, 1.2); funkenAn(p.clone().setY(FELD_OBEN)); }
+      if (fd.rein && u >= 1 && !fd.platzt) { fd.platzt = true; funkenAn(figurPos(fd.j), 0.14, 1.2); funkenAn(figurPos(fd.j)); }
     }
   }
   g.grossZahlen = g.grossZahlen.filter((x) => {
@@ -1398,7 +1668,7 @@ function schleife(gen) {
   });
 
   // ---- Stimmung: Geist, Fledermaeuse, Irrlichter, Nebel, Brandung
-  if (g.geist) { const a = t * 0.45; g.geist.position.set(BURG.x + Math.cos(a) * 2.4, 2.2 + Math.sin(t * 1.7) * 0.3, BURG.z + Math.sin(a) * 2.0); g.geist.rotation.y = -a; }
+  if (g.geist) { const a = t * 0.45; g.geist.position.set(g.burg.x + Math.cos(a) * 2.4 * g.GR, 2.2 * g.GR + Math.sin(t * 1.7) * 0.3, g.burg.z + Math.sin(a) * 2.0 * g.GR); g.geist.rotation.y = -a; }
   g.flederm.forEach((x) => {
     if (!x.b.visible) return;
     const a = t * x.v + x.ph;
@@ -1411,17 +1681,17 @@ function schleife(gen) {
   g.lichtBasis.forEach(([x, y, z, ph], i) => { lp.array[i * 3] = x + Math.sin(t * 0.4 + ph) * 0.6; lp.array[i * 3 + 1] = y + Math.sin(t * 0.9 + ph * 2) * 0.35; lp.array[i * 3 + 2] = z + Math.cos(t * 0.35 + ph) * 0.6; });
   lp.needsUpdate = true;
   g.irrlichter.material.opacity = 0.6 + Math.sin(t * 2) * 0.2;
-  g.nebel.forEach((x) => { const a = x.a + t * x.v; x.sp.position.set(Math.cos(a) * 12.2, 0.3, Math.sin(a) * 10.6); });
+  g.nebel.forEach((x) => { const a = x.a + t * x.v; x.sp.position.set(Math.cos(a) * 12.2 * g.W, 0.3, Math.sin(a) * 10.6 * g.W); });
   g.brandung.material.opacity = 0.12 + Math.sin(t * 1.3) * 0.05;
   g.brandung.scale.setScalar(1 + Math.sin(t * 1.3) * 0.012);
 
   // ---- Podest: Konfetti in Abstaenden
-  if (g.sieger && t - (g.sieger.konfetti || 0) > 2.2) { g.sieger.konfetti = t; funkenAn(PODEST.clone().add(V(0, 1.3, 0))); }
+  if (g.sieger && t - (g.sieger.konfetti || 0) > 2.2) { g.sieger.konfetti = t; funkenAn(g.podestOrt.clone().add(V(0, 1.3, 0))); }
 
   // ---- schwebende Texte steigen und verblassen
   g.schweber = g.schweber.filter((x) => {
-    x.t += dt;
-    x.sp.position.y += dt * 1.1;
+    x.t += dtE;
+    x.sp.position.y += dtE * 1.1;
     x.sp.material.opacity = Math.max(0, 1 - x.t / 1.8);
     if (x.t > 1.8) { g.scene.remove(x.sp); x.sp.material.map.dispose(); x.sp.material.dispose(); return false; }
     return true;
@@ -1429,7 +1699,7 @@ function schleife(gen) {
 
   // ---- Teil 4b: Geschosse, Blitze, Rauch, Portale, Truhen, Marker, Lebenspunkte
   g.geschosse = g.geschosse.filter((x) => {
-    x.t += dt;
+    x.t += dtE;
     const u = Math.min(1, x.t / x.dauer), ziel = x.nach();
     x.sp.position.lerpVectors(x.von, ziel, u); x.sp.position.y += Math.sin(u * Math.PI) * 2.2;
     if (u < 1) return true;
@@ -1441,8 +1711,8 @@ function schleife(gen) {
   g.rauch.forEach((x) => {
     x.t += dt * (g.krater && g.krater.ausbruch > 0 ? 0.5 : 0.12);
     if (x.t > 1) x.t -= 1;
-    x.sp.position.set(BURG.x + Math.sin(x.t * 6 + x.sp.id) * 0.4 * x.t, 3.2 + x.t * 4.5, BURG.z + Math.cos(x.t * 5) * 0.3 * x.t);
-    const gr = 0.8 + x.t * 2.6; x.sp.scale.set(gr, gr, 1); x.sp.material.opacity = 0.38 * (1 - x.t);
+    x.sp.position.set(g.burg.x + Math.sin(x.t * 6 + x.sp.id) * 0.4 * x.t * g.GR, (3.2 + x.t * 4.5) * g.GR, g.burg.z + Math.cos(x.t * 5) * 0.3 * x.t * g.GR);
+    const gr = (0.8 + x.t * 2.6) * g.GR; x.sp.scale.set(gr, gr, 1); x.sp.material.opacity = 0.38 * (1 - x.t);
   });
   if (g.krater) {
     const a = g.krater.ausbruch || 0;
@@ -1469,9 +1739,10 @@ function schleife(gen) {
   if (!g.sieger && KF.padTakt(dt, g.groesse ? g.groesse[1] : 600)) g.fahrt = null;
   if (KF.K.an !== freiVorher) freiKnopfZeigen();
   if (!g.sieger) auftrittTakt(dt);
-  kameraBewegen(dt);
+  kameraBewegen(dtEcht);
   if (g.wackelBis > t) { const st = Math.min(1, g.wackelBis - t) * 0.16; g.camera.position.add(V((Math.random() - 0.5) * st, (Math.random() - 0.5) * st, (Math.random() - 0.5) * st)); }
-  g.renderer.render(g.scene, g.camera);
+  if (g.composer && STUFE[g.stufe].leuchten) g.composer.render(dt);
+  else g.renderer.render(g.scene, g.camera);
 }
 function versatz(j, n) {
   if (n <= 4) return V(Math.cos(j * 1.57 + 0.6) * 0.42, 0, Math.sin(j * 1.57 + 0.6) * 0.42);
@@ -1513,7 +1784,7 @@ export function kameraStand() {
     zaehlerMax: g.zaehlerMax, nahMin: +(g.nahMin || 99).toFixed(2), fahrten: (g.fahrtenListe || []).slice(), auftritt: g.auftritt ? g.auftritt.stufe : null, auftritte: g.auftrittZahl, karte: !!g.karteHTML,
     zahlen: g.grossZahlen.filter((x) => x.t >= 0).length, muenzenFliegen: g.muenzen.filter((x) => x.m.visible).length,
     frei: KF.K.an, freiQuelle: KF.K.quelle, freiDarf: KF.darf(), blick: [+g.kamL.x.toFixed(2), +g.kamL.z.toFixed(2)],
-    kameraHoehe: +g.kamP.y.toFixed(2), beamer: g.beamer };
+    kameraHoehe: +g.kamP.y.toFixed(2), beamer: g.beamer, schatten: [+g.sonne.target.position.x.toFixed(1), +g.sonne.target.position.z.toFixed(1), +g.schattenHalb.toFixed(1)] };
 }
 
 // Knopf "Karte ansehen" / "Zurueck zur Figur" (nur wer die Kamera fuehren darf: am Zug bzw. am Beamer)
@@ -1563,18 +1834,23 @@ function kameraSchalter(container) {
 // sieger (nur fuer die Siegerehrung): { plaetze: [[j, stufe 1-3 oder 0], ...], jubel: [j], trauer: [j] }
 export function brett3dZeigen(container, s, muster, brett, sieger = null) {
   // neu bauen, wenn sich Spielerzahl, Felder oder Aussehen aendern (ohne Trinken: Aufgabenfelder statt Trinkfelder)
-  if (g && (g.figuren.length !== s.pos.length || g.muster !== muster || g.look !== lookVon() || g.welt !== (brett.welt === "vulkan" ? "vulkan" : "insel") || g.beamer !== !!brett.beamer)) {
-    try { g.renderer.dispose(); } catch (e) { /* egal */ }
+  const figSig = JSON.stringify(brett.fig || null);
+  if (g && (g.figuren.length !== s.pos.length || g.muster !== muster || g.look !== lookVon() || g.welt !== (brett.welt || "insel") || g.beamer !== !!brett.beamer || g.figSig !== figSig || g.vorschau !== !!brett.vorschau)) {
+    try { if (g.composer) g.composer.dispose(); g.renderer.dispose(); } catch (e) { /* egal */ }
     g.laeuft = false; g = null;
   }
   try {
-    if (!g) { aufbauen(muster, s.pos.length, brett); g.muster = muster; g.next = brett.next; }
+    if (!g) { aufbauen(muster, s.pos.length, brett); g.muster = muster; g.next = brett.next; g.figSig = figSig; g.vorschau = !!brett.vorschau; g.vorschauTakt = 0; }
   } catch (e) {
     console.warn("3D nicht verfuegbar - flaches Brett", e);
     g = null;
     return false;
   }
   g.container = container;
+  g.tempo = tempoVon(s);
+  g.fig = brett.fig || null;
+  KF.welt(g.R);
+  zustandAnwenden(brett.zustand);
   container.insertBefore(g.renderer.domElement, container.firstChild);
   // Siegerehrung: flacheres Bild, Figuren aufs Treppchen
   const warSieger = !!g.sieger;
@@ -1584,9 +1860,10 @@ export function brett3dZeigen(container, s, muster, brett, sieger = null) {
   g.hoehe = g.sieger ? 0.56 : 0.82;
   const breite = container.clientWidth || 360;
   // Beamer: das Bild fuellt den Kasten, den beamer_spiele.js vorgibt (Hoehe aus dem CSS)
-  if (brett.beamer && container.clientHeight > 80) g.hoehe = Math.max(0.35, Math.min(1.2, container.clientHeight / breite));
+  if ((brett.beamer || brett.vorschau) && container.clientHeight > 80) g.hoehe = Math.max(0.35, Math.min(1.2, container.clientHeight / breite));
   g.groesse = [breite, Math.round(breite * g.hoehe)];
-  g.renderer.setSize(g.groesse[0], g.groesse[1], false);
+  groesseAnwenden();
+  tageslicht(s);
   g.renderer.domElement.style.width = "100%"; g.renderer.domElement.style.height = "auto";
   g.camera.aspect = 1 / g.hoehe; g.camera.updateProjectionMatrix();
   // Siegerehrung: von etwas weiter oben aufs Treppchen zufahren; zurueck aufs Brett ohne Fahrt
@@ -1636,7 +1913,7 @@ export function brett3dZeigen(container, s, muster, brett, sieger = null) {
         if (f.pfad[f.pfad.length - 1] !== p) f.pfad.push(p);
         if (k < 0) f.sprungZiel = p;   // Portal oder K.O.: erst den Weg laufen, dann springen
         if (f.pfad.length === 1 && k < 0) f.sprung = true;
-        if (neuerWurf && g.wurf.j === j) { f.startIn = WURF.los; f.huepfen = 0; }
+        if (neuerWurf && g.wurf.j === j) { f.startIn = WURF.los / g.tempo.wuerfel; f.huepfen = 0; }
       }
       f.ziel = p;
     } else if (s.spur && s.spur.j === j && s.spur.nr === f.spurNr && s.spur.felder.length > (f.spurLaenge || 0) && !s.spur.sprung) {
@@ -1653,15 +1930,15 @@ export function brett3dZeigen(container, s, muster, brett, sieger = null) {
     }
   });
   // Standort fuer die Kamera schon jetzt (die Bildschleife setzt ihn sonst erst im naechsten Bild)
-  if (!g.sieger) g.figuren.forEach((f, j) => { if (!f.pfad.length || f.startIn > 0) f.boden.copy(g.lage[f.anzeige]).add(versatz(j, g.figuren.length)).setY(0); });
+  if (!g.sieger) g.figuren.forEach((f, j) => { if (!f.pfad.length || f.startIn > 0) f.boden.copy(g.lage[f.anzeige]).add(versatz(j, g.figuren.length)); });
 
   // Kamerafahrten: Rundenbeginn (Ueberflug, Stern, Figur), Zugbeginn (zur Figur), Stern wandert (hin und zurueck)
   const neueRunde = !ersterBlick && s.runde !== g.rundeAlt && !s.ende;
   const spielStart = ersterBlick && s.runde === 1 && !(s.spurNr > 0) && s.phase === "wuerfeln";
   const sternNeu = !ersterBlick && g.sternAlt !== undefined && g.sternAlt !== s.stern;
   const sp = g.lage[s.stern] || V();
-  if (ersterBlick || !g.sternPos.lengthSq()) g.sternPos.set(sp.x, 0, sp.z);
-  else if (sternNeu) g.sternFlug = { von: g.sternPos.clone().setY(0), nach: V(sp.x, 0, sp.z), t: 0 };
+  if (ersterBlick || !g.sternPos.lengthSq()) g.sternPos.copy(sp);
+  else if (sternNeu) g.sternFlug = { von: g.sternPos.clone(), nach: sp.clone(), t: 0 };
   g.aktiv = s.dran;
   if ((ersterBlick || g.gesetzt) && !g.sieger) { const r = ruhePose(); g.kamP.copy(r.p); g.kamL.copy(r.l); g.gesetzt = false; }
   if ((neueRunde || spielStart) && s.phase === "wuerfeln") {
@@ -1685,7 +1962,7 @@ export function brett3dZeigen(container, s, muster, brett, sieger = null) {
   });
   Object.keys(fallen).forEach((k) => {
     if (g.fallenObj[k] || !g.felder[k]) return;
-    const o = falleBauen(); const p = g.felder[k].p; o.position.set(p.x + 0.42, FELD_OBEN, p.z - 0.3);
+    const o = falleBauen(); const p = g.felder[k].p; o.position.set(p.x + 0.42, p.y + FELD_OBEN, p.z - 0.3); o.userData.y = p.y;
     g.scene.add(o); g.fallenObj[k] = o;
   });
 
@@ -1699,8 +1976,8 @@ export function brett3dZeigen(container, s, muster, brett, sieger = null) {
         // Sternenrohr/Tausch: am alten Platz ein Rohr bzw. Wirbel, die Figur springt, am Ziel taucht sie auf
         const f = g.figuren[e.j];
         if (e.art === "rohr" && f) {
-          const alt = f.obj.position.clone().setY(0), neu = g.lage[s.pos[e.j]] || alt;
-          [alt, neu].forEach((q, k) => { const r = g.rohre[k]; r.position.set(q.x, 0, q.z); r.visible = true; r.userData.t = -k * 0.4; r.scale.set(1, 0.01, 1); });
+          const alt = f.obj.position.clone().setY(f.boden.y), neu = g.lage[s.pos[e.j]] || alt;
+          [alt, neu].forEach((q, k) => { const r = g.rohre[k]; r.position.copy(q); r.visible = true; r.userData.t = -k * 0.4; r.scale.set(1, 0.01, 1); });
         }
         effektZeigen(e);
         nachDerLandung(e.j, () => { funkenAn(figurPos(e.j), e.art === "rohr" ? 0.14 : 0.78); if (e.art === "rohr") zoomFahrt(e.j, "rohr"); });

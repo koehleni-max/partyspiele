@@ -8,6 +8,8 @@
 let ctx = null, haupt = null, hall = null, musikBus = null, dateiBus = null;
 let modus = localStorage.getItem("pa_ton") || "an"; // "an" | "effekte" | "aus"
 let musikName = null, musikLauf = null;
+export const DATEI_BUS = 0.77;
+export const BEGRENZER = { threshold: -3, knee: 0, ratio: 20, attack: 0.002, release: 0.1 };
 
 function bereit() {
   if (ctx) return ctx.state === "running";
@@ -25,8 +27,12 @@ function bereit() {
   const tp = ctx.createBiquadFilter(); tp.type = "lowpass"; tp.frequency.value = 2400;
   hall.connect(v).connect(tp).connect(fb).connect(v); tp.connect(haupt);
   musikBus = ctx.createGain(); musikBus.gain.value = 0.0; musikBus.connect(haupt);
-  // Aufnahmen sind fertig abgemischt: ohne Kunsthall, aber durch denselben Begrenzer
-  dateiBus = ctx.createGain(); dateiBus.gain.value = 1.4; dateiBus.connect(haupt);
+  // Aufnahmen sind fertig abgemischt und gemessen (messen): ohne Kunsthall und ohne den Kompressor der Kunstklaenge - der holt
+  // kurze Schlaege herunter und macht den Abgleich zunichte. Der Begrenzer greift nur, wenn sich viele Klaenge ueberlagern.
+  const grenze = ctx.createDynamicsCompressor();
+  Object.entries(BEGRENZER).forEach(([k, v]) => { grenze[k].value = v; });
+  grenze.connect(ctx.destination);
+  dateiBus = ctx.createGain(); dateiBus.gain.value = DATEI_BUS; dateiBus.connect(grenze);
   if (modus !== "aus") vorladen();
   return ctx.state === "running";
 }
@@ -36,54 +42,96 @@ function bereit() {
 }, { passive: true }));
 
 // ---------------------------------------------------------------- echte Aufnahmen
-// Je Ereignis: laut = Pegel in der Mischung, streu = Tonhoehen-Streuung (+-, 0.05 = 5 %; Musik-Jingles 0, sonst
-// klingen sie verstimmt), gruppen = Varianten nach Vorrang: die erste Gruppe, von der mindestens eine Datei da ist,
-// klingt (z. B. erst das echte Hahnkraehen aus der Download-Liste, bis dahin ein Kenney-Jingle).
+// Je Ereignis: streu = Tonhoehen-Streuung (+-, 0.05 = 5 %; Musik-Jingles 0, sonst klingen sie verstimmt), gruppen = Varianten
+// nach Vorrang: die erste Gruppe, von der mindestens eine Datei da ist, klingt (z. B. erst das echte Hahnkraehen aus der
+// Download-Liste, bis dahin ein Kenney-Jingle). leise = Bedien- und Hintergrundgeraeusche, sie liegen PEGEL.leise unter den anderen.
+// Die Lautstaerke steht nicht hier: jede Datei wird beim Laden gemessen und auf denselben Pegel gebracht (Vorschlag 129).
 // Namen: if_ Interface, ui_ UI, cas_ Casino, im_ Impact, rpg_ RPG, sf_ Sci-Fi, jin_ Jingles (alle Kenney),
 // dl_/musik_ = Downloads (Liste in ton/quellen.json).
 export const KLAENGE = {
-  klick: { laut: 0.45, streu: 0.06, gruppen: [["if_click_001", "if_click_002", "if_click_003"]] },
-  pop: { laut: 0.55, streu: 0.08, gruppen: [["if_pluck_001", "if_pluck_002", "if_drop_002"]] },
-  karte: { laut: 0.8, streu: 0.06, gruppen: [["cas_card-place-1", "cas_card-place-2", "cas_card-place-3"]] },
-  dran: { laut: 0.6, streu: 0.03, gruppen: [["if_glass_001", "if_glass_002", "if_glass_003"]] },
-  richtig: { laut: 0.65, streu: 0.03, gruppen: [["if_confirmation_001", "if_confirmation_002", "if_confirmation_004"]] },
-  falsch: { laut: 0.55, streu: 0.04, gruppen: [["if_error_004", "if_error_005", "if_error_006"]] },
-  sieg: { laut: 0.75, streu: 0, gruppen: [["jin_SAX00", "jin_SAX03", "jin_STEEL00"]] },
-  fanfare: { laut: 0.8, streu: 0, gruppen: [["jin_HIT00", "jin_HIT03"]] },
-  wuerfel: { laut: 0.9, streu: 0.06, gruppen: [["cas_dice-throw-1", "cas_dice-throw-2", "cas_dice-throw-3"]] },
-  schritt: { laut: 0.55, streu: 0.08, gruppen: [["im_footstep_grass_000", "im_footstep_grass_001", "im_footstep_grass_002"]] },
-  stern: { laut: 0.75, streu: 0, gruppen: [["jin_PIZZI01", "jin_PIZZI04"]] },
-  muenzen: { laut: 0.8, streu: 0.05, gruppen: [["rpg_handleCoins", "rpg_handleCoins2"]] },
-  tick: { laut: 0.55, streu: 0.03, gruppen: [["if_tick_001", "if_tick_002", "if_tick_004"]] },
-  tack: { laut: 0.5, streu: 0.08, gruppen: [["ui_mouseclick1", "ui_mouserelease1"]] },
-  los: { laut: 0.65, streu: 0.03, gruppen: [["im_impactBell_heavy_000", "im_impactBell_heavy_001"]] },
-  sprung: { laut: 0.65, streu: 0.08, gruppen: [["rpg_cloth1", "rpg_cloth2", "rpg_cloth3"]] },
-  aua: { laut: 0.75, streu: 0.06, gruppen: [["im_impactPunch_medium_000", "im_impactPunch_medium_001", "im_impactPunch_medium_002"]] },
-  ziel: { laut: 0.75, streu: 0, gruppen: [["jin_PIZZI02"]] },
-  gong: { laut: 0.75, streu: 0.02, gruppen: [["dl_glocke"], ["im_impactBell_heavy_002", "im_impactBell_heavy_003"]] },
-  heulen: { laut: 0.8, streu: 0.04, gruppen: [["dl_wolf_1", "dl_wolf_2"]] },
-  morgen: { laut: 0.75, streu: 0.02, gruppen: [["dl_hahn"], ["jin_STEEL02"]] },
-  tod: { laut: 0.9, streu: 0.04, gruppen: [["im_impactSoft_heavy_000", "im_impactSoft_heavy_001", "im_impactSoft_heavy_002"]] },
-  hammer: { laut: 0.85, streu: 0.04, gruppen: [["dl_hammer"], ["im_impactWood_heavy_000", "im_impactWood_heavy_001"]] },
-  spannung: { laut: 0.75, streu: 0.03, gruppen: [["dl_trommelwirbel"], ["rpg_drawKnife1", "rpg_drawKnife2"]] },
-  magie: { laut: 0.65, streu: 0.06, gruppen: [["im_impactGlass_light_000", "im_impactGlass_light_001", "im_impactGlass_light_002"]] },
-  herz: { laut: 0.9, streu: 0.03, gruppen: [["dl_herz"], ["im_impactSoft_medium_000", "im_impactSoft_medium_001"]] },
-  schuss: { laut: 0.85, streu: 0.04, gruppen: [["sf_lowFrequency_explosion_000"]] },
-  geist: { laut: 0.65, streu: 0.05, gruppen: [["rpg_doorOpen_1", "rpg_doorOpen_2"]] },
-  knarzen: { laut: 0.75, streu: 0.06, gruppen: [["rpg_creak1", "rpg_creak2", "rpg_creak3"]] },
-  kichern: { laut: 0.75, streu: 0.03, gruppen: [["dl_kichern"], ["jin_PIZZI05"]] },
-  grusel: { laut: 0.75, streu: 0.02, gruppen: [["im_impactBell_heavy_003"]] },
-  techno: { laut: 0.75, streu: 0, gruppen: [["jin_HIT01"]] },
-  troete: { laut: 0.75, streu: 0, gruppen: [["jin_SAX01"]] },
-  boing: { laut: 0.75, streu: 0, gruppen: [["jin_PIZZI06"]] },
-  wirbel: { laut: 0.75, streu: 0, gruppen: [["dl_trommelwirbel"], ["jin_HIT02"]] },
-  wobble: { laut: 0.75, streu: 0, gruppen: [["jin_SAX04"]] },
-  tada: { laut: 0.75, streu: 0, gruppen: [["jin_STEEL01"]] },
-  schrei: { laut: 0.65, streu: 0.02, gruppen: [["dl_schrei"], ["sf_lowFrequency_explosion_001"]] },
+  klick: { leise: true, streu: 0.06, gruppen: [["if_click_001", "if_click_002", "if_click_003"]] },
+  pop: { leise: true, streu: 0.08, gruppen: [["if_pluck_001", "if_pluck_002", "if_drop_002"]] },
+  karte: { streu: 0.06, gruppen: [["cas_card-place-1", "cas_card-place-2", "cas_card-place-3"]] },
+  dran: { streu: 0.03, gruppen: [["if_glass_001", "if_glass_002", "if_glass_003"]] },
+  richtig: { streu: 0.03, gruppen: [["if_confirmation_001", "if_confirmation_002", "if_confirmation_004"]] },
+  falsch: { streu: 0.04, gruppen: [["if_error_004", "if_error_005", "if_error_006"]] },
+  sieg: { streu: 0, gruppen: [["jin_SAX00", "jin_SAX03", "jin_STEEL00"]] },
+  fanfare: { streu: 0, gruppen: [["jin_HIT00", "jin_HIT03"]] },
+  wuerfel: { streu: 0.06, gruppen: [["cas_dice-throw-1", "cas_dice-throw-2", "cas_dice-throw-3"]] },
+  schritt: { leise: true, streu: 0.08, gruppen: [["im_footstep_grass_000", "im_footstep_grass_001", "im_footstep_grass_002"]] },
+  stern: { streu: 0, gruppen: [["jin_PIZZI01", "jin_PIZZI04"]] },
+  muenzen: { streu: 0.05, gruppen: [["rpg_handleCoins", "rpg_handleCoins2"]] },
+  tick: { leise: true, streu: 0.03, gruppen: [["if_tick_001", "if_tick_002", "if_tick_004"]] },
+  tack: { leise: true, streu: 0.08, gruppen: [["ui_mouseclick1", "ui_mouserelease1"]] },
+  los: { streu: 0.03, gruppen: [["im_impactBell_heavy_000", "im_impactBell_heavy_001"]] },
+  sprung: { leise: true, streu: 0.08, gruppen: [["rpg_cloth1", "rpg_cloth2", "rpg_cloth3"]] },
+  aua: { streu: 0.06, gruppen: [["im_impactPunch_medium_000", "im_impactPunch_medium_001", "im_impactPunch_medium_002"]] },
+  ziel: { streu: 0, gruppen: [["jin_PIZZI02"]] },
+  gong: { streu: 0.02, gruppen: [["dl_glocke"], ["im_impactBell_heavy_002", "im_impactBell_heavy_003"]] },
+  heulen: { streu: 0.04, gruppen: [["dl_wolf_1", "dl_wolf_2"]] },
+  morgen: { streu: 0.02, gruppen: [["dl_hahn"], ["jin_STEEL02"]] },
+  tod: { streu: 0.04, gruppen: [["im_impactSoft_heavy_000", "im_impactSoft_heavy_001", "im_impactSoft_heavy_002"]] },
+  hammer: { streu: 0.04, gruppen: [["dl_hammer"], ["im_impactWood_heavy_000", "im_impactWood_heavy_001"]] },
+  spannung: { streu: 0.03, gruppen: [["dl_trommelwirbel"], ["rpg_drawKnife1", "rpg_drawKnife2"]] },
+  magie: { streu: 0.06, gruppen: [["im_impactGlass_light_000", "im_impactGlass_light_001", "im_impactGlass_light_002"]] },
+  herz: { streu: 0.03, gruppen: [["dl_herz"], ["im_impactSoft_medium_000", "im_impactSoft_medium_001"]] },
+  schuss: { streu: 0.04, gruppen: [["sf_lowFrequency_explosion_000"]] },
+  geist: { streu: 0.05, gruppen: [["rpg_doorOpen_1", "rpg_doorOpen_2"]] },
+  knarzen: { streu: 0.06, gruppen: [["rpg_creak1", "rpg_creak2", "rpg_creak3"]] },
+  kichern: { streu: 0.03, gruppen: [["dl_kichern"], ["jin_PIZZI05"]] },
+  grusel: { streu: 0.02, gruppen: [["im_impactBell_heavy_003"]] },
+  techno: { streu: 0, gruppen: [["jin_HIT01"]] },
+  troete: { streu: 0, gruppen: [["jin_SAX01"]] },
+  boing: { streu: 0, gruppen: [["jin_PIZZI06"]] },
+  wirbel: { streu: 0, gruppen: [["dl_trommelwirbel"], ["jin_HIT02"]] },
+  wobble: { streu: 0, gruppen: [["jin_SAX04"]] },
+  tada: { streu: 0, gruppen: [["jin_STEEL01"]] },
+  schrei: { streu: 0.02, gruppen: [["dl_schrei"], ["sf_lowFrequency_explosion_001"]] },
   // fuer den Werwolf-Ablauf (Plan Runde 8) schon eingetragen; ohne Datei bleiben sie still (kein Ersatzklang)
-  eule: { laut: 0.55, streu: 0.03, gruppen: [["dl_eule"]] },
-  grillen: { laut: 0.45, streu: 0, gruppen: [["dl_grillen"]] },
-  volk: { laut: 0.45, streu: 0, gruppen: [["dl_volk"]] },
+  eule: { leise: true, streu: 0.03, gruppen: [["dl_eule"]] },
+  grillen: { leise: true, streu: 0, gruppen: [["dl_grillen"]] },
+  volk: { leise: true, streu: 0, gruppen: [["dl_volk"]] },
+};
+
+// Lautstaerke-Abgleich (Vorschlag 129): Pegel in dB. Geraeusche zaehlen mit ihrer lautesten Zehntelsekunde (die meisten sind
+// kuerzer als eine halbe Sekunde, ein laengeres Fenster wuerde sie zu leise messen), Musik als Ganzes.
+// Musik liegt unter den Geraeuschen, sonst gingen Wuerfel und Ansagen darin unter. spitze: hoeher darf keine Datei ausschlagen -
+// etwas ueber 1, weil danach noch der Bus (DATEI_BUS) kommt.
+export const PEGEL = { ziel: -21, leise: -9, musik: -6, spitze: 1.2 };   // ziel: hoeher schaffen es die kurzen Schlaege nicht mehr
+const FENSTER = 0.1;
+// -> {db, spitze} einer Aufnahme (alle Kanaele zusammen); ganz = Mittel ueber die ganze Datei
+export function messen(buf, ganz = false) {
+  const n = buf.length, kanaele = buf.numberOfChannels, sr = buf.sampleRate;
+  const block = Math.max(1, Math.round(sr * FENSTER / 4)), bloecke = new Float64Array(Math.ceil(n / block));
+  let spitze = 0;
+  // Hochpass: Gleichanteil und Rumpeln unter 60 Hz hoert man nicht, sie wuerden manche Aufnahmen (Glas, Schlaege) aber viel zu laut messen
+  const a = Math.exp(-2 * Math.PI * 60 / sr);
+  for (let c = 0; c < kanaele; c++) {
+    const d = buf.getChannelData(c);
+    let x0 = 0, y = 0;
+    for (let i = 0; i < n; i++) {
+      const x = d[i], q = x < 0 ? -x : x;
+      if (q > spitze) spitze = q;
+      y = a * (y + x - x0); x0 = x;
+      bloecke[(i / block) | 0] += y * y;
+    }
+  }
+  const leistung = (summe, proben) => summe / (proben * kanaele);
+  let p = 0;
+  if (ganz) p = leistung(bloecke.reduce((a, b) => a + b, 0), n);
+  else for (let i = 0; i < bloecke.length; i++) {
+    let s = 0;
+    for (let k = i; k < i + 4 && k < bloecke.length; k++) s += bloecke[k];
+    p = Math.max(p, leistung(s, block * 4));
+  }
+  return { db: p > 1e-10 ? 10 * Math.log10(p) : -100, spitze };
+}
+// Verstaerkung einer Datei auf ihren Sollpegel; leise Aufnahmen hoechstens so weit, dass die Spitze nicht uebersteuert
+export function verstaerkung(m, ziel) { return Math.min(Math.pow(10, (ziel - m.db) / 20), m.spitze > 0.001 ? PEGEL.spitze / m.spitze : 1); }
+const zielVon = (name) => {
+  if (name.startsWith("musik_")) return PEGEL.ziel + PEGEL.musik;
+  const k = Object.values(KLAENGE).find((x) => x.gruppen.flat().includes(name));
+  return PEGEL.ziel + (k && k.leise ? PEGEL.leise : 0);
 };
 // Hintergrundmusik als Schleife (Downloads); fehlt die Datei, spielt der Sequenzer unten
 export const MUSIK_DATEIEN = { brett: "musik_brett", fiesbau: "musik_fiesbau", nacht: "musik_nacht", dorf: "musik_dorf", spannung: "musik_spannung" };
@@ -94,7 +142,7 @@ let vorhanden = null;           // Set der Namen mit Datei - null = Liste noch n
 let vorhandenLaden = null;
 const puffer = {};              // Name -> AudioBuffer | "fehlt" | Promise (laedt)
 const zuletzt = {};             // Ereignis -> zuletzt gespielte Variante (nicht zweimal hintereinander)
-const angleich = {};            // Name -> Verstaerkung auf gleichen Spitzenpegel
+const angleich = {};            // Name -> Verstaerkung auf den Sollpegel (gemessen beim Laden)
 
 // Tondateien liegen neben diesem Modul (web/ton/) - unabhaengig davon, von welcher Seite aus es geladen wird
 const TON_ORT = (datei) => new URL(`ton/${datei}`, import.meta.url).href;
@@ -113,12 +161,8 @@ function datei(name) {
     return fetch(TON_ORT(`${name}.${ENDUNG}`)).then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.arrayBuffer(); })
       .then((b) => new Promise((ok, nein) => ctx.decodeAudioData(b, ok, nein)));
   }).then((buf) => {
-    if (buf && typeof buf === "object") {
-      // Spitzenpegel angleichen: Kenney-Pakete sind verschieden laut abgemischt (gemessen 0,06 bis 1,1)
-      const c = buf.getChannelData(0); let p = 0;
-      for (let i = 0; i < c.length; i += 4) { const v = Math.abs(c[i]); if (v > p) p = v; }
-      angleich[name] = p > 0.001 ? Math.min(8, 0.9 / p) : 1;
-    }
+    // Kenney-Pakete und Downloads sind sehr verschieden laut abgemischt
+    if (buf && typeof buf === "object") angleich[name] = verstaerkung(messen(buf, name.startsWith("musik_")), zielVon(name));
     return (puffer[name] = buf || "fehlt");
   }, () => (puffer[name] = "fehlt"));
   puffer[name] = p;
@@ -147,7 +191,7 @@ function abspielen(name, liste, ziel) {
   const q = ctx.createBufferSource(), g = ctx.createGain();
   q.buffer = puffer[n];
   q.playbackRate.value = 1 + (Math.random() * 2 - 1) * (k.streu || 0);
-  g.gain.value = k.laut * (angleich[n] || 1);
+  g.gain.value = angleich[n] || 1;
   q.connect(g).connect(ziel || dateiBus);
   q.start();
   return q;
@@ -378,8 +422,8 @@ function musikNeu() {
       if (musikName !== name || musikQuelle || modus !== "an" || nachtRuhe || typeof buf !== "object") return;
       const q = ctx.createBufferSource(), g = ctx.createGain();
       q.buffer = buf; q.loop = true;
-      g.gain.setValueAtTime(0.0001, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + 1.2);
-      q.connect(g).connect(musikBus); q.start();
+      g.gain.setValueAtTime(0.0001, ctx.currentTime); g.gain.exponentialRampToValueAtTime(angleich[dateiName] || 0.5, ctx.currentTime + 1.2);
+      q.connect(g).connect(dateiBus); q.start();
       musikQuelle = { q, g };
     });
     return;
