@@ -942,7 +942,9 @@ function ausfuehren(von, a) {
     const idx = p.mit.indexOf(von);
     if (idx < 0) return;
     if (spielAktion(p, sp, idx, a)) aend.tafel = true;
-    if (p.s && p.s.weg) partieWeg(p.pid);   // Gluecksrad-Duell: "Fertig" raeumt es weg
+    // Gluecksrad-Duell: "Fertig" raeumt es weg. Nur genau dieses Spiel und nur s.weg === true - das Millionaer-Spiel fuehrt
+    // unter s.weg die 50:50-Liste ([] gilt als wahr) und war sonst nach dem ersten Tipp beendet (Nicos Kritik 08.11.2026, Punkt 10)
+    if (sp.id === "gduell" && p.s && p.s.weg === true) partieWeg(p.pid);
   }
   if (raum.partien[p.pid]) p.t = Date.now();   // zuletzt geaendert (Beamer: Ergebnis steht eine Weile, dann Diashow)
   if (sp.id === "brett" && p.phase === "sammeln" && raum.partien[p.pid]) { M.abgleich(p, raum.look, P.istBot); if (a.typ !== "_figur") brettZuletztMerken(p); }
@@ -1843,6 +1845,48 @@ function sperreAufheben() {
   if (padIds().length) C.fokusWiederherstellen();
 }
 
+// ---------------------------------------------------------------- Spielmodus am Handy: Vollbild, nichts verrutscht
+// Nicos Kritik 08.11.2026 (Punkte 8, 9): "ein versehentlicher Tipp neben das Spielfenster verschiebt die Seite" und "am besten
+// alle Spiele im Vollbild". Solange ein Spiel laeuft (fuer alle Spiele, zentral hier):
+// - html.im-spiel: kein Ueberscrollen/Gummiband, kein Ziehen zum Neuladen, kein Doppeltipp-Zoom, kein Markieren (style.css)
+// - Zoom aus: der Viewport bekommt maximum-scale=1/user-scalable=no; zwei Finger bewegen die Seite nicht
+// - Wischen, das NEBEN dem Spielfeld beginnt (Kopf, Rand, Fuss), bewegt die Seite nicht; auf dem Spielfeld darf man weiter
+//   scrollen (lange Spiele brauchen das), Eingabefelder bleiben frei
+// - Vollbild (Fullscreen-API) braucht eine Geste: "Los", "Mitmachen" und das Oeffnen eines Spiels schalten es ein, sonst
+//   der Knopf "⛶ Vollbild" im Spielkopf. iPhone-Safari kennt Vollbild fuer Webseiten nicht - dort fehlt der Knopf, es
+//   bleibt bei der Sperre gegen Verrutschen und voller Hoehe (100dvh); die Safari-Leisten lassen sich von einer Seite aus nicht wegschalten.
+const HANDY = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+const VOLLBILD_DA = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+const VIEWPORT = document.querySelector('meta[name="viewport"]');
+const VIEWPORT_NORMAL = VIEWPORT ? VIEWPORT.content : "";
+const imVollbild = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+function vollbildKnopf() {
+  return HANDY && VOLLBILD_DA ? `<button class="klein2 vollbild-knopf" data-vollbild aria-label="Vollbild" title="Vollbild">⛶ Vollbild</button>` : "";
+}
+function vollbildAn() {
+  if (!HANDY || !VOLLBILD_DA || imVollbild()) return;
+  const el = document.documentElement, f = el.requestFullscreen || el.webkitRequestFullscreen;
+  try { const r = f.call(el, { navigationUI: "hide" }); if (r && r.catch) r.catch(() => {}); } catch (e) { /* Browser lehnt ab: Knopf bleibt */ }
+}
+function spielmodus(an) {
+  const html = document.documentElement;
+  if (html.classList.contains("im-spiel") === an) return;
+  html.classList.toggle("im-spiel", an);
+  if (VIEWPORT) VIEWPORT.content = an ? `${VIEWPORT_NORMAL}, maximum-scale=1, user-scalable=no` : VIEWPORT_NORMAL;
+}
+function vollbildGeaendert() { document.documentElement.classList.toggle("vollbild", imVollbild()); }
+document.addEventListener("fullscreenchange", vollbildGeaendert);
+document.addEventListener("webkitfullscreenchange", vollbildGeaendert);
+let wischStart = null;
+document.addEventListener("touchstart", (ev) => { wischStart = ev.target; }, { passive: true, capture: true });
+document.addEventListener("touchmove", (ev) => {
+  if (!document.documentElement.classList.contains("im-spiel")) return;
+  if (ev.touches.length > 1) { ev.preventDefault(); return; }   // zwei Finger: kein Zoomen im Spiel
+  const t = wischStart && wischStart.closest ? wischStart : null;
+  if (t && t.closest(".spielflaeche, input, textarea, select, .protokoll, .bm-pult")) return;
+  ev.preventDefault();
+}, { passive: false });
+
 // ---------------------------------------------------------------- Zurueck-Knopf des Handys
 // Aus Spiel, Turniertafel oder Steuerseite fuehrt "Zurueck" in die Uebersicht (vorher verliess man den Raum). Dafuer liegt,
 // solange so eine Ansicht offen ist, ein eigener Eintrag im Verlauf.
@@ -1901,6 +1945,7 @@ function zeichnen() {
   TON.musik(anDerWand || SL.pausiert(raum) ? null : musik);
   felderZurueck(felder);
   document.body.classList.toggle("hm-offen", !!hmKontext);
+  spielmodus(!!(partie && partie.phase === "laeuft"));
   if (hmKontext) HM.nach(hmKontext);
   ergebnisPruefen(partie);
   if (raum && !status && (ansicht || tafelAuf || steuerAuf)) zurueckMerken();
@@ -2093,7 +2138,7 @@ function partieBild(p, sp, ich) {
       <button class="klein2" data-ansicht="">‹ Übersicht</button>
       ${leitet && sp.id === "brett" && p.s && p.s.runden === 0 && !p.s.ende && p.s.phase !== "bonus" ? `<button class="klein2" data-a='{"typ":"_brettende"}'>🏁 Auswerten</button>` : ""}
       ${leitet && sp.id === "brett" && p.phase === "laeuft" && p.s && !p.s.ende ? `<button class="klein2" data-a='{"typ":"_brettspeichern"}' title="Spielstand speichern">💾</button>` : ""}
-      ${leitet ? `<button class="klein2" data-a='{"typ":"_zurueck"}'>⏹️ Beenden</button>` : ""}</span></div>
+      ${leitet ? `<button class="klein2" data-a='{"typ":"_zurueck"}'>⏹️ Beenden</button>` : ""}${vollbildKnopf()}</span></div>
     <div class="spielflaeche">${inhalt}</div>
     ${stvLeiste(p, nm, ich)}
     ${padLeiste(p, sp)}
@@ -2519,6 +2564,10 @@ document.addEventListener("toggle", (ev) => {
 
 // ---------------------------------------------------------------- Klicks
 document.addEventListener("click", async (ev) => {
+  // Vollbild braucht eine Geste: der Knopf im Spielkopf, dazu "Los", "Mitmachen" und das Oeffnen eines Spiels (Spielmodus oben)
+  if (ev.target.closest("[data-vollbild]")) { vibriere(20); return vollbildAn(); }
+  const start = ev.target.closest("[data-ansage-mit], [data-a*='\"_los\"'], [data-a*='\"_mit\"'], [data-ansicht]:not([data-ansicht=''])");
+  if (start && raum) vollbildAn();
   const schalter = ev.target.closest("[data-ton-schalter]");
   if (schalter) { const t = TON.umschalten(); schalter.outerHTML = TON.schalterHTML(); zeigeHinweis(t); return; }
   // Turniertafel oeffnen, schliessen, Station wechseln: nur auf diesem Handy, nichts wird gesendet

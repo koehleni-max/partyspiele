@@ -14,7 +14,7 @@ const DE = [
   [/Fire at/gi, "Schieß auf"], [/You sank/gi, "Du hast versenkt:"], [/sank your/gi, "versenkt dein"], [/You won/gi, "Du hast gewonnen"], [/You lost/gi, "Du hast verloren"],
   [/Unplaced ships/gi, "Noch nicht aufgestellt"], [/Press R while dragging to rotate\.?/gi, "Am PC ziehen (R dreht) – am Handy einfach oben zufällig aufstellen."],
   [/ is placing their ships/gi, " stellt die Flotte auf"], [/(\d) von (\d) placed/g, "$1 von $2 aufgestellt"], [/placed/g, "aufgestellt"],
-  [/select a piece to move/gi, "wähle einen Stein"], [/select a destination/gi, "wähle das Ziel"], [/their/g, "seine"],
+  [/Continue your capture chain/gi, "Du darfst weiterschlagen – oder den Zug beenden"], [/select a piece to move/gi, "wähle einen Stein"], [/select a destination/gi, "wähle das Ziel"], [/their/g, "seine"],
   [/Grand Total/gi, "Gesamt"], [/Grand Summe/g, "Gesamt"], [/Subtotal/gi, "Zwischensumme"], [/\(\+35 if ≥63\)/g, "(+35 ab 63)"], [/\bif\b/g, "ab"],
   [/3 of a Kind/gi, "Dreierpasch"], [/4 of a Kind/gi, "Viererpasch"], [/(\d) of (\d)/g, "$1 von $2"], [/(\d+) held/g, "$1 gehalten"],
   [/re-roll or/gi, "nochmal würfeln oder"], [/re-roll/gi, "nochmal würfeln"], [/pick a category/gi, "Feld wählen"], [/\bor\b/g, "oder"],
@@ -46,7 +46,8 @@ function uebersetzen(knoten) {
 const buehnen = {};
 let aktuelleAnsicht = null;
 
-function fremdSpiel({ id, name, emoji, kurz, farben, M, regeln, gruppe, bot }) {
+// kettenEnde (Dame): mitten in einer Schlagkette darf man aufhoeren - Knopf schickt "skipTurn", das sonst abgelehnt wird
+function fremdSpiel({ id, name, emoji, kurz, farben, M, regeln, gruppe, bot, kettenEnde }) {
   const meta = M.LOGIK.getGameMetadata ? M.LOGIK.getGameMetadata() : { maxPlayers: 8 };
   return {
     id, name, emoji, kurz, farben, fremd: true,
@@ -85,6 +86,7 @@ function fremdSpiel({ id, name, emoji, kurz, farben, M, regeln, gruppe, bot }) {
       if (a.typ === "neu") return Object.assign(s, this.start(namen));
       if (a.typ === "zufall") return zufallsFlotte(M, s, String(i));
       if (a.typ !== "fremd") return;
+      if (kettenEnde && a.action === "skipTurn" && !(s.st && s.st.pendingChainPiece)) { s.fehler = { i, text: "Aufhören geht nur mitten beim Weiterschlagen", n: Date.now() }; return; }
       let r;
       try { r = M.LOGIK.applyAction(s.st, String(i), a.action, a.payload || {}); } catch (e) { s.fehler = { i, text: String(e.message || e), n: Date.now() }; return; }
       if (r.error) { s.fehler = { i, text: r.error, n: Date.now() }; return; }
@@ -97,7 +99,9 @@ function fremdSpiel({ id, name, emoji, kurz, farben, M, regeln, gruppe, bot }) {
       const ichSpieler = (s.st.players || [])[ich];
       const flotteKnopf = id === "f-schiffe" && !zuschauer && s.st.turnState?.phase === "setup" && ichSpieler && !ichSpieler.ready
         ? knopf("🎲 Flotte zufällig aufstellen", { typ: "zufall" }, "gross zufall-flotte") : "";
-      return `${flotteKnopf}${zuschauer ? `<div class="hinweisbox warten">👀 Dieses Spiel ist für ${mitspieler} Spieler – du schaust zu.</div>` : ""}
+      const kette = kettenEnde && !zuschauer && !vorbei && s.st.pendingChainPiece && s.st.turnState && s.st.turnState.currentPlayerIndex === ich
+        ? `<div class="hinweisbox kettenende">⚔️ Du darfst noch einmal schlagen – musst aber nicht.${knopf(kettenEnde, { typ: "fremd", action: "skipTurn" }, "gross gelb")}</div>` : "";
+      return `${flotteKnopf}${kette}${zuschauer ? `<div class="hinweisbox warten">👀 Dieses Spiel ist für ${mitspieler} Spieler – du schaust zu.</div>` : ""}
         <div id="fremd-platz" class="fremd-platz"></div>
         ${s.fehler && s.fehler.i === ich ? `<div class="hinweisbox" data-key="f${s.fehler.n}">⚠️ ${esc(uebersetzt(s.fehler.text))}</div>` : ""}
         ${vorbei ? `<i hidden data-ergebnis="f${s.partie}-${s.nr}"></i>${knopf("🔄 Neue Partie", { typ: "neu" }, "gross")}` : ""}
@@ -168,17 +172,29 @@ function botReihe(action, schluessel, werte) {
 const BOT_VIER = botReihe("dropPiece", (p) => Math.abs(p.column - 3) + Math.random() * 2.5, () => [0, 1, 2, 3, 4, 5, 6].map((column) => ({ column })));
 const BOT_TTT = botReihe("markCell", (p) => (p.row === 1 && p.col === 1 ? 0 : (p.row + p.col) % 2 === 0 ? 1 : 2) + Math.random() * 1.5,
   () => [0, 1, 2].flatMap((row) => [0, 1, 2].map((col) => ({ row, col }))));
+// Dame ohne Schlagzwang (Nico 08.11.2026): der Computer muss nicht mehr schlagen und waegt ab - Schlag, Dame werden und Sieg
+// zaehlen, ein Stand, in dem der Gegner sofort schlagen kann, zaehlt dagegen. Mitten in einer Kette darf er auch aufhoeren.
+function dameSchlaege(st, uid) {
+  if (!uid || !st || st.status !== "playing") return 0;
+  return (DAME.LOGIK.getValidActions(st, uid) || []).filter((x) => { const m = String(x).split(":")[1]; if (!m) return false; const [a, , c] = m.split(",").map(Number); return Math.abs(c - a) === 2; }).length;
+}
 function BOT_DAME(st, uid, probe) {
-  const n = st.config?.settings?.boardSize || 8, zuege = [];
+  const n = st.config?.settings?.boardSize || 8, kandidaten = [];
+  const gegner = (st.players || []).map((p) => p.userId).find((x) => x !== uid);
+  const wert = (r, schlag) => (r.state.winner === uid ? 100 : 0) + (schlag ? 3 : 0) + (r.state.lastMove && r.state.lastMove.crowned ? 2 : 0)
+    - (r.state.pendingChainPiece ? 0 : 2.5 * Math.min(2, dameSchlaege(r.state, gegner))) + Math.random() * 0.8;
   for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) for (const [dr, dc] of [[1, 1], [1, -1], [-1, 1], [-1, -1], [2, 2], [2, -2], [-2, 2], [-2, -2]]) {
     const z = { action: "move", payload: { from: { row: r, col: c }, to: { row: r + dr, col: c + dc } } };
     if (z.payload.to.row < 0 || z.payload.to.col < 0 || z.payload.to.row >= n || z.payload.to.col >= n) continue;
-    if (probe(z.action, z.payload)) zuege.push({ ...z, schlag: Math.abs(dr) === 2 });
+    const ergebnis = probe(z.action, z.payload);
+    if (ergebnis) kandidaten.push({ z, w: wert(ergebnis, Math.abs(dr) === 2) });
   }
-  if (!zuege.length) return null;
-  const schlaege = zuege.filter((z) => z.schlag);
-  const auswahl = schlaege.length ? schlaege : zuege;
-  return auswahl[Math.floor(Math.random() * auswahl.length)];
+  if (st.pendingChainPiece) {   // Kette: Aufhoeren ist auch ein Zug
+    const halt = probe("skipTurn", {});
+    if (halt) kandidaten.push({ z: { action: "skipTurn", payload: {} }, w: wert(halt, false) - 1 });
+  }
+  if (!kandidaten.length) return null;
+  return kandidaten.sort((x, y) => y.w - x.w)[0].z;
 }
 function BOT_WUERFEL(st, uid, probe, gueltig) {
   const ts = st.turnState || {}, wuerfel = ts.dice || [], benutzt = ts.rollsUsed || 0;
@@ -233,8 +249,8 @@ export const FREMDSPIELE = [
     regeln: "<ul><li>Pro Zug bis zu dreimal würfeln. Würfel antippen = behalten.</li><li>Danach ein freies Feld auf dem Zettel wählen und eintragen.</li><li>Oben: Augen zählen (ab 63 gibt es Bonus). Unten: Pasch, Full House, Straßen, Fünferpasch, Chance.</li><li>Wer am Ende die meisten Punkte hat, gewinnt.</li></ul>" }),
   fremdSpiel({ id: "f-schiffe", bot: BOT_SCHIFFE, name: "Schiffe versenken", emoji: "🚢", kurz: "Flotte verstecken, dann abwechselnd schießen – für 2", farben: ["#0ea5e9", "#0c4a6e"], M: SCHIFFE,
     regeln: "<ul><li>Zuerst stellt jeder seine Schiffe auf (oder lässt sie zufällig verteilen) und tippt „Fertig“.</li><li>Dann abwechselnd auf das gegnerische Feld schießen.</li><li>Wer zuerst alle Schiffe des anderen versenkt, gewinnt.</li></ul>" }),
-  fremdSpiel({ id: "f-dame", bot: BOT_DAME, name: "Dame", emoji: "⚫", kurz: "Das klassische Brettspiel für zwei", farben: ["#78350f", "#1c1917"], M: DAME,
-    regeln: "<ul><li>Steine ziehen schräg nach vorn. Gegnerische Steine werden übersprungen und geschlagen – Schlagen ist Pflicht.</li><li>Wer die andere Seite erreicht, wird zur Dame und darf auch rückwärts.</li><li>Wer keine Steine oder Züge mehr hat, verliert.</li></ul>" }),
+  fremdSpiel({ id: "f-dame", bot: BOT_DAME, name: "Dame", emoji: "⚫", kurz: "Das klassische Brettspiel für zwei", farben: ["#78350f", "#1c1917"], M: DAME, kettenEnde: "✋ Nicht weiterschlagen",
+    regeln: "<ul><li>Steine ziehen schräg nach vorn. Gegnerische Steine werden übersprungen und geschlagen.</li><li>Schlagen darfst du, musst du aber nicht – auch Weiterschlagen ist freiwillig („Nicht weiterschlagen“ beendet den Zug).</li><li>Wer die andere Seite erreicht, wird zur Dame und darf auch rückwärts.</li><li>Wer keine Steine oder Züge mehr hat, verliert.</li></ul>" }),
   fremdSpiel({ id: "f-ttt", bot: BOT_TTT, name: "Tic-Tac-Toe", emoji: "❌", kurz: "Drei in einer Reihe – schnell zwischendurch", farben: ["#8b5cf6", "#312e81"], M: TTT,
     regeln: "<ul><li>Abwechselnd ein Feld antippen. Drei in einer Reihe gewinnt.</li></ul>" }),
 ];

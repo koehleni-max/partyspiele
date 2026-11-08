@@ -209,8 +209,8 @@ function getAllValidMoves(board, color) {
       }
     }
   }
-  // Captures are mandatory — if any exist, only captures are legal.
-  return allCaptures.length > 0 ? allCaptures : allSteps;
+  // Hausregel Partyspiele (Nico 08.11.2026): kein Schlagzwang - Schlaege und normale Zuege sind beide erlaubt.
+  return [...allCaptures, ...allSteps];
 }
 
 // ── game state queries ────────────────────────────────────────────────────────
@@ -252,7 +252,7 @@ function initGame(gameId, name, players, config) {
   const size = cfg.settings.boardSize;
   const board = createStartingBoard(size);
 
-  const captureRequired = getAvailableCaptures(board, 'red').length > 0;
+  const captureRequired = false;   // Hausregel Partyspiele: kein Schlagzwang
 
   return {
     id: gameId,
@@ -418,13 +418,7 @@ function move(state, userId, payload) {
     return { state, events: [], error: 'You must continue capturing' };
   }
 
-  // Mandatory capture rule: if any capture is available, must capture.
-  if (!state.pendingChainPiece && isStep) {
-    const allCaptures = getAvailableCaptures(state.board, color);
-    if (allCaptures.length > 0) {
-      return { state, events: [], error: 'A capture is available — you must take it' };
-    }
-  }
+  // Hausregel Partyspiele (Nico 08.11.2026): kein Schlagzwang - ein normaler Zug ist auch erlaubt, wenn ein Schlag ginge.
 
   // Validate the capture target.
   if (isCapture) {
@@ -546,12 +540,7 @@ function move(state, userId, payload) {
   }
 
   const nextColor = newPlayers[nextIdx].color;
-  const captureRequired =
-    newStatus === 'playing' && advanceTurn
-      ? getAvailableCaptures(newBoard, nextColor).length > 0
-      : pendingChainPiece
-        ? true
-        : state.captureRequired;
+  const captureRequired = false;   // Hausregel Partyspiele: kein Schlagzwang (auch nicht mitten in einer Kette)
 
   const logMsg = isCapture
     ? `${player.username} captured a piece${crowned ? ' and was crowned' : ''}${!advanceTurn ? ' — chain continues' : ''}`
@@ -598,7 +587,7 @@ function skipTurn(state, userId) {
 
   const nextIdx = (state.turnState.currentPlayerIndex + 1) % state.players.length;
   const nextColor = state.players[nextIdx].color;
-  const captureRequired = getAvailableCaptures(state.board, nextColor).length > 0;
+  const captureRequired = false;   // Hausregel Partyspiele: kein Schlagzwang
 
   const newState = {
     ...state,
