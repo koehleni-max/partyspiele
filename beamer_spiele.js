@@ -19,7 +19,7 @@ import * as BR from "./brett.js";
 import { brett3dZeigen } from "./brett3d.js";
 import { busAuszug, busHTML } from "./trinken_geburtstag.js";   // Busfahrer an der Wand (Geburtstags-Runde E)
 import { mioAuszug, mioHTML, actAuszug, actHTML } from "./gruppen_geburtstag.js";   // Millionaer (Runde F) und Activity (Restpaket 3c) an der Wand
-import { maednAuszug, maednHTML } from "./maedn.js";   // Mensch aergere dich nicht an der Wand (Vorschlag 147)
+import { maednAuszug, maednHTML, maednNach } from "./maedn.js";   // Mensch aergere dich nicht an der Wand (Vorschlag 147)
 import { asAuszug, asHTML } from "./autoscooter.js";   // Autoscooter an der Wand (Vorschlag 145)
 
 // Zuschauen (Nico 31.10.2026): die fertigen Zweier-Spiele laufen auch an der Wand mit - auch gegen den Computer.
@@ -553,7 +553,8 @@ export function html(raum, p, d, merk, vorbei = false) {
 // Nach dem Einsetzen: Leinwand zeichnen, Reaktions-Flaeche schalten. lokal = {gruen: {key: Zeitpunkt}} des Beamers
 export function nach(el, p, d, lokal, beiGruen) {
   if (p && p.spiel === "brett") brettNach(el, d);
-  const c = el.querySelector("[data-bs-leinwand]");
+  if (p && p.spiel === "maedn") maednNach(el, d);   // 3D-Brett an der Wand (08.11.2026)
+  const c =el.querySelector("[data-bs-leinwand]");
   if (c && d.striche) {
     const g = c.getContext("2d");
     g.fillStyle = "#fffdf8"; g.fillRect(0, 0, c.width, c.height);

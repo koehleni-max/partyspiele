@@ -10,8 +10,12 @@
 //   Handy     Wuerfeln und Figur waehlen (Knopf je ziehbarer Figur, dazu ein kleines Brett).
 //   Beamer    das ganze Brett gross (maednAuszug/maednHTML, beamer_spiele.js haengt sie ein) - alles daran ist oeffentlich.
 //   Computer  Computer-Mitspieler fuellen auf (Knopf in der Spielerliste); sie werfen gern raus und bringen Figuren heim.
+//   3D        (Partyspiele-Kritik Schritt 2, 08.11.2026) Handy und Beamer zeigen das Brett in 3D mit Kamerafahrten und Auftritten
+//             (maedn3d.js, nach dem Einsetzen ueber maedn.nach bzw. maednNach). Das SVG-Brett bleibt im Kasten als Rueckfallweg
+//             ohne WebGL. Figur antippen im 3D-Bild tippt denselben Knopf wie unten in der Liste.
 // Zustand und Zufall nur beim Gastgeber.
 import { esc, knopf, zufall, name } from "./hilfe.js";
+import { maedn3dZeigen } from "./maedn3d.js";
 
 export const MAEDN_MAX = 8, FIGUREN = 4, ARM = 10;
 export const MAEDN_FARBEN = ["#dc2626", "#2563eb", "#16a34a", "#eab308", "#9333ea", "#ea580c", "#0891b2", "#db2777"];
@@ -114,9 +118,19 @@ export const maedn = {
     if (s.phase === "wuerfeln") return { typ: "wurf" };
     return { typ: "zug", f: maednBotWahl(s, i) };
   },
+  // nach dem Einsetzen: 3D-Brett in den Kasten (bleibt ueber Neuzeichnungen erhalten)
+  nach(s, ich, senden, namen) {
+    const c = document.querySelector("#app [data-md3d]");
+    if (!c) return;
+    const tippen = (f) => {
+      const k = document.querySelector(`#app button[data-a='${JSON.stringify({ typ: "zug", f })}']`);
+      if (k) k.click(); else senden({ typ: "zug", f });
+    };
+    maedn3dZeigen(c, { ...s, zwang: maednZwang(s) }, md3dDaten(s, ich < s.n ? ich : -1, namen, false, tippen));
+  },
   render(s, ich, namen) {
     const n = s.n, L = maednLaenge(n), dran = ich === s.dran;
-    const brett = maednSvg(s, namen, dran && s.phase === "ziehen" ? maednZuege(s, ich, s.wurf) : [], ich);
+    const brett = `<div class="brett3d md-3d" data-md3d>${maednSvg(s, namen, dran && s.phase === "ziehen" ? maednZuege(s, ich, s.wurf) : [], ich)}</div>`;
     const leute = `<div class="punkte">${namen.slice(0, n).map((nm, j) => `<span class="${j === s.dran ? "md-dran" : ""}"><i class="md-punkt" style="background:${MAEDN_FARBEN[j]}"></i>${j === s.dran ? "👉 " : ""}${esc(nm)}: ${s.fig[j].filter((r) => r >= L).length}/4 🏠</span>`).join("")}</div>`;
     const regel = `<details class="grundregeln"><summary>📜 So geht's</summary><ul><li>Mit einer 6 kommt eine Figur aus dem Haus aufs Startfeld. Nach einer 6 darfst du nochmal.</li>
       <li>Steht keine Figur auf dem Weg, hast du drei Versuche für die 6.</li><li>Landest du auf einer fremden Figur, fliegt sie raus – zurück ins Haus.</li>
@@ -198,16 +212,36 @@ export function maednSvg(s, namen, waehlbar = [], ich = -1) {
   return `<div class="md-brett"><svg viewBox="-2 -2 104 104" role="img" aria-label="Spielbrett">${h}${w}</svg></div>`;
 }
 
+// ---------------------------------------------------------------- 3D (maedn3d.js): Brett, Spieler und waehlbare Zuege
+// wahl nur fuer den Spieler am Zug in der Ziehphase: { f, nach, schlag } - dieselben Zuege wie die Knoepfe (maednZuege)
+function md3dDaten(s, ich, namen, beamer, tippen = null) {
+  const n = s.n, L = maednLaenge(n);
+  const wahl = !beamer && ich >= 0 && ich === s.dran && s.phase === "ziehen" && s.wurf ? maednZuege(s, ich, s.wurf).map((f) => {
+    const nach = maednZiel(s, ich, f, s.wurf), b = nach < L ? besetzt(s, maednAbs(ich, nach, n)) : null;
+    return { f, nach, schlag: !!b && b[0] !== ich };
+  }) : [];
+  return { n, P: maednPunkte(n), abs: (j, r) => maednAbs(j, r, n), sitz: (j) => maednSitz(j, n), farben: MAEDN_FARBEN, namen: (namen || []).slice(0, n), ich, beamer, wahl, tippen };
+}
+
 // ---------------------------------------------------------------- Beamer (alles oeffentlich)
-export const maednAuszug = (s) => JSON.parse(JSON.stringify({ n: s.n, fig: s.fig, dran: s.dran, wurf: s.wurf, versuche: s.versuche, phase: s.phase, sieger: s.sieger, letzt: s.letzt, runde: s.runde, zwang: maednZwang(s) }));
+// wuerfe (08.11.2026): zaehlt die Wuerfe, damit die Wand auch zwei gleiche Wuerfe hintereinander als Wurf zeigt
+export const maednAuszug = (s) => JSON.parse(JSON.stringify({ n: s.n, fig: s.fig, dran: s.dran, wurf: s.wurf, versuche: s.versuche, phase: s.phase, sieger: s.sieger, letzt: s.letzt, runde: s.runde, zwang: maednZwang(s), wuerfe: s.wuerfe || 0 }));
+// nach dem Einsetzen an der Wand: 3D-Brett in den Kasten (beamer_spiele.js ruft das auf)
+let wandNamen = [];
+export function maednNach(el, d) {
+  const c = el && el.querySelector("[data-md3d]");
+  if (!c || !d || !Array.isArray(d.fig)) return;
+  try { maedn3dZeigen(c, d, md3dDaten(d, -1, wandNamen, true)); } catch (e) { console.error(e); }
+}
 export function maednHTML(d, nm, sp, kopf) {
   stil();
+  wandNamen = nm.slice(0, d.n);
   const L = maednLaenge(d.n);
   const text = d.phase === "ende" ? `🏆 ${esc(nm[d.sieger] || "")} gewinnt!` : `${esc(nm[d.dran] || "")} ist dran${d.wurf ? ` · gewürfelt ${d.wurf}` : ""}`;
   const leute = nm.slice(0, d.n).map((x, j) => `<div class="mdb-sp ${j === d.dran ? "an" : ""}"><i style="background:${MAEDN_FARBEN[j]}"></i>${esc(x)}<b>${d.fig[j].filter((r) => r >= L).length}/4</b></div>`).join("");
   const letzt = d.letzt ? `<div class="mdb-letzt">${maednLetztText(d, nm).replace(/<b class="n\d+">/g, "<b>")}</div>` : "";
   const zwang = d.zwang && d.phase === "ziehen" ? `<div class="mdb-zwang">💥 Schlagzwang!</div>` : "";
-  return `<div class="bsmaedn">${kopf(sp, text)}<div class="mdb">${maednSvg(d, nm)}<div class="mdb-liste">${zwang}${leute}${letzt}</div></div></div>`;
+  return `<div class="bsmaedn">${kopf(sp, text)}<div class="mdb"><div class="brett3d md-3d md3-beamer" data-md3d>${maednSvg(d, nm)}</div><div class="mdb-liste">${zwang}${leute}${letzt}</div></div></div>`;
 }
 
 let stilDa = false;
@@ -223,8 +257,33 @@ function stil() {
     .mdb .md-brett{max-width:none;width:min(78vh,60vw);margin:0}
     .mdb-liste{display:flex;flex-direction:column;gap:.8vh;font-size:1.8vw;color:#fff}
     .mdb-sp{display:flex;align-items:center;gap:.8vw;padding:.4vh 1vw;border-radius:1vw;overflow-wrap:anywhere}.mdb-sp.an{background:#ffffff26;font-weight:800}
-    .mdb-sp i{width:1.4vw;height:1.4vw;border-radius:50%;flex:none}.mdb-sp b{margin-left:auto}
+    .mdb-sp i{width:1.4vw;height:1.4vw;border-radius:50%;flex:none}.mdb-sp b{margin-left:auto;white-space:nowrap}
     .mdb-letzt{margin-top:1.5vh;font-size:1.5vw;opacity:.9}
+    .md-3d{max-width:min(96vw,560px);margin:.5em auto;min-height:0}.md-3d.hat-3d>.md-brett{display:none}.md-3d>.md-brett{margin:0;max-width:none}
+    .md-3d canvas{display:block;width:100%;touch-action:manipulation}
+    .md3-ui{position:absolute;inset:0;pointer-events:none;--md3-farbe:#fff}
+    .md3-dran{position:absolute;left:8px;top:8px;max-width:calc(100% - 150px);display:flex;align-items:center;gap:8px;padding:5px 12px 5px 6px;border-radius:99px;
+      background:#0b0d1ad9;color:#fff;box-shadow:0 0 0 2px var(--md3-farbe),0 0 16px var(--md3-farbe);transition:box-shadow .3s}
+    .md3-dran.ich{animation:md3-ich 1s ease-in-out infinite alternate}@keyframes md3-ich{to{box-shadow:0 0 0 3px var(--md3-farbe),0 0 28px var(--md3-farbe)}}
+    .md3-dran i{flex:none;width:22px;height:22px;border-radius:50%;background:var(--md3-farbe);box-shadow:inset 0 -3px 0 #0005,inset 0 2px 0 #fff6}
+    .md3-dran div{min-width:0;line-height:1.15}.md3-name{display:block;font-weight:900;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .md3-dran small{display:block;font-size:12px;font-weight:700;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .md3-zahl{position:absolute;left:50%;top:30%;transform:translate(-50%,-50%);text-align:center;max-width:90%}
+    .md3-zahl b{display:block;font-size:min(20vw,96px);line-height:1;font-weight:900;color:var(--md3-farbe);-webkit-text-stroke:3px #0009;
+      text-shadow:0 5px 0 #0007,0 0 34px var(--md3-farbe);animation:md3-pop .55s cubic-bezier(.2,1.7,.4,1)}
+    .md3-zahl small{display:inline-block;margin-top:4px;padding:3px 12px;border-radius:99px;background:#000b;color:#fff;font-weight:800;font-size:14px;overflow-wrap:anywhere}
+    @keyframes md3-pop{from{transform:scale(.15) rotate(-25deg);opacity:0}to{transform:scale(1);opacity:1}}
+    .md3-marke{position:absolute;right:8px;bottom:8px;padding:4px 11px;border-radius:99px;background:#0b0d1ad9;color:#fff;font-weight:900;font-size:16px;box-shadow:0 0 0 2px var(--md3-farbe)}
+    .md3-sieg{position:absolute;left:50%;bottom:10%;transform:translateX(-50%);max-width:90%;padding:8px 18px;border-radius:16px;text-align:center;overflow-wrap:anywhere;
+      background:linear-gradient(#ffe68a,#f5a623);color:#3a2200;font-weight:900;font-size:20px;box-shadow:0 6px 0 #0006,0 0 30px #ffd23f;animation:md3-pop .6s cubic-bezier(.2,1.6,.4,1)}
+    .md3-knall{position:absolute;left:50%;top:17%;transform:translateX(-50%);max-width:80%;padding:5px 14px;border-radius:14px;text-align:center;overflow-wrap:anywhere;
+      background:#0b0d1ae6;color:#fff;font-weight:900;font-size:16px;box-shadow:0 0 0 3px var(--md3-knall,#fff),0 0 26px var(--md3-knall,#fff);animation:md3-pop .45s cubic-bezier(.2,1.7,.4,1)}
+    .md3-ui [hidden]{display:none!important}
+    .mdb .md-3d.md3-beamer{width:min(64vw,118vh);height:74vh;max-width:none;margin:0}.md3-beamer canvas{height:100%!important}
+    .md3-beamer .md3-dran{left:1vw;top:1vw;gap:.7vw;padding:.45vw 1.3vw .45vw .5vw;max-width:calc(100% - 14vw)}.md3-beamer .md3-dran i{width:2vw;height:2vw}
+    .md3-beamer .md3-name{font-size:1.9vw}.md3-beamer .md3-dran small{font-size:1.2vw}
+    .md3-beamer .md3-zahl b{font-size:11vw}.md3-beamer .md3-zahl small{font-size:1.5vw}.md3-beamer .md3-marke{font-size:1.6vw;right:1vw;bottom:1vw}
+    .md3-beamer .md3-sieg{font-size:2.8vw}.md3-beamer .md3-knall{font-size:2.4vw}.md3-beamer .md3-kamera{font-size:1vw}
     .md-zwang{text-align:center}.mdb-zwang{font-size:2.6vw;font-weight:900;color:#fde047;text-align:center;padding:.6vh 1vw;border-radius:1vw;background:#dc262699;animation:md-blink .6s ease-in-out infinite alternate}
   </style>`);
 }

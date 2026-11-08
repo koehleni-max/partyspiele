@@ -65,24 +65,25 @@ const TEICH_EBBE = -0.08, TEICH_FLUT = 0.34;   // Wasserstand der Teiche: Flut l
 // ---------------------------------------------------------------- Qualitaetsstufen
 // "beamer" (Runde 3, Plan 3.1 G/H): grosses Bild am Ally - Schatten 2048, alle Lichter, volle Partikel, scharfe Pixel;
 // faellt die Bildrate, geht es wie ueberall eine Stufe herunter (bildrateMessen)
-const STUFEN = ["niedrig", "mittel", "hoch", "beamer"];
-const STUFE = {
+// Stufen, Startstufe, Aussehen und "weniger Bewegung" nutzt auch Mensch aergere dich nicht in 3D (maedn3d.js, 08.11.2026)
+export const STUFEN = ["niedrig", "mittel", "hoch", "beamer"];
+export const STUFE = {
   beamer: { pr: 1.5, schatten: 2048, lichter: 3, partikel: 1, leuchten: true, ziel: 46 },
   hoch: { pr: 2, schatten: 2048, lichter: 3, partikel: 1, leuchten: true, ziel: 46 },
   mittel: { pr: 1.5, schatten: 1024, lichter: 2, partikel: 0.6, leuchten: false, ziel: 38 },
   niedrig: { pr: 1, schatten: 0, lichter: 0, partikel: 0.3, leuchten: false, ziel: 38 },
 };
-function startStufe(beamer = false) {
+export function startStufe(beamer = false) {
   const vor = (typeof globalThis !== "undefined" && globalThis.__brettQualitaet) || lsLesen("pa_brett_qualitaet");
   if (STUFE[vor]) return { stufe: vor, fest: true };
   if (beamer) return { stufe: "beamer", fest: false };
   const handy = (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) || window.innerWidth < 700;
   return { stufe: handy ? "mittel" : "hoch", fest: false };
 }
-const wenigBewegung = () => !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+export const wenigBewegung = () => !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 
 // ---------------------------------------------------------------- Aussehen je Anlass
-const LOOKS = {
+export const LOOKS = {
   halloween: { nebel: 0x170d22, hemi: [0x9d8cff, 0x2a1206, 0.75], licht: [0xc4ccff, 1.7], lichtPos: [-8, 17, 6], gras: 0x3a5a2e, erde: 0x3b2416,
     wasser: 0x140c26, weg: 0x7a6650, krone: 0x1f3d2c, nacht: true, belichtung: 1.2, himmel: "nacht" },
   edel: { nebel: 0x120c08, hemi: [0xffe2b0, 0x2a1a10, 0.95], licht: [0xffd9a0, 2.1], lichtPos: [9, 15, 5], gras: 0x2f6b45, erde: 0x5a3a22,
@@ -96,7 +97,7 @@ const LOOKS = {
   kaufhaus: { nebel: 0x14101f, hemi: [0xfff0e0, 0x3a2f55, 1.25], licht: [0xfff4e6, 2.0], lichtPos: [6, 18, 7], gras: 0xd8d2e6, erde: 0x4a4560,
     wasser: 0x171228, weg: 0xf0d9a8, krone: 0x2f9e4f, nacht: true, belichtung: 1.0, innen: true, himmel: "nacht" },
 };
-const lookVon = () => { const l = document.body && document.body.dataset.look; return LOOKS[l] ? l : "normal"; };
+export const lookVon = () => { const l = document.body && document.body.dataset.look; return LOOKS[l] ? l : "normal"; };
 
 // ---------------------------------------------------------------- Texturen (selbst gemalt, je Art einmal)
 const texCache = new Map();
