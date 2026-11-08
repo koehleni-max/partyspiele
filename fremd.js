@@ -1,6 +1,7 @@
 // Adapter fuer fertige Spiele aus "LAN Games" (kbennett2000, MIT): deren Regelwerk laeuft beim Gastgeber,
 // deren Anzeige auf jedem Handy; englische Texte werden beim Anzeigen ins Deutsche uebertragen.
 import { esc, knopf } from "./hilfe.js";
+import { spiele as klang } from "./ton.js";
 import * as VIER from "./fremd/connect-four.js";
 import * as TTT from "./fremd/tic-tac-toe.js";
 import * as WUERFEL from "./fremd/yahtzee.js";
@@ -45,6 +46,32 @@ function uebersetzen(knoten) {
 
 const buehnen = {};
 let aktuelleAnsicht = null;
+const gefeiert = new Set();
+
+// ---------------------------------------------------------------- Studio-Look (Partyspiele-Kritik Schritt 4a, 08.11.2026)
+// Leiste "wer ist dran" ueber jedem fertigen Spiel: jede Person mit ihrer Spielfarbe (Stein-/Scheibenfarbe des Regelwerks),
+// wer am Zug ist, leuchtet und pulsiert, am eigenen Handy "Du bist dran!". Nach dem Spiel eine Siegertafel mit Pokal.
+const FARBWORT = { red: "#ef3b2c", black: "#4a4b55", yellow: "#ffd23f", blue: "#3b82f6", green: "#22c55e", white: "#e5e7eb" };
+const RESERVE = ["#ff5fae", "#3fd0ff", "#ffd23f", "#5ef08a", "#ff8020", "#c020e0"];
+function spielerFarbe(p, j) {
+  const f = p && (p.colorHex || p.color);
+  return (f && (FARBWORT[f] || (/^#[0-9a-f]{3,8}$/i.test(f) ? f : null))) || RESERVE[j % RESERVE.length];
+}
+function spielerLeiste(s, ich, namen, dran) {
+  const sp = (s.st && s.st.players) || [];
+  if (sp.length < 2) return "";
+  return `<div class="st-leiste">${sp.map((p, j) => `<span class="st-sp ${j === dran ? "an" : ""} ${j === ich ? "ich" : ""}" style="--f:${spielerFarbe(p, j)}"><i></i><b>${esc(j === ich ? `Du (${namen[j] || p.username || ""})` : namen[j] || p.username || `Spieler ${j + 1}`)}</b></span>`).join("")}</div>`;
+}
+function siegTafel(s, ich, namen, vorbei) {
+  if (!vorbei) return "";
+  const w = s.st && s.st.winner, sieger = w === null || w === undefined ? [] : [w].flat().map(Number).filter((j) => Number.isInteger(j));
+  const mitspieler = ((s.st && s.st.players) || []).length;
+  if (!sieger.length) return `<div class="st-sieg verloren"><span class="pokal">🤝</span><b>Unentschieden!</b><small>Niemand hat gewonnen – noch eine Partie?</small></div>`;
+  const nm = sieger.map((j) => (j === ich ? "Du" : namen[j] || `Spieler ${j + 1}`));
+  const ichGewinne = sieger.includes(ich), ichSpiele = ich < mitspieler;
+  const text = ichGewinne ? (sieger.length > 1 ? `${nm.join(" & ")} gewinnt gemeinsam!` : "Du gewinnst!") : `${nm.join(" & ")} ${sieger.length > 1 ? "gewinnen" : "gewinnt"}!`;
+  return `<div class="st-sieg ${ichSpiele && !ichGewinne ? "verloren" : ""}"><span class="pokal">${ichSpiele && !ichGewinne ? "🥈" : "🏆"}</span><b>${esc(text)}</b><small>${ichSpiele && !ichGewinne ? "Knapp vorbei – Revanche?" : "Glückwunsch!"}</small></div>`;
+}
 
 // kettenEnde (Dame): mitten in einer Schlagkette darf man aufhoeren - Knopf schickt "skipTurn", das sonst abgelehnt wird
 function fremdSpiel({ id, name, emoji, kurz, farben, M, regeln, gruppe, bot, kettenEnde }) {
@@ -101,7 +128,7 @@ function fremdSpiel({ id, name, emoji, kurz, farben, M, regeln, gruppe, bot, ket
         ? knopf("🎲 Flotte zufällig aufstellen", { typ: "zufall" }, "gross zufall-flotte") : "";
       const kette = kettenEnde && !zuschauer && !vorbei && s.st.pendingChainPiece && s.st.turnState && s.st.turnState.currentPlayerIndex === ich
         ? `<div class="hinweisbox kettenende">⚔️ Du darfst noch einmal schlagen – musst aber nicht.${knopf(kettenEnde, { typ: "fremd", action: "skipTurn" }, "gross gelb")}</div>` : "";
-      return `${flotteKnopf}${kette}${zuschauer ? `<div class="hinweisbox warten">👀 Dieses Spiel ist für ${mitspieler} Spieler – du schaust zu.</div>` : ""}
+      return `${siegTafel(s, ich, namen, vorbei)}${vorbei ? "" : spielerLeiste(s, ich, namen, s.st && s.st.turnState ? s.st.turnState.currentPlayerIndex : null)}${flotteKnopf}${kette}${zuschauer ? `<div class="hinweisbox warten">👀 Dieses Spiel ist für ${mitspieler} Spieler – du schaust zu.</div>` : ""}
         <div id="fremd-platz" class="fremd-platz"></div>
         ${s.fehler && s.fehler.i === ich ? `<div class="hinweisbox" data-key="f${s.fehler.n}">⚠️ ${esc(uebersetzt(s.fehler.text))}</div>` : ""}
         ${vorbei ? `<i hidden data-ergebnis="f${s.partie}-${s.nr}"></i>${knopf("🔄 Neue Partie", { typ: "neu" }, "gross")}` : ""}
@@ -111,6 +138,8 @@ function fremdSpiel({ id, name, emoji, kurz, farben, M, regeln, gruppe, bot, ket
     nach(s, ich, senden) {
       const platz = document.getElementById("fremd-platz");
       if (!platz) return;
+      // Siegesmoment: einmal je Partie und Geraet die Fanfare (Studio-Look, Schritt 4a)
+      if (document.querySelector("#app .st-sieg") && !gefeiert.has(`${id}-${s.partie}`)) { gefeiert.add(`${id}-${s.partie}`); try { klang("sieg"); } catch (e) { /* ohne Ton */ } }
       const schluessel = `${id}-${s.partie}-${ich}`;
       let b = buehnen[schluessel];
       const uid = String(ich);

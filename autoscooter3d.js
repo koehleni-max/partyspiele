@@ -33,6 +33,8 @@ const zufallFest = (k) => { const x = Math.sin(k * 91.7 + 13.1) * 43758.5453; re
 const wDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 const kurz = (t, n = 14) => (String(t || "").length > n ? String(t).slice(0, n - 1) + "…" : String(t || ""));
 const MEDAILLE = ["🥇", "🥈", "🥉"];
+const lsLesen = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSchreiben = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* privater Modus */ } };
 // Zeiten in Sekunden (fuer die Tests auslesbar)
 export const AS3_ZEIT = { podest: 1.7, plus: 1.1, funken: 0.7, ring: 0.55, los: 0.9 };
 
@@ -131,7 +133,8 @@ function wagenTeile() {
   const lack = vereinen([
     hochziehen(rundRechteck(0.62, 0.5, 0.14, 0.2), 0.16, 0.05, 0.1),                         // Wanne
     (() => { const k = new THREE.SphereGeometry(0.24, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2); k.scale(0.9, 0.55, 1.0); k.translate(0.16, 0.34, 0); return k; })(), // Haube vorn
-    (() => { const f = new THREE.BoxGeometry(0.1, 0.2, 0.44); f.translate(-0.3, 0.42, 0); return f; })(),                  // Heck-Rueckenblech
+    // Heck-Rueckenblech: oben rund (Halbscheibe) - so sieht man es hinter dem Wagen (Verfolger-Kamera, Nachtrag 08.11.2026)
+    (() => { const f = new THREE.CylinderGeometry(0.23, 0.23, 0.09, 28, 1, false, 0, Math.PI); f.rotateZ(Math.PI / 2); f.translate(-0.3, 0.31, 0); return f; })(),
   ]);
   const gummi = (() => { const t = new THREE.TorusGeometry(0.34, 0.068, 12, 48); t.rotateX(Math.PI / 2); t.scale(1.12, 1, 0.88); t.translate(0, 0.14, 0); return t; })();
   const dunkel = vereinen([
@@ -320,7 +323,7 @@ function aufbauen(o, n) {
   g = { renderer, scene, camera, mess, sonne, strahler, blitz, birnen, birnenOrte, dachBirnenAb, W3, autos, n, W, H, pfeil, ring, stangenFunken, funken, funkDaten: [], ringe, konfetti, konfDaten,
     podest, kegel, beamer: !!o.beamer, o, stufe: st.stufe, stufeFest: st.fest, mess_dt: [], bilder: 0, uhr: new THREE.Clock(), offsets: [], offMin: null, phase: null, runde: 0, start: 0, bis: 0,
     punkte: [], stoesse: 0, gesehen: new Set(), offen: [], eingabe: { l: 0, turboT: 0 }, kam: { a: Math.PI / 2, e: 0.9, d: 14, l: V() }, kamSprung: true, wackel: 0, stossZiel: null,
-    intro: null, sieg: null, countZuletzt: null, letztT: -1, zaehler: { knall: 0, turbo: 0, plus: 0, sieg: 0, countdown: 0, snaps: 0, vorausgerechnet: 0 }, mess_: null, ui: null, laeuft: false, container: null, groesse: null };
+    intro: null, sieg: null, countZuletzt: null, letztT: -1, folgen: lsLesen("pa_as_kamera") !== "oben", vMix: 0, kick: null, zaehler: { knall: 0, turbo: 0, plus: 0, sieg: 0, countdown: 0, snaps: 0, vorausgerechnet: 0 }, mess_: null, ui: null, laeuft: false, container: null, groesse: null };
   SC.himmelSetzen(g, "nacht");
   g.scene.environmentIntensity = 0.45;
   // Fahrer: Kenney-Figuren in Spielerfarbe; fehlen die Dateien, bleiben Kopf und Rumpf aus einfachen Formen
@@ -536,13 +539,16 @@ function autosSetzen(dt, t, T, hostJetzt) {
   // eigener Wagen: Pfeil und Ring
   const meins = ich >= 0 && g.autos[ich];
   g.pfeil.visible = g.ring.visible = !!meins && g.phase !== "ende";
+  if ((g.vMix || 0) > 0.5) g.pfeil.visible = false;   // hinter dem Wagen stoert der Pfeil nur
   if (meins) {
     const p = _v.setFromMatrixPosition(meins.matrix), farbe = meins.farbe;
     g.pfeil.position.set(p.x, 1.25 + Math.sin(t * 4) * 0.06, p.z); g.pfeil.rotation.y = t * 2; g.pfeil.material.color.copy(farbe).multiplyScalar(2.2);
     g.ring.position.set(p.x, 0.02, p.z); const rs = 1 + Math.sin(t * 5) * 0.06; g.ring.scale.set(rs, 1, rs); g.ring.material.color.copy(farbe).multiplyScalar(2.4);
   }
   if (g.mess_) {
-    g.mess_.push({ dt, zeige: g.autos.map((a) => [a.zx, a.zy]), roh: g.autos.map((a) => { const z = a.puffer[a.puffer.length - 1]; return z ? [z.x, z.y] : [0, 0]; }) });
+    // kam: Kamera des letzten Bildes (Lage und Blickwinkel) - fuer die Ruckel-Probe der Verfolger-Kamera
+    g.mess_.push({ dt, zeige: g.autos.map((a) => [a.zx, a.zy]), roh: g.autos.map((a) => { const z = a.puffer[a.puffer.length - 1]; return z ? [z.x, z.y] : [0, 0]; }),
+      kam: [g.camera.position.x, g.camera.position.y, g.camera.position.z, g.vYaw ?? 0, g.kick || g.wackel > 0.05 ? 1 : 0, g.vDreh || 0] });
     if (g.mess_.length > 4000) g.mess_.shift();
   }
 }
@@ -582,8 +588,10 @@ function knall(k, t, meiner) {
   const r = g.ringe.find((x) => x.t > AS3_ZEIT.ring) || g.ringe[0];
   r.t = 0; r.m.visible = true; r.m.position.set(ort.x, 0.03, ort.z); r.s = 0.5 + wucht * 0.9;
   if (g.blitz.visible) { g.blitz.position.copy(ort).setY(0.9); g.blitz.intensity = 22 * wucht; }
-  g.wackel = Math.max(g.wackel, 0.35 + wucht * 0.65);
+  // hinter dem Wagen wackelt nur der eigene Stoss richtig (fremde Stoesse nur ein Hauch)
+  g.wackel = Math.max(g.wackel, (0.35 + wucht * 0.65) * (verfolger() && !meiner ? 0.2 : 1));
   g.stossZiel = { p: ort.clone(), t };
+  if (meiner && verfolger()) { const s = k.a === g.o.ich ? -1 : 1; g.kick = { t, x: (k.nx || 0) * s, z: (k.ny || 0) * s, w: 0.6 + wucht * 0.8 }; g.zaehler.kick = (g.zaehler.kick || 0) + 1; }
   [[k.a, -1, k.pa], [k.b, 1, k.pb]].forEach(([j, s, plus]) => {
     const a = g.autos[j];
     if (!a) return;
@@ -744,7 +752,7 @@ function setzeKamera(cam, a, e, d, l) {
   cam.lookAt(l);
 }
 function passend(a, e, l, pts, oben) {
-  const cam = g.mess; cam.aspect = g.camera.aspect; cam.fov = g.camera.fov; cam.updateProjectionMatrix();
+  const cam = g.mess; cam.aspect = g.camera.aspect; cam.fov = VF.fovOben; cam.updateProjectionMatrix();
   let lo = 2, hi = 80;
   for (let i = 0; i < 20; i++) { const d = (lo + hi) / 2; setzeKamera(cam, a, e, d, l); cam.updateMatrixWorld(); if (randWert(cam, pts, oben) > 1) lo = d; else hi = d; }
   return hi;
@@ -777,16 +785,86 @@ function zielPose(t) {
   if (g.stossZiel && t - g.stossZiel.t < 0.45 && !wenigBewegung()) { const k = 1 - (t - g.stossZiel.t) / 0.45; l.lerp(g.stossZiel.p.clone().setY(0), 0.08 * k); d *= 1 - 0.035 * k; }
   return { a, e, d, l };
 }
+// ---- Verfolger-Kamera am Handy (Nachtrag Nico 08.11.2026 22:45: "2,5D, nicht 3D" - Kamera hinter dem eigenen Wagen, faehrt
+// und dreht mit). Die Kamera haengt hinter und ueber dem eigenen Fahrer; die Blickrichtung folgt dem Wagen gefedert und
+// hoechstens VF.dreh rad/s schnell (Abprall an der Bande wirbelt nicht herum - kein Schwindel), der Horizont bleibt gerade.
+// Eigener Stoss: Ruck weg vom Gegner, kurzes Wackeln, Sichtfeld zuckt auf (dazu Funken, Blitz, Vibration wie bisher).
+// Turbo weitet das Sichtfeld. Wand/Beamer und Siegerehrung bleiben in der Uebersicht von oben; Umschalter im Bild.
+export const VF = { hinten: 1.75, hoehe: 0.82, vorne: 1.7, blickHoehe: 0.28, fov: 64, fovTurbo: 9, fovOben: 38, dreh: 2.6, feder: 3.4, ruck: 0.12 };
+function verfolger() {
+  const ich = g.beamer ? -1 : g.o.ich;
+  return ich >= 0 && g.autos[ich] && !g.sieg && g.folgen ? g.autos[ich] : null;
+}
+const _cp = V(), _cz = V(), _ov = V(), _ol = V();
+function verfolgerPose(a, dt, t) {
+  const VF_ = VF, fest = wenigBewegung();
+  if (g.vYaw === undefined || g.vSprung) { g.vYaw = a.zw; g.vSprung = false; }
+  const fehl = wDiff(a.zw, g.vYaw), k = fest ? 1 : 1 - Math.exp(-dt * VF_.feder);
+  const schritt = Math.min(Math.abs(fehl) * k, VF_.dreh * dt * (Math.abs(fehl) > 1.2 ? 1 : 1.6));
+  g.vYaw += Math.sign(fehl) * schritt;
+  g.vDreh = dt > 0 ? schritt / dt : 0;   // fuer die Messung: Drehtempo der Blickrichtung (rad/s)
+  const fx = Math.cos(g.vYaw), fz = Math.sin(g.vYaw);
+  _cp.setFromMatrixPosition(a.matrix); _cp.y = 0;
+  const pos = V(_cp.x - fx * VF_.hinten, VF_.hoehe, _cp.z - fz * VF_.hinten);
+  // nicht durch die Saeulen am Rand: Kamera bleibt innerhalb des Dachs
+  pos.x = Math.max(-g.W - 1.1, Math.min(g.W + 1.1, pos.x)); pos.z = Math.max(-g.H - 0.9, Math.min(g.H + 0.9, pos.z));
+  const ziel = V(_cp.x + fx * VF_.vorne, VF_.blickHoehe, _cp.z + fz * VF_.vorne);
+  // eigener Stoss: Ruck (gedaempfte Schwingung entlang der Stossrichtung)
+  if (g.kick && !fest) {
+    const u = t - g.kick.t;
+    if (u > 1.2) g.kick = null;
+    else { const s = Math.exp(-u * 6) * Math.sin(u * 22) * VF_.ruck * g.kick.w; pos.x += g.kick.x * s; pos.z += g.kick.z * s; pos.y += Math.abs(s) * 0.4; }
+  }
+  return { pos, ziel };
+}
 function kameraBewegen(dt, t) {
   const z = zielPose(t), Kp = g.kam, f = wenigBewegung() ? 1 : 1 - Math.exp(-dt * 3.2);
-  if (g.kamSprung) { Kp.a = z.a; Kp.e = z.e; Kp.d = z.d; Kp.l.copy(z.l); g.kamSprung = false; }
+  if (g.kamSprung) { Kp.a = z.a; Kp.e = z.e; Kp.d = z.d; Kp.l.copy(z.l); }
   Kp.a += wDiff(z.a, Kp.a) * f; Kp.e += (z.e - Kp.e) * f; Kp.d += (z.d - Kp.d) * f; Kp.l.lerp(z.l, f);
   setzeKamera(g.camera, Kp.a, Kp.e, Kp.d, Kp.l);
+  // Mischung Uebersicht <-> Verfolger (weicher Uebergang beim Umschalten und zur Siegerehrung)
+  const a = verfolger(), soll = a ? 1 : 0;
+  if (g.kamSprung || wenigBewegung()) g.vMix = soll;
+  else g.vMix = (g.vMix || 0) + (soll - (g.vMix || 0)) * (1 - Math.exp(-dt * 2.4));
+  if (Math.abs(g.vMix - soll) < 0.002) g.vMix = soll;
+  g.kamSprung = false;
+  let fov = VF.fovOben;
+  if (g.vMix > 0) {
+    const meins = a || g.autos[g.o.ich];
+    if (meins) {
+      const v = verfolgerPose(meins, dt, t), m = sanftMix(g.vMix);
+      _ov.copy(g.camera.position); _ol.copy(Kp.l);
+      g.camera.position.lerpVectors(_ov, v.pos, m);
+      g.camera.lookAt(_cz.lerpVectors(_ol, v.ziel, m));
+      const turboT = meins.turbo ? 1 : 0;
+      g.vTurbo = (g.vTurbo || 0) + (turboT - (g.vTurbo || 0)) * (1 - Math.exp(-dt * 4));
+      fov = VF.fovOben + (VF.fov + VF.fovTurbo * g.vTurbo + (g.kick ? 6 * Math.exp(-(t - g.kick.t) * 6) * g.kick.w : 0) - VF.fovOben) * m;
+    }
+  } else g.vSprung = true;
+  if (Math.abs(g.camera.fov - fov) > 0.01) { g.camera.fov = fov; g.camera.updateProjectionMatrix(); }
   g.wackel *= Math.exp(-dt * 5.5);
   if (g.wackel > 0.01 && !wenigBewegung()) {
-    const s = g.wackel * 0.07;
+    // nah am Wagen weniger Weg (sonst schwindelt es), in der Uebersicht wie bisher; kein Kippen hinter dem Wagen
+    const s = g.wackel * (0.07 - 0.045 * (g.vMix || 0));
     g.camera.position.add(_v.set(Math.sin(t * 61) * s, Math.sin(t * 47 + 1) * s * 0.6, Math.sin(t * 53 + 2) * s));
-    g.camera.rotateZ(Math.sin(t * 37) * g.wackel * 0.006);
+    if ((g.vMix || 0) < 0.5) g.camera.rotateZ(Math.sin(t * 37) * g.wackel * 0.006);
+  }
+  // Lage der Kamera sofort festschreiben: Namensschilder und Punkte werden vor dem Zeichnen mit ihr ins Bild gerechnet
+  // (lookAt rechnet intern mit der alten Drehung - ohne das stuenden die Schilder hinter dem Wagen alle ausserhalb)
+  g.camera.updateMatrixWorld();
+}
+const sanftMix = (u) => u * u * (3 - 2 * u);
+// Umschalter im Bild (Handy): hinter dem Wagen / von oben; gemerkt im Geraet
+function kameraSchalter() {
+  if (g.beamer || !g.ui) return;
+  let el = g.ui.kamEl;
+  if (!el) {
+    el = g.ui.kamEl = document.createElement("span"); el.className = "as3-kamera"; el.setAttribute("role", "button"); el.tabIndex = 0;
+    const um = (ev) => { ev.preventDefault(); ev.stopPropagation(); g.folgen = !g.folgen; lsSchreiben("pa_as_kamera", g.folgen ? "hinten" : "oben"); zeigen(); };
+    const zeigen = () => { el.textContent = g.folgen ? "🗺️ Von oben" : "🎥 Hinter dem Wagen"; };
+    el.addEventListener("click", um); el.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") um(ev); });
+    el.addEventListener("pointerdown", (ev) => ev.stopPropagation());
+    zeigen(); g.ui.el.appendChild(el);
   }
 }
 
@@ -794,10 +872,89 @@ function kameraBewegen(dt, t) {
 function uiBauen() {
   const ui = document.createElement("div"); ui.className = "as3-ui";
   ui.innerHTML = `<div class="as3-uhr"><b>–</b><small></small></div><div class="as3-platz" hidden></div><div class="as3-rang" hidden></div>
-    <div class="as3-namen"></div><div class="as3-plusse"></div><div class="as3-count" hidden></div><div class="as3-sieg" hidden><b></b><small></small></div><div class="as3-blitz"></div>`;
-  return { el: ui, uhr: ui.querySelector(".as3-uhr b"), uhrKlein: ui.querySelector(".as3-uhr small"), uhrBox: ui.querySelector(".as3-uhr"), platz: ui.querySelector(".as3-platz"), rang: ui.querySelector(".as3-rang"),
+    <div class="as3-namen"></div><div class="as3-plusse"></div><canvas class="as3-karte" width="184" height="184" hidden></canvas><div class="as3-count" hidden></div><div class="as3-sieg" hidden><b></b><small></small></div><div class="as3-blitz"></div>`;
+  return { el: ui, karte: ui.querySelector(".as3-karte"), uhr: ui.querySelector(".as3-uhr b"), uhrKlein: ui.querySelector(".as3-uhr small"), uhrBox: ui.querySelector(".as3-uhr"), platz: ui.querySelector(".as3-platz"), rang: ui.querySelector(".as3-rang"),
     namen: ui.querySelector(".as3-namen"), plus: ui.querySelector(".as3-plusse"), count: ui.querySelector(".as3-count"), sieg: ui.querySelector(".as3-sieg"),
     siegB: ui.querySelector(".as3-sieg b"), siegS: ui.querySelector(".as3-sieg small"), blitz: ui.querySelector(".as3-blitz"), schilder: [], zeilen: [], sig: {} };
+}
+// Rangliste umsortieren (Abnahme Schritt 3, Nico 08.11.2026: Zeilen ueberlappten beim Umsortieren und standen kurz falsch).
+// Jede Zeile steht immer auf genau einem Platz. Wechseln Plaetze, blenden alle betroffenen Zeilen gemeinsam aus (kurz nach rechts),
+// springen auf den neuen Platz und blenden dort wieder ein. Kommt waehrenddessen ein neuer Stand, folgt er danach (nichts kreuzt).
+export const AS3_RANG = { raus: 0.16, rein: 0.24 };
+function rangUmsortieren(u) {
+  if (u.rangLaeuft || !u.rangZiel) return;
+  const rang = u.rangZiel, wandern = [];
+  const nr = (z, k, p) => { z.querySelector(".as3-nr").textContent = MEDAILLE[k] && p > 0 ? MEDAILLE[k] : `${k + 1}.`; z.dataset.platz = String(k); };
+  rang.forEach(([j, p], k) => {
+    const z = u.zeilen[j];
+    if (z._k === undefined || wenigBewegung()) { z._k = k; z.style.top = `calc(${k} * var(--as3-zeile))`; nr(z, k, p); }
+    else if (z._k !== k) wandern.push([z, k, p]);
+    else nr(z, k, p);
+  });
+  if (!wandern.length) return;
+  u.rangLaeuft = true;
+  wandern.forEach(([z]) => z.classList.add("weg"));
+  setTimeout(() => {
+    wandern.forEach(([z, k, p]) => { z._k = k; z.style.top = `calc(${k} * var(--as3-zeile))`; nr(z, k, p); z.classList.remove("weg"); z.classList.add("rein"); });
+    setTimeout(() => {
+      wandern.forEach(([z]) => z.classList.remove("rein"));
+      u.rangLaeuft = false;
+      if (u.rangZiel !== rang) rangUmsortieren(u);
+    }, AS3_RANG.rein * 1000);
+  }, AS3_RANG.raus * 1000);
+}
+function karteMalen(c, ich) {
+  const x = c.getContext("2d"), S = c.width, sk = (S * 0.92) / Math.hypot(AS.AS_B, AS.AS_H);
+  x.clearRect(0, 0, S, S);
+  x.save(); x.translate(S / 2, S / 2); x.rotate(-Math.PI / 2 - (g.vYaw ?? 0)); x.scale(sk, sk); x.translate(-AS.AS_B / 2, -AS.AS_H / 2);
+  x.fillStyle = "#0b0716cc"; x.strokeStyle = "#facc15"; x.lineWidth = 2.2 / sk * 1.2;
+  x.beginPath(); if (x.roundRect) x.roundRect(0, 0, AS.AS_B, AS.AS_H, 6); else x.rect(0, 0, AS.AS_B, AS.AS_H); x.fill(); x.stroke();
+  g.autos.forEach((a) => {
+    const meins = a.j === ich, r = meins ? 5.2 : 4;
+    x.fillStyle = `#${a.farbe.getHexString()}`; x.beginPath(); x.arc(a.zx, a.zy, r, 0, 7); x.fill();
+    if (meins) {
+      x.lineWidth = 1.6; x.strokeStyle = "#fff"; x.stroke();
+      x.fillStyle = "#fff"; x.beginPath(); x.moveTo(a.zx + Math.cos(a.zw) * 9, a.zy + Math.sin(a.zw) * 9);
+      x.lineTo(a.zx + Math.cos(a.zw + 2.5) * 5, a.zy + Math.sin(a.zw + 2.5) * 5); x.lineTo(a.zx + Math.cos(a.zw - 2.5) * 5, a.zy + Math.sin(a.zw - 2.5) * 5); x.fill();
+    }
+  });
+  x.restore();
+}
+// Namensschilder entwirren: der Reihe nach setzen (das eigene Schild zuerst, dann von oben nach unten). Stoesst ein Schild an
+// ein schon gesetztes, kommt es auf die naechste freie Hoehe direkt darueber oder darunter - die mit dem kuerzesten Weg.
+// So liegt nie eins auf dem anderen; bleibt im Kasten.
+function schilderEntwirren(lage, ich, bh) {
+  const luft = 4, gesetzt = [];
+  const quer = (A, B) => A.x < B.x + B.w + luft && B.x < A.x + A.w + luft;
+  const stoesst = (A, y) => gesetzt.some((B) => quer(A, B) && y < B.y + B.dy + B.h + luft && B.y + B.dy < y + A.h + luft);
+  // Reihenfolge mit Gedaechtnis (sonst tauschen zwei fast gleich hohe Schilder bei jedem Bild die Plaetze und zappeln):
+  // Nachbarn tauschen erst, wenn einer deutlich (12 px) hoeher steht. Das eigene Schild kommt immer zuerst.
+  const nach = new Map(lage.map((A) => [A.j, A]));
+  let ord = (lage[0] && lage[0].s.parentNode && lage[0].s.parentNode._ord) || [];
+  ord = ord.filter((j) => nach.has(j));
+  lage.forEach((A) => { if (!ord.includes(A.j)) ord.push(A.j); });
+  for (let runde = 0; runde < ord.length; runde++) {
+    let getauscht = false;
+    for (let i = 0; i + 1 < ord.length; i++) if (nach.get(ord[i]).y - nach.get(ord[i + 1]).y > 12) { [ord[i], ord[i + 1]] = [ord[i + 1], ord[i]]; getauscht = true; }
+    if (!getauscht) break;
+  }
+  if (lage[0] && lage[0].s.parentNode) lage[0].s.parentNode._ord = ord;
+  const reihe = ord.map((j) => nach.get(j)).sort((A, B) => (B.j === ich) - (A.j === ich));
+  reihe.forEach((A) => {
+    const lo = g.beamer ? 2 : 46, hi = bh - A.h - 2;   // am Handy nicht unter Uhr und Platz-Anzeige oben
+    let y = Math.max(lo, Math.min(hi, A.y));
+    if (stoesst(A, y)) {
+      // freie Hoehen direkt ueber/unter den Nachbarn; die Seite vom letzten Bild bekommt 12 px Vorsprung (kein Hin und Her)
+      const vorher = Math.sign(A.s._ziel || 0), kosten = (c) => Math.abs(c - A.y) + (vorher && Math.sign(c - A.y) !== vorher ? 12 : 0);
+      const kand = [];
+      gesetzt.forEach((B) => { if (quer(A, B)) kand.push(B.y + B.dy - A.h - luft, B.y + B.dy + B.h + luft); });
+      let best = null;
+      kand.filter((c) => c >= lo && c <= hi && !stoesst(A, c)).forEach((c) => { if (best === null || kosten(c) < kosten(best)) best = c; });
+      if (best !== null) y = best;
+    }
+    A.dy = y - A.y;
+    gesetzt.push(A);
+  });
 }
 const uhrText = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 function uiSetzen(t, hostJetzt) {
@@ -834,15 +991,16 @@ function uiSetzen(t, hostJetzt) {
       u.rang.hidden = false;
       while (u.zeilen.length < namen.length) { const z = document.createElement("div"); z.className = "as3-zeile"; z.innerHTML = "<span class='as3-nr'></span><i></i><span class='as3-nm'></span><b></b>"; u.rang.appendChild(z); u.zeilen.push(z); }
       u.zeilen.forEach((z, j) => { z.hidden = j >= namen.length; });
-      rang.forEach(([j, p], k) => {
+      // Punkte sofort, Plaetze ueber rangUmsortieren (nie zwei Zeilen uebereinander)
+      rang.forEach(([j, p]) => {
         const z = u.zeilen[j];
-        z.style.transform = `translateY(${k * 100}%)`; z.style.zIndex = String(100 - k);
         z.style.setProperty("--as3-farbe", o.farben[j % o.farben.length]);
-        z.querySelector(".as3-nr").textContent = MEDAILLE[k] && p > 0 ? MEDAILLE[k] : `${k + 1}.`;
         z.querySelector(".as3-nm").textContent = namen[j];
         const b = z.querySelector("b");
         if (b.textContent !== String(p)) { if (b.textContent) { b.classList.remove("pop"); void b.offsetWidth; b.classList.add("pop"); } b.textContent = String(p); }
       });
+      u.rangZiel = rang;
+      rangUmsortieren(u);
       u.rang.style.height = `calc(${namen.length} * var(--as3-zeile))`;
     } else if (ich >= 0 && ich < namen.length) {
       const p = g.punkte[ich] || 0, k = rang.filter(([, x]) => x > p).length;   // Gleichstand = gleicher Platz
@@ -865,21 +1023,41 @@ function uiSetzen(t, hostJetzt) {
   // Namensschilder ueber den Wagen (bleiben im Kasten)
   const bw = g.groesse ? g.groesse[0] : 360, bh = g.groesse ? g.groesse[1] : 260;
   while (u.schilder.length < g.n) { const s = document.createElement("span"); s.className = "as3-name"; u.namen.appendChild(s); u.schilder.push(s); }
-  g.autos.forEach((a, j) => {
+  // Abnahme Schritt 3 (Nico 08.11.2026): bei Gedraenge nicht uebereinander - Schilder weichen einander nach oben/unten aus;
+  // das eigene Schild bleibt am Wagen, die anderen machen Platz.
+  const lage = g.autos.map((a, j) => {
     const s = u.schilder[j], txt = j === ich ? "Du" : kurz(namen[j] || "", g.beamer ? 16 : 8);
     // Groesse nur nach einem Textwechsel messen (sonst rechnet der Browser jedes Bild die Seite neu)
-    if (s.dataset.t !== txt || !s._w) { s.dataset.t = txt; s.innerHTML = `<i></i>${esc(txt)}`; s.style.setProperty("--as3-farbe", o.farben[j % o.farben.length]); s.classList.toggle("ich", j === ich); s._w = s.offsetWidth; s._h = s.offsetHeight; }
+    if (s.dataset.t !== txt || !s._w) { s.dataset.t = txt; s.innerHTML = `<i></i>${esc(txt)}`; s.style.setProperty("--as3-farbe", o.farben[j % o.farben.length]); s.classList.toggle("ich", j === ich); s._w = s.offsetWidth + 1; s._h = s.offsetHeight + 1; }   // +1: Bruchteile (Schrift in vw)
     _v.setFromMatrixPosition(a.matrix); _v.y += a.podest ? 1.15 : 0.95; _v.project(g.camera);
     const sw = s._w || 40, sh = s._h || 16;
+    // hinter dem Wagen: das eigene Schild weg (man sitzt ja drin), Wagen hinter der Kamera oder weit ausserhalb ohne Schild
+    const weg = (g.vMix > 0.5 && j === ich) || _v.z > 1 || (g.vMix > 0 && (Math.abs(_v.x) > 1.05 || Math.abs(_v.y) > 1.05));
     const x = Math.max(2, Math.min(bw - sw - 2, ((_v.x + 1) / 2) * bw - sw / 2)), y = Math.max(2, Math.min(bh - sh - 2, ((1 - _v.y) / 2) * bh - sh));
-    s.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px)`;
-    s.style.opacity = g.phase === "ende" && !a.podest ? "0.35" : "1";
+    return { s, j, x, y, w: sw, h: sh, dy: 0, weg };
   });
+  lage.filter((L) => L.weg).forEach((L) => { L.s.style.opacity = "0"; L.s._dy = undefined; });
+  const sicht = lage.filter((L) => !L.weg);
+  schilderEntwirren(sicht, ich, bh);
+  sicht.forEach((L) => {
+    const s = L.s;
+    // genau auf den freien Platz (kein Nachgleiten: gleitende Schilder lagen unter Last kurz uebereinander); ruhig bleibt es
+    // durch die Reihenfolge mit Gedaechtnis und den Seiten-Vorsprung in schilderEntwirren
+    s._ziel = L.dy;
+    s._dy = L.dy;
+    s.style.transform = `translate(${L.x.toFixed(1)}px,${(L.y + s._dy).toFixed(1)}px)`;
+    s.style.opacity = g.phase === "ende" && !g.autos[L.j].podest ? "0.35" : "1";
+  });
+  // Hallenkarte (nur hinter dem Wagen): wer ist wo - gedreht, sodass "vorne" oben ist
+  const karteAn = (g.vMix || 0) > 0.5 && g.phase !== "ende";
+  if (u.karte.hidden === karteAn) u.karte.hidden = !karteAn;
+  if (karteAn && g.bilder % 2 === 0) karteMalen(u.karte, ich);
   // aufschwebende Punkte folgen ihrem Wagen
   u.plus.querySelectorAll(".as3-plus").forEach((el) => {
     const a = g.autos[Number(el.dataset.j)];
     if (!a) return;
     _v.setFromMatrixPosition(a.matrix); _v.y += 1.2; _v.project(g.camera);
+    el.style.visibility = _v.z > 1 ? "hidden" : "";
     const auf = (performance.now() - Number(el.dataset.seit)) / 1000;
     el.style.transform = `translate(${(((_v.x + 1) / 2) * bw).toFixed(1)}px,${(((1 - _v.y) / 2) * bh - auf * 46).toFixed(1)}px) translate(-50%,-100%)`;
   });
@@ -942,6 +1120,7 @@ export function as3dZeigen(container, d, o) {
   if (!g.ui) g.ui = uiBauen();
   if (g.ui.el.parentNode !== container) container.appendChild(g.ui.el);
   g.ui.el.classList.toggle("wand", g.beamer);
+  kameraSchalter();
   groessePruefen();
   if (!g.laeuft) { g.laeuft = true; g.gen = ++generation; g.uhr.getDelta(); schleife(g.gen); }
   return true;
@@ -966,7 +1145,14 @@ export function as3dStand() {
     schwankung: g.offsets.length > 1 ? Math.round(Math.max(...g.offsets.map((x) => x[1])) - g.offMin) : 0,
     eigenL: !g.beamer && g.autos[g.o.ich] && g.autos[g.o.ich].puffer.length ? g.autos[g.o.ich].puffer[g.autos[g.o.ich].puffer.length - 1].l : null,
     countdown: g.ui && !g.ui.count.hidden ? g.ui.count.textContent : "", uhr: g.ui ? g.ui.uhr.textContent : "", sieger: g.ui && !g.ui.sieg.hidden ? g.ui.siegB.textContent : "",
-    platz: g.ui && !g.ui.platz.hidden ? g.ui.platz.textContent : "", rang: g.ui && !g.ui.rang.hidden ? g.ui.zeilen.filter((z) => !z.hidden).map((z) => z.textContent) : [] };
+    platz: g.ui && !g.ui.platz.hidden ? g.ui.platz.textContent : "", rang: g.ui && !g.ui.rang.hidden ? g.ui.zeilen.filter((z) => !z.hidden).sort((x, y) => (x._k ?? 99) - (y._k ?? 99)).map((z) => z.textContent) : [],
+    // Rangliste: Lage jeder sichtbaren Zeile (Bildpunkte) und Namensschilder - fuer die Ueberlappungs-Probe
+    zeilenLage: g.ui && !g.ui.rang.hidden ? g.ui.zeilen.filter((z) => !z.hidden).map((z) => { const r = z.getBoundingClientRect(); return { t: z.textContent, oben: r.top, unten: r.bottom, sicht: +getComputedStyle(z).opacity }; }) : [],
+    schilder: g.ui ? g.ui.schilder.map((s) => { const r = s.getBoundingClientRect(); return { t: s.textContent, l: r.left, r: r.right, o: r.top, u: r.bottom, dy: +(s._dy || 0).toFixed(1), ziel: +(s._ziel || 0).toFixed(1), w: s._w, h: s._h, sicht: s.style.opacity !== "0" }; }) : [],
+    // Verfolger-Kamera (Handy): an?, Mischung, Sichtfeld, eigener Wagen im Bild (Seitenkoordinaten -1..1), Stoss-Rucks
+    verfolger: !!verfolger(), vMix: +(g.vMix || 0).toFixed(2), fov: +g.camera.fov.toFixed(1),
+    eigenImBild: !g.beamer && g.autos[g.o.ich] ? (() => { const p = _v.setFromMatrixPosition(g.autos[g.o.ich].matrix).project(g.camera); return [+p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(3)]; })() : null,
+    vorne: !g.beamer && g.autos[g.o.ich] ? g.autos.filter((a) => a.j !== g.o.ich).filter((a) => { const p = _v.setFromMatrixPosition(a.matrix).project(g.camera); return p.z < 1 && Math.abs(p.x) < 1 && Math.abs(p.y) < 1; }).length : 0 };
 }
 // Bild-fuer-Bild-Messung: gezeigte Lage jedes Wagens und der zuletzt angekommene Stand (so sah es frueher aus)
 export function as3dMessen(an) { if (g) g.mess_ = an ? [] : null; }
@@ -1010,7 +1196,9 @@ if (typeof document !== "undefined" && !document.getElementById("as3-stil")) {
     .as3-blitz.an{animation:as3-blitz .45s ease-out}@keyframes as3-blitz{from{opacity:1}to{opacity:0}}
     .as3-rang{position:absolute;right:0;top:1.2vh;width:19.5%;}
     .as3-zeile{position:absolute;left:0;right:.6vw;top:0;height:var(--as3-zeile);display:flex;align-items:center;gap:.5vw;padding:0 .7vw;box-sizing:border-box;color:#fff;
-      font-size:calc(var(--as3-zeile) * .46);font-weight:800;transition:transform .45s cubic-bezier(.3,1.3,.5,1);isolation:isolate}
+      font-size:calc(var(--as3-zeile) * .46);font-weight:800;transition:opacity ${AS3_RANG.raus}s ease-in,translate ${AS3_RANG.raus}s ease-in;isolation:isolate}
+    .as3-zeile.weg{opacity:0;translate:35% 0}
+    .as3-zeile.rein{animation:as3-rein ${AS3_RANG.rein}s cubic-bezier(.2,.9,.3,1)}@keyframes as3-rein{from{opacity:0;translate:-25% 0}to{opacity:1;translate:0 0}}
     .as3-zeile::before{content:"";position:absolute;inset:6% 0;border-radius:99px;background:#140d26;box-shadow:0 0 0 2px var(--as3-farbe);z-index:-1}
     .as3-zeile .as3-nr{width:2.2em;text-align:center;flex:none}.as3-zeile i{width:.8em;height:.8em;border-radius:50%;background:var(--as3-farbe);flex:none}
     .as3-zeile .as3-nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.as3-zeile b{font-size:1.25em;font-variant-numeric:tabular-nums}
@@ -1020,6 +1208,10 @@ if (typeof document !== "undefined" && !document.getElementById("as3-stil")) {
     .as3-ui.wand .as3-plus{font-size:3vw}.as3-ui.wand .as3-count{left:40%;font-size:16vw}.as3-ui.wand .as3-sieg{left:40%;max-width:72%}
     .as3-ui.wand .as3-sieg b{font-size:3vw}.as3-ui.wand .as3-sieg small{font-size:1.5vw}
     .as3-ui [hidden]{display:none!important}
+    .as3d .as3-karte{position:absolute;right:6px;bottom:6px;width:92px!important;height:92px!important;border-radius:50%;background:radial-gradient(#0b0716aa,#0b071640 70%,#0000 72%);
+      filter:drop-shadow(0 2px 4px #000a)}
+    .as3-kamera{position:absolute;left:8px;bottom:8px;padding:5px 10px;border-radius:99px;background:#0b0716cc;color:#fff;font-weight:800;font-size:12px;
+      pointer-events:auto;cursor:pointer;box-shadow:0 0 0 1.5px #ffffff40;-webkit-tap-highlight-color:transparent;user-select:none}
     .as-wand .as3d canvas{width:80%!important}
   </style>`);
 }

@@ -15,7 +15,7 @@
 //             ohne WebGL. Figur antippen im 3D-Bild tippt denselben Knopf wie unten in der Liste.
 // Zustand und Zufall nur beim Gastgeber.
 import { esc, knopf, zufall, name } from "./hilfe.js";
-import { maedn3dZeigen } from "./maedn3d.js";
+import { maedn3dZeigen, MD3_ZEIT } from "./maedn3d.js";
 
 export const MAEDN_MAX = 8, FIGUREN = 4, ARM = 10;
 export const MAEDN_FARBEN = ["#dc2626", "#2563eb", "#16a34a", "#eab308", "#9333ea", "#ea580c", "#0891b2", "#db2777"];
@@ -113,6 +113,8 @@ export const maedn = {
   },
   // Computer-Mitspieler: rauswerfen > ins Ziel > raus aus dem Haus > der vorderste Laeufer
   botPause: (s) => (s.phase === "ziehen" ? 1200 : 1000),
+  // Computer warten, bis der letzte Auftritt (Wurf, Huepfen, Rauswurf, Kameraschwenk) fertig gezeigt ist (app.js: botMindest)
+  botMindest: (s) => Math.round(maednVorfuehrDauer(s) * 1000),
   bot(s, i) {
     if (s.phase === "ende" || s.dran !== i) return null;
     if (s.phase === "wuerfeln") return { typ: "wurf" };
@@ -158,6 +160,25 @@ export const maedn = {
     return `<div class="frage">Gewürfelt: <span class="md-wurf">${WUERFEL[s.wurf]}</span> ${s.wurf} – welche Figur?</div>${zwang}<div class="raster2">${kn}</div>${brett}${leute}${regel}`;
   },
 };
+
+// Wie lange zeigt das 3D-Brett die letzte Aenderung noch vor? (Sekunden, aus dem Stand allein - fuer Gastgeber und Tests)
+// Teil A der Abnahme Schritt 2 (Nico 08.11.2026): Zuschauer sollen jeden Computer-Zug mitbekommen - wie beim Partybrett.
+//   gerade gewuerfelt (Zug offen)  Wurf rollt aus, Zahl lesen
+//   kein Zug moeglich              Wurf rollt aus, "Kein Zug" lesen, danach ggf. Kameraschwenk zum Naechsten
+//   gezogen                        Huepfen Feld fuer Feld, Landen, Rauswurf-Flug, Ziel-Glitzern, danach ggf. Kameraschwenk
+export const MD3_LESEN = 0.9, MD3_SCHWENK = 0.9, MD3_LUFT = 0.25;
+export function maednVorfuehrDauer(s) {
+  if (!s || s.phase === "ende") return 0;
+  const Z = MD3_ZEIT, L = maednLaenge(s.n), l = s.letzt;
+  if (!l) return s.phase === "ziehen" && s.wurf ? Z.wurf + MD3_LESEN + MD3_LUFT : 0;
+  const wechsel = l.j !== s.dran ? MD3_SCHWENK : 0;
+  if (l.nichts) return Z.wurf + MD3_LESEN + wechsel + MD3_LUFT;
+  const raus = l.von === -1, hops = raus ? 1 : Math.max(1, l.nach - l.von);
+  let t = hops * (raus ? Z.raus : Z.hopp) + Z.landen;
+  if (l.raus !== null && l.raus !== undefined) t += Z.flug;
+  if (l.nach >= L && l.von < L) t += Z.ziel;
+  return t + wechsel + MD3_LUFT;
+}
 
 export function maednBotWahl(s, i) {
   const L = maednLaenge(s.n), zuege = maednZuege(s, i, s.wurf);
@@ -231,7 +252,23 @@ let wandNamen = [];
 export function maednNach(el, d) {
   const c = el && el.querySelector("[data-md3d]");
   if (!c || !d || !Array.isArray(d.fig)) return;
+  wandHoehe(el, c);
   try { maedn3dZeigen(c, d, md3dDaten(d, -1, wandNamen, true)); } catch (e) { console.error(e); }
+}
+// Brett an der Wand so hoch wie die Buehne unter dem Titel Platz hat (Abnahme Schritt 2, Nico 08.11.2026: "freie Flaeche
+// unter dem Brett nutzen"). Gemessen ohne die Verkleinerung, mit der beamer.js den Inhalt einpasst; ohne Buehne (Probe) bis
+// zum Fensterrand. Breite folgt der Hoehe, die Liste rechts behaelt ihren Platz.
+function wandHoehe(el, c) {
+  const buehne = c.closest(".bm-buehne"), inhalt = c.closest(".bm-inhalt") || el;
+  const ri = inhalt.getBoundingClientRect(), skala = inhalt.offsetHeight ? ri.height / inhalt.offsetHeight || 1 : 1;
+  const oben = (c.getBoundingClientRect().top - ri.top) / skala;
+  let platz;
+  if (buehne) { const cs = getComputedStyle(buehne); platz = buehne.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - oben - 6; }
+  else platz = window.innerHeight - c.getBoundingClientRect().top - 24;
+  const h = Math.round(Math.max(window.innerHeight * 0.5, Math.min(window.innerHeight * 0.9, platz)));
+  if (c.style.height !== `${h}px`) c.style.height = `${h}px`;
+  const b = `${Math.round(Math.min(window.innerWidth * 0.68, h * 1.45))}px`;
+  if (c.style.width !== b) c.style.width = b;
 }
 export function maednHTML(d, nm, sp, kopf) {
   stil();

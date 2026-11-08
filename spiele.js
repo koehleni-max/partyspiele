@@ -181,7 +181,7 @@ const busfahrer = {
       ${knopf("Weiter", { typ: "weiter" }, "gross")}${tabelle}`;
     const f = BUS_FRAGEN[s.stufe];
     return `<div class="frage">${name(namen, s.dran)}: ${f.titel}</div>${karten}
-      ${ich === s.dran ? `<div class="raster${f.wahl.length > 2 ? "" : "2"}">${f.wahl.map(([w, t]) => knopf(t, { typ: "tipp", w }, "gross")).join("")}</div>`
+      ${ich === s.dran ? `<div class="raster${f.wahl.length > 2 ? "" : "2"}">${f.wahl.map(([w, t]) => knopf(t, { typ: "tipp", w }, `gross ${w === "♥" || w === "♦" ? "rotk" : ""} ${"♠♥♦♣".includes(w) && w.length === 1 ? "st-farbe" : ""}`)).join("")}</div>`
                        : `<p class="mitte leise">${esc(namen[s.dran])} rät gerade …</p>`}${tabelle}`;
   },
 };
@@ -230,7 +230,7 @@ const pferderennen = {
       const meine = s.wetten[ich];
       return `<div class="frage">Setzt auf ein Ass!</div>
         <label>Wie viele Schlucke setzt du?<input id="einsatz" type="number" min="1" max="10" value="${meine ? meine.n : 2}"></label>
-        <div class="raster">${["♠", "♥", "♦", "♣"].map((f) => knopf(f, { typ: "wette", f }, `gross ${meine && meine.f === f ? "gewaehlt" : ""} ${f === "♥" || f === "♦" ? "rotk" : ""}`, `data-feld="einsatz"`)).join("")}</div>
+        <div class="raster">${["♠", "♥", "♦", "♣"].map((f) => knopf(f, { typ: "wette", f }, `gross st-farbe ${meine && meine.f === f ? "gewaehlt" : ""} ${f === "♥" || f === "♦" ? "rotk" : ""}`, `data-feld="einsatz"`)).join("")}</div>
         <div class="punkte">${wetten}</div>
         ${ich === 0 ? knopf("Rennen starten", { typ: "los" }, "gross") : `<p class='leise mitte'>${esc(namen[0])} startet das Rennen.</p>`}`;
     }

@@ -2147,7 +2147,7 @@ function partieBild(p, sp, ich) {
       ${leitet && sp.id === "brett" && p.s && p.s.runden === 0 && !p.s.ende && p.s.phase !== "bonus" ? `<button class="klein2" data-a='{"typ":"_brettende"}'>🏁 Auswerten</button>` : ""}
       ${leitet && sp.id === "brett" && p.phase === "laeuft" && p.s && !p.s.ende ? `<button class="klein2" data-a='{"typ":"_brettspeichern"}' title="Spielstand speichern">💾</button>` : ""}
       ${leitet ? `<button class="klein2" data-a='{"typ":"_zurueck"}'>⏹️ Beenden</button>` : ""}${vollbildKnopf()}</span></div>
-    <div class="spielflaeche">${inhalt}</div>
+    <div class="spielflaeche" data-spiel="${esc(sp.id)}">${inhalt}</div>
     ${stvLeiste(p, nm, ich)}
     ${padLeiste(p, sp)}
     <div class="fuss">${p.mit.map((id, i) => { const s = raum.spieler.find((x) => x.id === id); return `<span class="pille ${!s || s.online ? "" : "aus"}"><span class="farbe f${farbeVon(p, id)}"></span>${esc(nm[i])}${P.istBot(id) ? "" : schilder(nm[i], id)}${padMarke(id)}${id === meineId ? " (du)" : ""}</span>`; }).join("")}</div>

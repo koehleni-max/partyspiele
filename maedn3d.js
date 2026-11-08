@@ -374,6 +374,33 @@ function passend(a, e, l) {
   for (let i = 0; i < 22; i++) { const d = (lo + hi) / 2; setzeKamera(cam, a, e, d, l); cam.updateMatrixWorld(); if (randWert(cam) > 1) lo = d; else hi = d; }
   return (g.passCache[key] = hi);
 }
+// Nahansicht: nur am Handy (nicht Beamer), 8er-Brett, ich bin am Zug, kein Sieg. Im Bild bleiben: das eigene Haus, alle eigenen
+// Figuren, die Ziele der waehlbaren Zuege und die Figur, die gerade huepft - mit Rand. Nie weiter weg als das ganze Brett.
+export const MD3_NAH = { rand: 0.78, minD: 0.55 };
+function nahePunkte() {
+  const ich = g.o.ich, pts = g.P.haus(ich).map((p) => g.w(p, 0));
+  for (let f = 0; f < 4; f++) pts.push(posVon(ich, g.zeige[ich][f], f));
+  g.wahlListe.forEach((x) => pts.push(posVon(ich, x.nach, x.f)));
+  if (g.akt && g.akt.art === "zug" && g.akt.j === ich && g.akt.pts) pts.push(g.akt.pts[g.akt.pts.length - 1]);
+  return pts;
+}
+function naheEigene(a) {
+  const ich = g.o.ich;
+  if (g.beamer || g.n <= 4 || ich < 0 || ich >= g.n || g.dranZeige !== ich || g.sieg !== null) return null;
+  const pts = nahePunkte(), l = pts.reduce((s, p) => s.add(p), V()).multiplyScalar(1 / pts.length).setY(0);
+  const e = 0.98, voll = passend(a, e, V());
+  const key = `nah|${a.toFixed(3)}|${pts.map((p) => p.x.toFixed(1) + "," + p.z.toFixed(1)).join(";")}|${g.camera.aspect.toFixed(3)}`;
+  let d = g.passCache[key];
+  if (d === undefined) {
+    const cam = g.mess; cam.aspect = g.camera.aspect; cam.fov = g.camera.fov; cam.updateProjectionMatrix();
+    const v = V(), passt = () => pts.every((p) => { v.copy(p).setY(FELD_OBEN + g.fr).project(cam); return Math.abs(v.x) < MD3_NAH.rand && Math.abs(v.y) < MD3_NAH.rand * 0.9 && v.z < 1; });
+    let lo = g.RB * 0.3, hi = voll;
+    for (let i = 0; i < 18; i++) { const m = (lo + hi) / 2; setzeKamera(cam, a, e, m, l); cam.updateMatrixWorld(); if (passt()) hi = m; else lo = m; }
+    d = g.passCache[key] = Math.max(hi, voll * MD3_NAH.minD);
+  }
+  if (d >= voll * 0.97) return null;   // die Figuren stehen ohnehin ueberall: ganzes Brett
+  return { a, e, d, l, nah: true };
+}
 function zielPose(t) {
   const e0 = g.beamer ? 0.8 : 0.86;
   if (g.sieg !== null && !wenigBewegung()) {
@@ -383,6 +410,9 @@ function zielPose(t) {
   }
   if (!g.folgen) { const l = V(), a = g.beamer ? Math.PI / 2 : g.o.ich >= 0 && g.o.ich < g.n ? sitzWinkel(g.o.ich) : Math.PI / 2, e = 1.15; return { a, e, d: passend(a, e, l), l }; }
   const a = sitzWinkel(g.dranZeige), dir = V(Math.cos(a), 0, Math.sin(a));
+  // 8er-Brett am Handy, selbst am Zug: naeher an die eigenen Figuren (Abnahme Schritt 2, Nico 08.11.2026 "Figuren zu klein")
+  const nah = naheEigene(a);
+  if (nah) return nah;
   const l = dir.clone().multiplyScalar(g.RB * 0.1);
   const pose = { a, e: e0, d: passend(a, e0, l), l };
   // beim Ziehen und Rauswerfen ein wenig mitgehen (ohne das Brett aus dem Bild zu verlieren)
@@ -779,6 +809,8 @@ export function maedn3dStand() {
     zeichnungen: g.renderer.info.render.calls, dreiecke: g.renderer.info.render.triangles, schlange: g.schlange.length + (g.akt ? 1 : 0), akt: g.akt ? g.akt.art : null,
     zaehler: { ...g.zaehler }, dran: g.dranZeige, sieg: g.sieg, folgen: g.folgen, wuerfel: g.wuerfel.visible, wahl: g.wahl.filter((m) => m.ring.visible).length,
     rand: +randWert(cam, 1).toFixed(3), kamera: { a: +g.kam.a.toFixed(3), e: +g.kam.e.toFixed(3), d: +g.kam.d.toFixed(2) }, zeige: g.zeige.map((r) => r.slice()),
-    groesse: g.groesse ? g.groesse.slice() : null, bilder: g.bilder, ui: g.ui ? g.ui.name.textContent + " · " + g.ui.unter.textContent : "" };
+    groesse: g.groesse ? g.groesse.slice() : null, bilder: g.bilder, nah: g.folgen && !!naheEigene(sitzWinkel(g.dranZeige)),
+    // eigene Figuren und Ziele der waehlbaren Zuege im Bild? (Nahansicht 8er-Brett)
+    eigeneDrin: g.o.ich >= 0 && g.o.ich < g.n ? nahePunkte().every((p) => { const v = p.clone().setY(FELD_OBEN + g.fr).project(cam); return Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1; }) : null, ui: g.ui ? g.ui.name.textContent + " · " + g.ui.unter.textContent : "" };
 }
 export const maedn3dDa = () => !!g;
