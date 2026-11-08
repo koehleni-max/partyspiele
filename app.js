@@ -64,6 +64,7 @@ let adminFehler = {};      // Gastgeber: falsche Beweise je Konto {n, bis}
 let phasen = {};           // pid -> zuletzt gesehene Phase
 let eigeneMeldung = 0, ansageNr = 0, ansageTimer = null, ersterStand = true;
 let partieSig = "";
+let eingesetzt = null;   // was einsetzen zuletzt gesetzt hat (sp.ruhig in zeichnen) - gilt nur, solange sein erster Knoten noch dasteht
 let warVerbunden = false;
 let radGesehen = -1, radGemeldet = -1, jokerGesehen = -1, meineJoker = -1;   // Gluecksrad: was dieses Handy schon gemeldet hat
 // Controller an diesem Geraet (Nico 30.10.2026, controller.js): jeder ist ein eigener Spieler im Raum
@@ -1788,6 +1789,7 @@ function fokusZurueck(x) {
 // Neues HTML ins App-Feld. Tippt gerade jemand in ein Feld, das es danach wieder gibt (gleiche id, Art und Runde), bleiben
 // dieses Element und seine Vorfahren stehen - nur alles drumherum wird ersetzt.
 function einsetzen(html) {
+  eingesetzt = null;
   const halten = document.activeElement;
   if (halten && halten.id && app.contains(halten) && /^(INPUT|TEXTAREA)$/.test(halten.tagName)) {
     const neu = document.createElement("div");
@@ -1797,6 +1799,7 @@ function einsetzen(html) {
       && (partner.dataset.rk || "") === (halten.dataset.rk || "") && verpflanzen(neu, halten, partner)) return;
   }
   app.innerHTML = html;
+  eingesetzt = { html, knoten: app.firstElementChild };
 }
 function verpflanzen(neu, halten, partner) {
   const pfad = (wurzel, ziel) => { const l = []; for (let k = ziel; k && k !== wurzel; k = k.parentNode) l.unshift(k); return l; };
@@ -1932,7 +1935,12 @@ function zeichnen() {
     const sp = spiel(p.spiel);
     const ich = anzeigeIch(p, sp);
     anzeige = { pid: p.pid, id: ich >= 0 ? p.mit[ich] : null };
-    einsetzen(partieBild(p, sp, ich));
+    // sp.ruhig (Autoscooter, 08.11.2026): gleicher Inhalt = Seite stehen lassen; nur nach() zieht den neuen Stand nach
+    // (vorher wurde bei jedem Rechentakt die ganze Seite neu gebaut - auf allen Handys, mehrmals pro Sekunde)
+    const bild = partieBild(p, sp, ich);
+    let ruhig = false;
+    try { ruhig = typeof sp.ruhig === "function" ? !!sp.ruhig(p.s) : !!sp.ruhig; } catch (e) { ruhig = false; }
+    if (!(ruhig && eingesetzt && eingesetzt.html === bild && eingesetzt.knoten && eingesetzt.knoten.parentNode === app)) einsetzen(bild);
     partieSig = sigFuer(p);
     felderZurueck(felder);
     if (p.phase === "laeuft" && ich >= 0) {

@@ -20,7 +20,7 @@ import { brett3dZeigen } from "./brett3d.js";
 import { busAuszug, busHTML } from "./trinken_geburtstag.js";   // Busfahrer an der Wand (Geburtstags-Runde E)
 import { mioAuszug, mioHTML, actAuszug, actHTML } from "./gruppen_geburtstag.js";   // Millionaer (Runde F) und Activity (Restpaket 3c) an der Wand
 import { maednAuszug, maednHTML, maednNach } from "./maedn.js";   // Mensch aergere dich nicht an der Wand (Vorschlag 147)
-import { asAuszug, asHTML } from "./autoscooter.js";   // Autoscooter an der Wand (Vorschlag 145)
+import { asAuszug, asHTML, asNach } from "./autoscooter.js";   // Autoscooter an der Wand (Vorschlag 145), seit 08.11.2026 in 3D
 
 // Zuschauen (Nico 31.10.2026): die fertigen Zweier-Spiele laufen auch an der Wand mit - auch gegen den Computer.
 // Geheimes bleibt geheim: bei Schiffe versenken nur die Schuesse (Treffer/Wasser), nie wo die Schiffe liegen.
@@ -554,6 +554,7 @@ export function html(raum, p, d, merk, vorbei = false) {
 export function nach(el, p, d, lokal, beiGruen) {
   if (p && p.spiel === "brett") brettNach(el, d);
   if (p && p.spiel === "maedn") maednNach(el, d);   // 3D-Brett an der Wand (08.11.2026)
+  if (p && p.spiel === "autoscooter") asNach(el, d);   // 3D-Halle an der Wand (08.11.2026)
   const c =el.querySelector("[data-bs-leinwand]");
   if (c && d.striche) {
     const g = c.getContext("2d");
