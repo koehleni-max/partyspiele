@@ -130,10 +130,12 @@ const malen = {
   render(s, ich, namen) {
     const istMaler = ich === s.maler;
     const kopf = istMaler ? `<div class="frage">Male: <span class="gross2">${esc(s.wort)}</span></div>` : `<div class="frage">${name(namen, s.maler)} malt – was ist es?</div>`;
-    const tipps = `<div class="tipps">${s.tipps.slice(-6).map((x) => `<span>${esc(namen[x.von])}: ${esc(x.t)}</span>`).join("")}</div>`;
+    // Schritt 4b: Tipps als Sprechblasen, jede springt einmal herein (Schluessel je Runde und Nummer)
+    const ab = Math.max(0, s.tipps.length - 6);
+    const tipps = `<div class="tipps">${s.tipps.slice(-6).map((x, k) => `<span class="mt-blase" data-key="mt${s.runde}-${ab + k}" data-ton="pop"><i class="farbe f${x.von}"></i>${esc(namen[x.von])}: ${esc(x.t)}</span>`).join("")}</div>`;
     let unten = "";
     if (s.geloest !== null) {
-      unten = `<div class="urteil">${s.geloest >= 0 ? `${name(namen, s.geloest)} hat es: <b>${esc(s.wort)}</b>! Alle anderen trinken 1 Schluck, ${esc(namen[s.maler])} verteilt ${schlucke(2)}.` : `Aufgegeben – es war <b>${esc(s.wort)}</b>. ${esc(namen[s.maler])} trinkt ${schlucke(2)}.`}</div>${knopf("Nächster Maler", { typ: "weiter" }, "gross")}`;
+      unten = `<div class="urteil ${s.geloest >= 0 ? "gut" : ""}" data-key="mu${s.runde}" data-ton="${s.geloest >= 0 ? "richtig" : "falsch"}">${s.geloest >= 0 ? `${name(namen, s.geloest)} hat es: <b>${esc(s.wort)}</b>! Alle anderen trinken 1 Schluck, ${esc(namen[s.maler])} verteilt ${schlucke(2)}.` : `Aufgegeben – es war <b>${esc(s.wort)}</b>. ${esc(namen[s.maler])} trinkt ${schlucke(2)}.`}</div>${knopf("Nächster Maler", { typ: "weiter" }, "gross")}`;
     } else if (istMaler) unten = `<div class="zeile-knoepfe">${knopf("Alles löschen", { typ: "loeschen" })}${knopf("Aufgeben", { typ: "aufgeben" }, "rot")}</div>`;
     else unten = `<div class="zeile-knoepfe"><input id="raten" data-rk="${s.runde}" placeholder="Dein Tipp" autocomplete="off" enterkeyhint="send">${knopf("Raten", { typ: "rate" }, "", `data-feld="raten" data-leeren`)}</div>`;
     return `${kopf}<canvas id="leinwand" class="leinwand ${istMaler && s.geloest === null ? "aktiv" : ""}" width="600" height="600"></canvas>${tipps}${unten}`;
@@ -141,6 +143,9 @@ const malen = {
   nach(s, ich, senden) {
     const c = document.getElementById("leinwand");
     const g = c.getContext("2d");
+    // die Malflaeche bleibt seit Schritt 4b stehen (weiches Einsetzen): erst leeren, dann alle Striche neu - sonst bliebe nach
+    // "Alles loeschen" das alte Bild stehen
+    g.clearRect(0, 0, c.width, c.height);
     g.lineCap = g.lineJoin = "round"; g.lineWidth = 7; g.strokeStyle = "#1b1f2a";
     const linie = (p) => { if (p.length < 2) return; g.beginPath(); g.moveTo(p[0][0] * 6, p[0][1] * 6); p.forEach(([x, y]) => g.lineTo(x * 6, y * 6)); g.stroke(); };
     s.striche.forEach(linie);

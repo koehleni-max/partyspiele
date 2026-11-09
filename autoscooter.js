@@ -176,7 +176,7 @@ export function asDaten(s) {
 }
 
 export const autoscooter = {
-  id: "autoscooter", name: "Autoscooter", emoji: "🚗", farben: ["#f43f5e", "#1e40af"], kurz: "Am Handy lenken, an der Wand rammen – jeder Stoß gibt Punkte",
+  id: "autoscooter", weich: false, name: "Autoscooter", emoji: "🚗", farben: ["#f43f5e", "#1e40af"], kurz: "Am Handy lenken, an der Wand rammen – jeder Stoß gibt Punkte",
   start: (namen) => ({ phase: "bereit", dran: 0, wagen: aufstellen(namen.length), punkte: namen.map(() => 0), sperre: {}, stoesse: 0, knall: null, knalle: [], runde: 1 }),
   ergebnis(s) {
     if (s.phase !== "ende") return null;

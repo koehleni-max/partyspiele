@@ -271,7 +271,8 @@ export const activity = {
   render(s, ich, namen) {
     s.anzahl = namen.length;
     const artText = (ACT_ARTEN.find(([k]) => k === s.art) || ["", ""])[1];
-    const teams = `<div class="punkte">${TEAMS.map((t, k) => `<span>${k ? "🔵" : "🔴"} ${t}: <b>${s.punkte[k]}</b>/${ACT_ZIEL} (${namen.filter((_, j) => actTeam(j) === k).map(esc).join(", ") || "–"})</span>`).join("")}</div>`;
+    // Schritt 4b: Spielstand als Duell-Tafel - Rot gegen Blau, Fortschritt bis zum Ziel, Punkte zaehlen hoch
+    const teams = `<div class="punkte act-teams">${TEAMS.map((t, k) => `<span class="act-team ${k ? "blau" : "rot"} ${actTeam(s.dar) === k && s.phase !== "ende" ? "am-zug" : ""}" style="--anteil:${Math.min(1, s.punkte[k] / ACT_ZIEL)}">${k ? "🔵" : "🔴"} ${t}: <b data-zahl="${s.punkte[k]}">${s.punkte[k]}</b>/${ACT_ZIEL} <small>(${namen.filter((_, j) => actTeam(j) === k).map(esc).join(", ") || "–"})</small></span>`).join("")}</div>`;
     const dar = s.dar === ich, team = TEAMS[actTeam(s.dar)];
     const regel = `<details class="grundregeln"><summary>📜 So geht's</summary><ul><li>Abwechselnd stellt jemand aus Team Rot und Team Blau dar.</li>
       <li>Den Begriff sieht nur die Person, die darstellt. Das eigene Team rät.</li><li>Erklären: das Wort selbst ist verboten. Zeichnen: keine Buchstaben. Pantomime: kein Ton.</li>
@@ -291,7 +292,7 @@ export const activity = {
       const malt = actMalt(s);
       const flaeche = malt ? `<canvas id="leinwand" class="leinwand ${dar ? "aktiv" : ""}" width="600" height="600"></canvas>` : "";
       if (dar) {
-        return `${kopf}${zeit}<div class="karte-gross blau"><small>DEIN BEGRIFF – nicht zeigen!</small><div>${esc(s.begriff)}</div></div>
+        return `${kopf}${zeit}<div class="karte-gross blau" data-key="actb${s.zug || 0}-${esc(s.begriff)}" data-ton="karte"><small>DEIN BEGRIFF – nicht zeigen!</small><div>${esc(s.begriff)}</div></div>
           ${malt ? `${flaeche}<p class="mitte leise klein">Mit dem Finger malen – das Bild erscheint sofort am Beamer.</p>${knopf("Alles löschen", { typ: "loeschen" }, "zweit klein2")}` : ""}
           <div class="raster2">${knopf("✅ Erraten!", { typ: "erraten" }, "gross gruen")}${knopf("❌ Nicht geschafft", { typ: "nicht" }, "gross rot")}</div>${teams}`;
       }
@@ -299,7 +300,7 @@ export const activity = {
       return `${kopf}${zeit}<p class="mitte">${rat}</p>${flaeche}${knopf("⏰ Zeit ist um", { typ: "nicht" }, "zweit klein2")}${teams}`;
     }
     return `${kopf}<div class="karte-gross ${s.geschafft ? "blau" : "rot"}"><small>Der Begriff war</small><div>${esc(s.begriff)}</div></div>
-      <div class="urteil ${s.geschafft ? "gut" : ""}">${s.geschafft ? `✅ ${team} bekommt ${s.wert} Punkte` : "❌ Nicht geschafft – keine Punkte"}</div>
+      <div class="urteil ${s.geschafft ? "gut" : ""}" data-key="actu${s.zug || 0}-${esc(s.begriff)}" data-ton="${s.geschafft ? "richtig" : "falsch"}">${s.geschafft ? `✅ ${team} bekommt ${s.wert} Punkte` : "❌ Nicht geschafft – keine Punkte"}</div>
       ${knopf("Weiter", { typ: "weiter" }, "gross")}${teams}`;
   },
   // Zeichnen: dieselbe Malflaeche wie Malen & Raten (Striche 0-100, Darsteller malt, alle anderen sehen zu)

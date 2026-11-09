@@ -808,7 +808,7 @@ function starteTakt() {
 // wie auf dem Feld angesagt). Der Sieg zaehlt in der Gesamtwertung (wertung.js, "Glücksrad-Duell").
 const duAktion = aktion, duHtml = html, duNach = nach, duBot = bot;
 export const gduell = {
-  id: "gduell", name: "Glücksrad-Duell", emoji: "⚔️", farben: ["#ff4b4b", "#7b2cbf"], kurz: "Vom Glücksrad: zwei spielen ein echtes Duell", versteckt: true,
+  id: "gduell", weich: false, name: "Glücksrad-Duell", emoji: "⚔️", farben: ["#ff4b4b", "#7b2cbf"], kurz: "Vom Glücksrad: zwei spielen ein echtes Duell", versteckt: true,
   start(namen, raum) { const nr = Number(raum && raum.glueck && raum.glueck.nr) || 0; return { duell: neu(0, 1, nr, namen), weg: false }; },
   aktion(s, i, a) {
     if (!s.duell) return;

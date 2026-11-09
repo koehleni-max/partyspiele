@@ -141,7 +141,7 @@ const einstellbar = (s) => s.runde === 1 && s.dran === 0 && s.phase === "wuerfel
 const rundenGueltig = M.rundenGueltig;
 
 export const brett = {
-  id: "brett", name: "Partybrett", emoji: "🎲", farben: ["#ff9600","#b4231f"], kurz: "Würfeln, Lebenspunkte, Laden, Sterne kaufen, 53 Minispiele – 4 Karten, Runden frei wählbar",
+  id: "brett", weich: false, name: "Partybrett",   // weich: false = 3D/Minispiele haengen eigene Lauscher an (app.js, weich.js) emoji: "🎲", farben: ["#ff9600","#b4231f"], kurz: "Würfeln, Lebenspunkte, Laden, Sterne kaufen, 53 Minispiele – 4 Karten, Runden frei wählbar",
   start(namen) {
     const n = namen.length, je = (v) => namen.map(() => (typeof v === "function" ? v() : v));
     const t = testVorgabe();

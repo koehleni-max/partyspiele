@@ -4,7 +4,8 @@ import { esc, knopf, zufall, mischen, name } from "./hilfe.js";
 import { BEGRIFFE, PANTOMIME, FIGUREN, ORTE, SLF_KAT, QUIZ, QUIZ_HALLOWEEN } from "./inhalte2.js";
 import * as STAPEL from "./stapel.js";
 
-const punkteTafel = (namen, punkte) => `<div class="tafel">${namen.map((nm, j) => `<div><span class="farbe f${j}"></span><b>${esc(nm)}</b><span>🏅 ${punkte[j] || 0}</span></div>`).join("")}</div>`;
+// data-zahl: neue Punkte zaehlen sichtbar hoch (weich.js, Schritt 4b)
+const punkteTafel = (namen, punkte) => `<div class="tafel">${namen.map((nm, j) => `<div><span class="farbe f${j}"></span><b>${esc(nm)}</b><span data-zahl="${punkte[j] || 0}">🏅 ${punkte[j] || 0}</span></div>`).join("")}</div>`;
 // mit raum: ohne Wiederholung ueber den ganzen Abend (stapel.js); ohne raum (alte Aufrufe, Tests): je Partie
 function stapelZiehen(s, liste, raum, schluessel) {
   if (raum && schluessel) return STAPEL.eins(raum, schluessel, liste.length);
@@ -63,15 +64,17 @@ function erklaerSpiel(id, titel, emoji, kurz, farben, liste, mitVerboten, sekund
       const tafel = punkteTafel(namen, s.punkte);
       if (s.phase === "bereit") return `${tafel}<div class="frage">${name(namen, s.dran)} ist dran mit ${mitVerboten ? "Erklären" : "Vorspielen"}</div>
         <p class="mitte leise">${sekunden} Sekunden. Die anderen raten laut. Wer richtig rät, bekommt auch einen Punkt.</p>
-        ${istDran ? knopf("▶️ Los – Zeit starten", { typ: "start" }, "gross gruen") : `<div class="hinweisbox warten">${esc(namen[s.dran])} startet gleich …</div>`}`;
+        ${istDran ? `<i hidden data-key="${id}d${s.runde}" data-ton="dran"></i>${knopf("▶️ Los – Zeit starten", { typ: "start" }, "gross gruen")}` : `<div class="hinweisbox warten">${esc(namen[s.dran])} startet gleich …</div>`}`;
       if (s.phase === "pause") return `${tafel}<div class="urteil gut">⏰ Zeit um! ${esc(namen[s.dran])} hat ${s.geschafft} Begriff${s.geschafft === 1 ? "" : "e"} geschafft.</div>
         ${knopf("Nächster Spieler ➜", { typ: "weiter" }, "gross")}`;
       const uhr = `<div class="uhr" data-uhr="${id}-${s.runde}">⏱️ ${sekunden}</div>`;
-      if (!istDran) return `${tafel}${uhr}<div class="fragekarte" style="--k1:${farben[0]};--k2:${farben[1]}"><div class="vor">${esc(namen[s.dran])} ${mitVerboten ? "erklärt" : "spielt vor"}</div>
-        <div class="text">Ratet laut mit! 🗣️</div></div><p class="mitte leise">Geschafft: ${s.geschafft}</p>`;
+      // Schritt 4b: Begriffe als Tabu-Karte (Wort oben, verbotene Woerter im roten Feld), Pantomime auf einer Buehne mit Vorhang
+      const look = mitVerboten ? "bg-tabu" : "pm-buehne";
+      if (!istDran) return `${tafel}${uhr}<div class="fragekarte ${look}" style="--k1:${farben[0]};--k2:${farben[1]}"><div class="vor">${esc(namen[s.dran])} ${mitVerboten ? "erklärt" : "spielt vor"}</div>
+        <div class="text">Ratet laut mit! 🗣️</div></div><p class="mitte leise">Geschafft: <b data-zahl="${s.geschafft}">${s.geschafft}</b></p>`;
       const w = liste[s.wort];
       const [wort, ...verboten] = Array.isArray(w) ? w : [w];
-      return `${tafel}${uhr}<div class="fragekarte" data-key="${esc(wort)}" style="--k1:${farben[0]};--k2:${farben[1]}"><div class="vor">${mitVerboten ? "Erkläre ohne die roten Wörter:" : "Spiel vor – ohne Worte:"}</div>
+      return `${tafel}${uhr}<div class="fragekarte fk-zieh ${look}" data-key="${esc(wort)}" data-ton="karte" style="--k1:${farben[0]};--k2:${farben[1]}"><div class="vor">${mitVerboten ? "Erkläre ohne die roten Wörter:" : "Spiel vor – ohne Worte:"}</div>
         <div class="text">${esc(wort)}</div>${verboten.length ? `<div class="verboten">${verboten.map((v) => `<span>${esc(v)}</span>`).join("")}</div>` : ""}</div>
         <p class="mitte leise">Wer hat's erraten?</p>
         <div class="raster">${namen.map((nm, j) => (j === ich ? "" : knopf(`✅ ${esc(nm)}`, { typ: "richtig", wer: j }, "gruen"))).join("")}</div>
@@ -176,16 +179,17 @@ export const werbinich = {
     const alle = s.erraten.every((x) => x) || s.beendet;
     const falsch = !s.erraten[ich] && s.falsch && s.falsch[ich];
     const raten = s.erraten[ich] || alle ? "" : `<div class="zeile-knoepfe wbi-raten"><input id="wbi-name" data-rk="${esc(s.figur.join("-"))}" maxlength="40" placeholder="Wer bist du?" autocomplete="off" autocapitalize="words" enterkeyhint="send">${knopf("✅ Raten", { typ: "erraten" }, "gruen", `data-feld="wbi-name" data-leeren`)}</div>
-      ${falsch ? `<div class="hinweisbox wbi-falsch" data-key="wbf-${falsch.n}">❌ „${esc(falsch.t)}“ ist es nicht – weiter fragen!</div>` : ""}`;
+      ${falsch ? `<div class="hinweisbox wbi-falsch" data-key="wbf-${falsch.n}" data-ton="falsch">❌ „${esc(falsch.t)}“ ist es nicht – weiter fragen!</div>` : ""}`;
     const karte = (nm, j) => {
       const verdeckt = j === ich && !s.erraten[j];
       const f = figurVon(s, j);
       // der Betroffene sieht nichts von der Gruppenwahl - auch nicht, dass es sie gab
       const gruppe = !verdeckt && s.eigen && s.eigen[j] ? `<em class="wbi-gruppe-marke">🗳️ von der Gruppe</em>` : "";
-      return `<div class="figurkarte ${j === ich ? "ich" : ""} ${s.erraten[j] ? "geschafft" : ""}">
-        <small>${esc(nm)}${j === ich ? " (du)" : ""}</small><b class="${verdeckt ? "" : wortKlasse(f)}">${verdeckt ? "❓ ??? ❓" : esc(f)}</b>${gruppe}${s.erraten[j] ? `<em>#${s.erraten[j]} erraten</em>` : ""}</div>`;
+      // Schritt 4b: Stirn-Zettel (Klebezettel mit Klebestreifen), wer fragt, leuchtet; Erraten = Stempel mit Klang
+      return `<div class="figurkarte ${j === ich ? "ich" : ""} ${s.erraten[j] ? "geschafft" : ""} ${j === s.dran ? "dran" : ""}" data-key="wbk${j}-${esc(s.figur[j] ?? "")}" style="--i:${j}">
+        <small>${esc(nm)}${j === ich ? " (du)" : ""}</small><b class="${verdeckt ? "" : wortKlasse(f)}">${verdeckt ? "❓ ??? ❓" : esc(f)}</b>${gruppe}${s.erraten[j] ? `<em class="wbi-stempel" data-key="wbs${j}-${s.erraten[j]}-${esc(s.figur[j] ?? "")}" data-ton="richtig">#${s.erraten[j]} erraten</em>` : ""}</div>`;
     };
-    return `<div class="frage">${name(namen, s.dran)} stellt eine Ja/Nein-Frage über sich</div>
+    return `<div class="frage">${name(namen, s.dran)} stellt eine Ja/Nein-Frage über sich</div>${ich === s.dran && !alle ? `<i hidden data-key="wbd${s.dran}-${s.erraten.filter(Boolean).length}-${esc(String(s.figur[ich] ?? ""))}" data-ton="dran"></i>` : ""}
       <div class="figurenliste">${namen.map(karte).join("")}</div>
       ${raten}
       ${knopf("➜ Nächster fragt", { typ: "naechster" }, "zweit")}
@@ -323,8 +327,8 @@ export const slf = {
       ${s.kats.map((k, ki) => `<tr><td><b>${esc(k)}</b></td>${namen.map((_, j) => `<td>${esc((s.antworten[j] || [])[ki] || "–")}<small>${s.wertung[`${j}-${ki}`]}</small></td>`).join("")}</tr>`).join("")}</table></div>
       <p class="mitte leise klein">10 Punkte = einzigartig, 5 = doppelt, 0 = leer oder falscher Buchstabe</p>${knopf("Nächste Runde ➜", { typ: "start" }, "gross")}`;
     const fertig = !!s.antworten[ich];
-    return `${tafel}<div class="frage">Buchstabe <span class="buchstabe" data-key="b${s.runde}">${s.buchstabe}</span></div>
-      ${s.phase === "stopp" ? `<div class="urteil">✋ STOPP! ${esc(namen[s.stopp])} ist fertig – Stifte weg!</div>` : ""}
+    return `${tafel}<div class="frage">Buchstabe <span class="buchstabe" data-key="b${s.runde}" data-ton="wirbel">${s.buchstabe}</span></div>
+      ${s.phase === "stopp" ? `<div class="urteil slf-stopp-urteil" data-key="slfs${s.runde}" data-ton="gong">✋ STOPP! ${esc(namen[s.stopp])} ist fertig – Stifte weg!</div>` : ""}
       ${fertig ? `<div class="hinweisbox warten">Abgegeben – warte auf die anderen</div>` : `<div class="slf-felder">${s.kats.map((k, ki) => `<label>${esc(k)}<input id="slf${ki}" data-rk="${s.runde}" autocomplete="off" placeholder="${s.buchstabe}…"></label>`).join("")}</div>
       <button class="gross rot" id="slf-stopp">✋ Fertig – STOPP!</button>`}`;
   },

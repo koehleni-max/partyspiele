@@ -30,7 +30,7 @@ function angebot() { return mischen(Object.keys(TEILE)).slice(0, 3); }
 function belegt(s, x, y) { return s.teile.some((t) => t.x === x && t.y === y) || "S#Z".includes(KARTE[y][x]); }
 
 export const hindernis = {
-  id: "fiesbau", name: "Fiesbau", emoji: "🏗️", farben: ["#00b3a4","#13406e"], kurz: "Strecke reihum fies bebauen, dann laufen – nur wer ins Ziel kommt, punktet",
+  id: "fiesbau", weich: false, name: "Fiesbau", emoji: "🏗️", farben: ["#00b3a4","#13406e"], kurz: "Strecke reihum fies bebauen, dann laufen – nur wer ins Ziel kommt, punktet",
   start: (namen) => ({ runde: 1, phase: "bauen", teile: [], angebote: namen.map(() => angebot()), wahl: {}, gebaut: {}, ergebnis: {}, punkte: namen.map(() => 0), meldung: "" }),
   // Computer-Mitspieler: baut etwas Fieses in die Laufbahn und "laeuft" mit einer Chance, die von der Strecke abhaengt
   botPause: (s) => (s.phase === "laufen" ? 7000 : 2200),

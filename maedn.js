@@ -90,7 +90,7 @@ function ziehen(s, j, f) {
 }
 
 export const maedn = {
-  id: "maedn", name: "Mensch ärgere dich nicht", emoji: "🎲", farben: ["#dc2626", "#16a34a"], kurz: "Bis zu 8 Spieler – würfeln, rauswerfen, heimbringen",
+  id: "maedn", weich: false, name: "Mensch ärgere dich nicht", emoji: "🎲", farben: ["#dc2626", "#16a34a"], kurz: "Bis zu 8 Spieler – würfeln, rauswerfen, heimbringen",
   start(namen) {
     const n = Math.max(1, Math.min(MAEDN_MAX, namen.length));
     return { n, fig: Array.from({ length: n }, () => [-1, -1, -1, -1]), dran: 0, wurf: null, versuche: 0, phase: "wuerfeln",

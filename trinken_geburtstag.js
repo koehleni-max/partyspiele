@@ -126,7 +126,11 @@ export const maexRang = (w) => MAEX_WERTE.indexOf(String(w));
 export const wurfWert = (a, b) => { const hi = Math.max(a, b), lo = Math.min(a, b); return hi === 2 && lo === 1 ? "21" : `${hi}${lo}`; };
 const AUGE = ["", "⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 const wName = (w) => (w === "21" ? "Mäxchen (21)" : w[0] === w[1] ? `${w[0]}er-Pasch` : w);
-const wuerfelBild = (w) => `<span class="tg-wuerfel" style="display:block;font-size:4em;line-height:1.1">${AUGE[Number(w[0])]}${AUGE[Number(w[1])]}</span>`;
+// Schritt 4b: echte Elfenbein-Wuerfel mit Augen (3 x 3 Raster, je Zahl die passenden Punkte) statt Schriftzeichen
+const AUGEN_AN = { 1: [4], 2: [2, 6], 3: [2, 4, 6], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
+const wuerfelEins = (z) => `<span class="mx-w" aria-label="${z}">${Array.from({ length: 9 }, (_, k) => `<i class="${AUGEN_AN[z].includes(k) ? "an" : ""}"></i>`).join("")}</span>`;
+const wuerfelBild = (w) => `<span class="tg-wuerfel mx-paar" aria-label="${AUGE[Number(w[0])]}${AUGE[Number(w[1])]}">${wuerfelEins(Number(w[0]))}${wuerfelEins(Number(w[1]))}</span>`;
+const becher = (wackelt) => `<div class="mx-becher ${wackelt ? "wackelt" : ""}"><span></span></div>`;
 
 export const maexchen = {
   id: "maexchen", name: "Mäxchen", emoji: "🎲", farben: ["#0ea5e9", "#1e3a8a"], kurz: "Verdeckt würfeln, ansagen, lügen – glauben oder aufdecken?",
@@ -157,31 +161,35 @@ export const maexchen = {
   },
   render(s, ich, namen) {
     const n = namen.length;
-    const stand = `<div class="punkte">${namen.map((nm, j) => `<span>${esc(nm)}: ${(s.verloren || [])[j] || 0}× verloren</span>`).join("")}</div>`;
+    const dranJ = s.phase === "aufgedeckt" ? -1 : s.dran;
+    const stand = `<div class="punkte mx-stand">${namen.map((nm, j) => `<span class="${j === dranJ ? "md-dran" : ""}"><i class="farbe f${j}"></i>${esc(nm)}: <b data-zahl="${(s.verloren || [])[j] || 0}">${(s.verloren || [])[j] || 0}</b>× verloren</span>`).join("")}</div>`;
+    const dranTon = ich === dranJ && s.phase !== "ansagen" ? `<i hidden data-key="mxd${s.runde}-${s.phase}-${s.vorher || 0}-${s.ansage || 0}" data-ton="dran"></i>` : "";
     const regel = `<details class="grundregeln"><summary>📜 So geht Mäxchen</summary><ul><li>Du würfelst verdeckt – nur du siehst den Wurf.</li>
       <li>Sag einen Wert an, der höher ist als der vorige. Lügen ist erlaubt!</li><li>Der Nächste glaubt (und muss dann selbst höher kommen) oder deckt auf.</li>
       <li>Aufgedeckt: gelogen = Ansager trinkt 1 Schluck, ehrlich = Zweifler trinkt 1 Schluck. Beim Mäxchen 2.</li>
       <li>Rangfolge: 31 ist am kleinsten, dann bis 65, dann die Paschs (11 bis 66), ganz oben 21 = Mäxchen.</li></ul></details>`;
-    const unten = `${stand}${regel}${zaehlerHTML(s, ich)}`;
+    const unten = `${dranTon}${stand}${regel}${zaehlerHTML(s, ich)}`;
     const vorher = s.vorher ? `<p class="mitte">Zu schlagen: <b>${esc(wName(s.vorher))}</b></p>` : `<p class="mitte leise">Neue Runde – jeder Wert gilt.</p>`;
     if (s.phase === "wuerfeln") {
-      return `<div class="frage">${name(namen, s.dran)} würfelt</div>${vorher}
+      return `<div class="frage">${name(namen, s.dran)} würfelt</div>${becher(false)}${vorher}
         ${ich === s.dran ? knopf("🎲 Verdeckt würfeln", { typ: "wuerfeln" }, "gross") : `<p class="mitte leise">Warte auf ${esc(namen[s.dran])} …</p>`}${unten}`;
     }
     if (s.phase === "ansagen") {
-      if (ich !== s.dran) return `<div class="frage">${name(namen, s.dran)} schaut heimlich auf den Wurf …</div>${vorher}${unten}`;
+      if (ich !== s.dran) return `<div class="frage">${name(namen, s.dran)} schaut heimlich auf den Wurf …</div><div data-key="mxb${s.runde}-${s.vorher || 0}" data-ton="wuerfel">${becher(true)}</div>${vorher}${unten}`;
       const ab = s.vorher === null ? 0 : maexRang(s.vorher) + 1;
-      return `<div class="frage">Dein Wurf (nur du siehst ihn):</div><div class="mitte tg-wurf" data-key="m${s.runde}-${s.vorher || 0}">${wuerfelBild(s.wurf)}<b>${esc(wName(s.wurf))}</b></div>
+      return `<div class="frage">Dein Wurf (nur du siehst ihn):</div><div class="mitte tg-wurf mx-rollt" data-key="m${s.runde}-${s.vorher || 0}" data-ton="wuerfel">${wuerfelBild(s.wurf)}<b>${esc(wName(s.wurf))}</b></div>
         ${vorher}<p class="mitte">Was sagst du an? Die Wahrheit – oder geschwindelt.</p>
         <div class="raster">${MAEX_WERTE.slice(ab).map((w) => knopf(esc(wName(w)), { typ: "ansage", w }, `wahl ${w === s.wurf ? "gewaehlt" : ""}`)).join("")}</div>${unten}`;
     }
     if (s.phase === "entscheiden") {
-      const kopf = `<div class="frage">${name(namen, s.ansager)} sagt an:<br><span class="gross2">${esc(wName(s.ansage))}</span></div>`;
+      // die Ansage steht als Wuerfelpaar unter dem umgedrehten Becher - ob sie stimmt, weiss nur der Ansager
+      const kopf = `<div class="frage">${name(namen, s.ansager)} sagt an:<br><span class="gross2">${esc(wName(s.ansage))}</span></div>
+        <div class="mx-ansage ${s.ansage === "21" ? "maex" : ""}" data-key="mxa${s.runde}-${s.ansage}" data-ton="${s.ansage === "21" ? "spannung" : "tack"}">${wuerfelBild(s.ansage)}<small>angesagt – gelogen oder wahr?</small></div>`;
       if (ich !== s.dran) return `${kopf}<p class="mitte leise">${esc(namen[s.dran])} überlegt: glauben oder aufdecken?</p>${unten}`;
       return `${kopf}<div class="raster2">${knopf(s.ansage === "21" ? "🤝 Glauben (2 Schlucke)" : "🤝 Glauben – ich würfle", { typ: "glauben" }, "gross blau")}${knopf("🔍 Aufdecken!", { typ: "aufdecken" }, "gross rot")}</div>${unten}`;
     }
     const e = s.ergebnis || {};
-    return `<i hidden data-ergebnis="m${s.runde}"></i>${e.echt ? `<div class="mitte tg-wurf">${wuerfelBild(e.echt)}<b>Wirklich: ${esc(wName(e.echt))}</b></div>` : ""}
+    return `<i hidden data-ergebnis="m${s.runde}"></i>${e.echt ? `<div class="mitte tg-wurf mx-aufgedeckt ${e.ehrlich ? "ehrlich" : "gelogen"}" data-key="mxe${s.runde}" data-ton="${e.ehrlich ? "richtig" : "falsch"}">${becher(false)}${wuerfelBild(e.echt)}<b>Wirklich: ${esc(wName(e.echt))}</b><em class="mx-stempel">${e.ehrlich ? "EHRLICH" : "GELOGEN!"}</em></div>` : ""}
       <div class="urteil">🍺 ${name(namen, e.verlierer)} ${esc(e.grund || "")} und trinkt ${schlucke(e.schlucke || 1)}</div>
       ${knopf("Neue Runde", { typ: "neuerunde" }, "gross")}${unten}`;
   },

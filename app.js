@@ -28,6 +28,7 @@ import { Wache, akkuStarten, akkuWerte } from "./netzwache.js";
 import * as SL from "./spielleitung.js";
 import * as R from "./brett_minis.js";
 import * as ER from "./erklaer.js";   // Erklaer-Einblendung nach "Los geht's" (Restpaket 3a)
+import { einsetzenWeich } from "./weich.js";   // Spielseiten: nur Geaendertes austauschen (Schritt 4b, weiche Animationen)
 
 const app = document.getElementById("app");
 const BASIS = location.href.split("#")[0];
@@ -1940,7 +1941,14 @@ function zeichnen() {
     const bild = partieBild(p, sp, ich);
     let ruhig = false;
     try { ruhig = typeof sp.ruhig === "function" ? !!sp.ruhig(p.s) : !!sp.ruhig; } catch (e) { ruhig = false; }
-    if (!(ruhig && eingesetzt && eingesetzt.html === bild && eingesetzt.knoten && eingesetzt.knoten.parentNode === app)) einsetzen(bild);
+    // Schritt 4b (Nico 08.11.2026): Spielseiten werden weich angeglichen statt neu eingesetzt (weich.js) - Einblenden,
+    // Aufdecken, Hochzaehlen und Siegesmoment laufen so einmal durch und starten nicht bei jedem fremden Tipp neu.
+    // Spiele mit eigener Zeichenflaeche/3D, deren nach() Lauscher an ihre Elemente haengt, bleiben beim Neu-Einsetzen.
+    if (ruhig && eingesetzt && eingesetzt.html === bild && eingesetzt.knoten && eingesetzt.knoten.parentNode === app) { /* unveraendert */ }
+    else if (sp.weich !== false && eingesetzt && eingesetzt.pid === p.pid && eingesetzt.knoten && eingesetzt.knoten.parentNode === app) {
+      einsetzenWeich(app, bild);
+      eingesetzt = { html: bild, knoten: app.firstElementChild, pid: p.pid };
+    } else { einsetzen(bild); if (eingesetzt) eingesetzt.pid = p.pid; }
     partieSig = sigFuer(p);
     felderZurueck(felder);
     if (p.phase === "laeuft" && ich >= 0) {
@@ -1970,15 +1978,17 @@ function zeichnen() {
     if (!gesehen.has(k)) { gesehen.add(k); konfetti(160); }
   }
   // Animationen nur beim ersten Erscheinen, Konfetti bei Siegen
+  // Weiches Einsetzen (weich.js): ein Element, das schon beim ersten Erscheinen dastand (__erstK), bleibt stehen und spielt
+  // seine Animation zu Ende - "still" bekaemen nur neu eingesetzte Doppelgaenger (sonst wuerde die laufende Animation abgeschnitten)
   document.querySelectorAll("[data-key]").forEach((el) => {
     const k = el.dataset.key;
-    if (gesehen.has(k)) el.classList.add("still");
-    else { gesehen.add(k); if (el.dataset.ton && !anDerWand) { const n = el.dataset.ton, v = Number(el.dataset.tonNach || 0); v ? setTimeout(() => TON.spiele(n), v) : TON.spiele(n); } }
+    if (gesehen.has(k)) { if (el.__erstK !== k) el.classList.add("still"); }
+    else { gesehen.add(k); el.__erstK = k; if (el.dataset.ton && !anDerWand) { const n = el.dataset.ton, v = Number(el.dataset.tonNach || 0); v ? setTimeout(() => TON.spiele(n), v) : TON.spiele(n); } }
   });
   document.querySelectorAll(".urteil").forEach((el) => {
     const k = "k:" + el.textContent.slice(0, 80);
-    if (!gesehen.has(k)) { gesehen.add(k); if (/🏆|gewinnt/.test(el.textContent) && !anDerWand) konfetti(); }
-    else el.classList.add("still");
+    if (!gesehen.has(k)) { gesehen.add(k); el.__erstU = k; if (/🏆|gewinnt/.test(el.textContent) && !anDerWand) konfetti(); }
+    else if (el.__erstU !== k) el.classList.add("still");
   });
   if (gesehen.size > 3000) gesehen.clear();
   fokusZurueck(fokus);
@@ -2147,7 +2157,7 @@ function partieBild(p, sp, ich) {
       ${leitet && sp.id === "brett" && p.s && p.s.runden === 0 && !p.s.ende && p.s.phase !== "bonus" ? `<button class="klein2" data-a='{"typ":"_brettende"}'>🏁 Auswerten</button>` : ""}
       ${leitet && sp.id === "brett" && p.phase === "laeuft" && p.s && !p.s.ende ? `<button class="klein2" data-a='{"typ":"_brettspeichern"}' title="Spielstand speichern">💾</button>` : ""}
       ${leitet ? `<button class="klein2" data-a='{"typ":"_zurueck"}'>⏹️ Beenden</button>` : ""}${vollbildKnopf()}</span></div>
-    <div class="spielflaeche" data-spiel="${esc(sp.id)}">${inhalt}</div>
+    <div class="spielflaeche" data-spiel="${esc(sp.id)}"${sp.weich !== false ? " data-weich" : ""}>${inhalt}</div>
     ${stvLeiste(p, nm, ich)}
     ${padLeiste(p, sp)}
     <div class="fuss">${p.mit.map((id, i) => { const s = raum.spieler.find((x) => x.id === id); return `<span class="pille ${!s || s.online ? "" : "aus"}"><span class="farbe f${farbeVon(p, id)}"></span>${esc(nm[i])}${P.istBot(id) ? "" : schilder(nm[i], id)}${padMarke(id)}${id === meineId ? " (du)" : ""}</span>`; }).join("")}</div>

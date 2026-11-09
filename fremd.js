@@ -129,7 +129,7 @@ function fremdSpiel({ id, name, emoji, kurz, farben, M, regeln, gruppe, bot, ket
       const kette = kettenEnde && !zuschauer && !vorbei && s.st.pendingChainPiece && s.st.turnState && s.st.turnState.currentPlayerIndex === ich
         ? `<div class="hinweisbox kettenende">⚔️ Du darfst noch einmal schlagen – musst aber nicht.${knopf(kettenEnde, { typ: "fremd", action: "skipTurn" }, "gross gelb")}</div>` : "";
       return `${siegTafel(s, ich, namen, vorbei)}${vorbei ? "" : spielerLeiste(s, ich, namen, s.st && s.st.turnState ? s.st.turnState.currentPlayerIndex : null)}${flotteKnopf}${kette}${zuschauer ? `<div class="hinweisbox warten">👀 Dieses Spiel ist für ${mitspieler} Spieler – du schaust zu.</div>` : ""}
-        <div id="fremd-platz" class="fremd-platz"></div>
+        <div id="fremd-platz" class="fremd-platz" data-eigen></div>
         ${s.fehler && s.fehler.i === ich ? `<div class="hinweisbox" data-key="f${s.fehler.n}">⚠️ ${esc(uebersetzt(s.fehler.text))}</div>` : ""}
         ${vorbei ? `<i hidden data-ergebnis="f${s.partie}-${s.nr}"></i>${knopf("🔄 Neue Partie", { typ: "neu" }, "gross")}` : ""}
         <details class="grundregeln"><summary>📖 So geht's</summary>${regeln}</details>

@@ -23,12 +23,17 @@
   box-shadow: 0 4px 0 #11122a, 0 8px 16px #0006, inset 0 1px 0 #ffffff33; }
 .spielflaeche button.gross, .spielflaeche button.wahl { box-shadow: 0 6px 0 var(--lippe, var(--blurple-lippe)), 0 12px 22px #0007, inset 0 1px 0 #ffffff4d, inset 0 -3px 8px #0003; }
 .spielflaeche button.gross { background-color: var(--blurple); }
+/* farbige grosse Knoepfe behalten ihre Farbe (vorher machte die Zeile oben alle "gross" lila - z. B. Glauben/Aufdecken) */
+.spielflaeche button.gross.blau { background-color: var(--blau); } .spielflaeche button.gross.rot { background-color: var(--rot); }
+.spielflaeche button.gross.gruen { background-color: var(--gruen); } .spielflaeche button.gross.pink { background-color: var(--pink); }
+.spielflaeche button.gross.gelb { background-color: var(--gelb); }
 .spielflaeche button.wahl { --lippe: #1a1c38; background-color: #3a3d66; border: 1px solid #ffffff1c; transition: transform .12s cubic-bezier(.2, 1.6, .4, 1), box-shadow .12s, filter .15s; }
 .spielflaeche button.wahl:not(:disabled):hover { filter: brightness(1.12); }
 .spielflaeche button.rot { --lippe: var(--rot-lippe); } .spielflaeche button.gruen { --lippe: var(--gruen-lippe); }
 .spielflaeche button.blau { --lippe: var(--blau-lippe); } .spielflaeche button.gelb { --lippe: var(--gelb-lippe); text-shadow: none; } .spielflaeche button.pink { --lippe: var(--pink-lippe); }
 .spielflaeche button:active:not(:disabled) { box-shadow: 0 0 0 #0000, 0 2px 6px #0006, inset 0 2px 10px #0005; }
-/* (kein Einblend-Hopser: app.js setzt die Seite bei jedem neuen Stand neu ein - er wuerde bei jedem fremden Tipp wieder hopsen) */
+/* (kein Einblend-Hopser an Knoepfen: bei Spielen ohne weiches Einsetzen wuerde er bei jedem fremden Tipp wieder hopsen;
+   die weichen Auftritte fuer Karten, Urteile und Chips stehen unten unter "Schritt 4b") */
 .spielflaeche button.gewaehlt { box-shadow: 0 5px 0 var(--blau-lippe), 0 0 26px #1cb0f6aa, inset 0 1px 0 #fff8 !important; }
 @keyframes st-gewaehlt { 0% { transform: scale(.92); } 60% { transform: scale(1.06); } 100% { transform: scale(1); } }
 .spielflaeche button:disabled { filter: grayscale(.6) brightness(.75); }
@@ -127,7 +132,9 @@
 .fremd-buehne .ck-piece-black { border: 0; background: radial-gradient(circle at 34% 28%, #9a9aa8 0 7%, #3f4048 30%, #1d1e24 62%, #0a0a0e 100%);
   box-shadow: 0 3px 0 #050507, 0 4px 0 #000, 0 8px 10px #000a, inset 0 0 0 4px #ffffff14, inset 0 0 0 5px #0006, inset 0 0 0 9px #ffffff10, inset 0 0 0 10px #0004; }
 .fremd-buehne .ck-crown { font-size: min(5vw, 22px); filter: drop-shadow(0 2px 0 #7a4b00) drop-shadow(0 0 6px #ffd23f); }
-.fremd-buehne .ck-eligible { animation: st-wippen 1.4s ease-in-out infinite; }
+/* zugfaehige Steine leuchten (ohne Bewegung: ein dauernd wippender Stein steht nie still - Antippen/Klick-Proben, test_bots) */
+.fremd-buehne .ck-eligible { animation: st-leuchten 1.4s ease-in-out infinite; }
+@keyframes st-leuchten { 50% { filter: brightness(1.25) drop-shadow(0 0 8px #ffd23f); } }
 .fremd-buehne .ck-piece-red.ck-eligible, .fremd-buehne .ck-piece-black.ck-eligible { outline: 2px solid #ffd23fcc; outline-offset: 2px; }
 @keyframes st-wippen { 50% { transform: translateY(-2px); } }
 .fremd-buehne .ck-selected { transform: translateY(-6px) scale(1.12) !important; outline: 3px solid var(--gold); outline-offset: 2px; z-index: 3;
@@ -154,7 +161,8 @@
   box-shadow: 0 3px 0 #11122a, inset 0 1px 0 #ffffff33; font-size: 16px; }
 .fremd-buehne .cf-col-btn:not(:disabled) { animation: st-tippen 1.6s ease-in-out infinite; }
 .fremd-buehne .cf-col-btn:not(:disabled):active { transform: translateY(3px); box-shadow: none; }
-@keyframes st-tippen { 50% { transform: translateY(2px); box-shadow: 0 1px 0 #11122a, 0 0 12px #6d5dfc88, inset 0 1px 0 #ffffff33; } }
+/* nur Licht, keine Bewegung: ein dauernd wippender Knopf steht nie still (Antippen/Klick-Proben warten vergeblich, test_bots) */
+@keyframes st-tippen { 50% { box-shadow: 0 3px 0 #11122a, 0 0 14px #6d5dfc99, inset 0 1px 0 #ffffff33; filter: brightness(1.18); } }
 
 /* ================================================================ Tic-Tac-Toe: Neonbrett, Zeichen leuchten auf */
 .fremd-buehne .ttt-grid { box-sizing: border-box; grid-template-columns: repeat(3, minmax(0, 1fr)) !important; background: #0b0d1a; border-radius: 18px; padding: 8px; box-shadow: 0 0 0 2px #6d5dfc66, 0 0 30px #6d5dfc44, inset 0 0 30px #6d5dfc22; }
@@ -220,6 +228,166 @@
 .bsf-sp.sieger { animation: st-pokal 1.4s ease-in-out infinite; }
 body.beamer .bm-inhalt .urteil { box-shadow: 0 0 0 .2vw var(--pink), 0 0 3vw #eb459e66; }
 body.beamer .bm-pille { background-image: var(--glanz); box-shadow: inset 0 1px 0 #ffffff26, 0 .4vh 1vh #0006; }
+
+/* ================================================================ Schritt 4b: weiche Auftritte (nur bei weichem Einsetzen)
+   app.js gleicht Spielseiten jetzt an statt sie neu einzusetzen (weich.js, Spielflaeche mit data-weich). Darum duerfen Karten,
+   Urteile und Chips einmal hereinkommen - sie starten nicht mehr bei jedem fremden Tipp neu. Neue Karte = neuer data-key. */
+.spielflaeche[data-weich] .fragekarte.fk-zieh { animation: st-zieh .55s cubic-bezier(.2, 1.25, .4, 1) both; transform-origin: 50% 120%; }
+@keyframes st-zieh { from { transform: translate(18%, -14%) rotate(9deg) scale(.82); opacity: 0; } 60% { opacity: 1; } }
+.spielflaeche[data-weich] .urteil { animation: st-urteil .5s cubic-bezier(.2, 1.6, .4, 1) both; }
+@keyframes st-urteil { from { transform: scale(.6); opacity: 0; } }
+.spielflaeche[data-weich] .karte-gross { animation: st-aufdecken .5s cubic-bezier(.3, 1.3, .5, 1) both; }
+@keyframes st-aufdecken { from { transform: perspective(700px) rotateY(80deg); opacity: .2; } }
+.spielflaeche[data-weich] .hinweisbox { animation: st-ein .3s ease-out both; }
+@keyframes st-ein { from { transform: translateY(6px); opacity: 0; } }
+/* Punkte zaehlen hoch (weich.js setzt st-zahl-neu, solange die Zahl laeuft) */
+.st-zahl-neu { display: inline-block; animation: st-zahl .6s cubic-bezier(.2, 1.8, .4, 1); }
+.st-zahl-hoch { color: var(--gold) !important; text-shadow: 0 0 10px #ffd23f99; }
+.st-zahl-runter { color: #ff8a8a !important; }
+@keyframes st-zahl { 0% { transform: scale(1); } 30% { transform: scale(1.45); } 100% { transform: scale(1); } }
+/* Spieler-Chips (wer getrunken/gestanden hat): springen einzeln herein */
+.st-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 11px 4px 6px; border-radius: 99px; font-weight: 800; font-size: 14px;
+  background: #ffffff12; box-shadow: 0 0 0 1.5px #ffffff2a, 0 4px 10px #0006; overflow-wrap: anywhere; animation: st-chip .45s cubic-bezier(.2, 1.8, .4, 1) both; }
+.st-chip .farbe { flex: none; }
+@keyframes st-chip { from { transform: scale(.2) translateY(10px); opacity: 0; } }
+
+/* ---- Ich hab noch nie: Gestaendnis-Zaehler und Trinker-Chips */
+.nn-gestaendnis { display: flex; align-items: center; gap: 12px; margin: 12px 0; padding: 10px 12px; border-radius: 16px; background: #0d0e20aa; box-shadow: inset 0 0 0 1px #ff5fae33; }
+.nn-zahl { flex: none; text-align: center; min-width: 64px; }
+.nn-zahl b { display: block; font-size: 34px; line-height: 1; font-weight: 900; color: #ff8fc8; text-shadow: 0 0 16px #ff5fae88; }
+.nn-zahl small { display: block; font-size: 11px; opacity: .75; }
+.nn-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+/* ---- Wer wuerde eher: wer schon abgestimmt hat (Punkte leuchten auf), Aufloesung mit wachsenden Balken und Krone */
+.ww-stimmen { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; margin: -4px 0 6px; }
+.ww-stimmen i { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; background: #ffffff10; opacity: .35; transition: opacity .3s, transform .3s; }
+.ww-stimmen i.da { opacity: 1; transform: scale(1.15); box-shadow: 0 0 10px #ffffff55; animation: st-chip .4s cubic-bezier(.2, 1.8, .4, 1) both; }
+.ww-stimmen .farbe { margin: 0; }
+.spielflaeche[data-weich] .ww-ergebnis .b { transform-origin: left; animation: st-balken .7s cubic-bezier(.2, 1, .3, 1) both; animation-delay: calc(var(--i, 0) * .12s); }
+@keyframes st-balken { from { transform: scaleX(0); } }
+.ww-ergebnis .zeile.top span { color: var(--gold); font-weight: 900; }
+.ww-ergebnis .zeile.top .b { background: linear-gradient(90deg, #f5a623, var(--gold)); box-shadow: 0 0 16px #ffd23f88, inset 0 1px 0 #fff8; }
+/* ---- Wahrheit oder Pflicht: zwei grosse Karten zur Wahl */
+.wop-wahl .gross, .wop-zu { min-height: 128px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 21px; font-weight: 900; border-radius: 20px; }
+.spielflaeche .wop-wahl button.gross.blau { background: linear-gradient(160deg, #1cb0f6, #1550a8); --lippe: #0d3a78; }
+.spielflaeche .wop-wahl button.gross.rot { background: linear-gradient(160deg, #ff4b4b, #9b1030); --lippe: #5e0a1d; }
+.wop-wahl small { font-size: 12px; font-weight: 700; opacity: .85; }
+.wop-emo { font-size: 40px; line-height: 1; filter: drop-shadow(0 4px 4px #0006); }
+.wop-wahl .gross:not(:disabled) .wop-emo { animation: st-wippen 1.6s ease-in-out infinite; }
+.wop-zu { color: #fff; opacity: .55; box-shadow: inset 0 0 0 2px #ffffff22; }
+.wop-zu.blau { background: linear-gradient(160deg, #1cb0f6, #1550a8); } .wop-zu.rot { background: linear-gradient(160deg, #ff4b4b, #9b1030); }
+.wop-karte.w .fragekarte { box-shadow: 0 0 0 3px #1cb0f6, 0 0 34px #1cb0f688, 0 18px 40px #0009; }
+.wop-karte.p .fragekarte { box-shadow: 0 0 0 3px #ff4b4b, 0 0 34px #ff4b4b88, 0 18px 40px #0009; }
+/* ---- Lieber ... oder ...: blau gegen pink, VS in der Mitte; Aufloesung: Lager fahren von links und rechts herein */
+.lb-vs { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
+.lb-vs .lb-a, .lb-vs .lb-b { padding: 10px 8px; border-radius: 14px; font-size: 17px; line-height: 1.25; min-width: 0; overflow-wrap: anywhere; }
+.lb-vs .lb-a { background: #1cb0f633; box-shadow: inset 0 0 0 2px #1cb0f6aa; } .lb-vs .lb-b { background: #ff5fae33; box-shadow: inset 0 0 0 2px #ff5faeaa; }
+.lb-vs i { font-style: normal; font-weight: 900; font-size: 15px; color: #3a2200; background: linear-gradient(180deg, #ffe68a, #f5a623); border-radius: 50%; width: 38px; height: 38px; display: grid; place-items: center; box-shadow: 0 3px 0 #a8650e, 0 0 14px #ffd23f99; }
+.lb-zahl { display: block; font-size: 30px; line-height: 1.1; font-weight: 900; }
+.spielflaeche[data-weich] .lb-lager .lb-links { animation: st-links .5s cubic-bezier(.2, 1.3, .4, 1) both; }
+.spielflaeche[data-weich] .lb-lager .lb-rechts { animation: st-rechts .5s cubic-bezier(.2, 1.3, .4, 1) .08s both; }
+@keyframes st-links { from { transform: translateX(-40%); opacity: 0; } } @keyframes st-rechts { from { transform: translateX(40%); opacity: 0; } }
+/* ---- Paranoia: Fluestern im Dunkeln, die Enthuellung blitzt */
+.spielflaeche[data-spiel="paranoia"] { background: radial-gradient(60% 40% at 50% 0%, #6d5dfc33, #0000 70%), radial-gradient(120% 80% at 50% -10%, #1d1b3a, #0d0c1e 55%, #06060f 100%); }
+.pa-psst { font-size: 64px; animation: st-psst 2.4s ease-in-out infinite; }
+@keyframes st-psst { 50% { transform: scale(1.12) rotate(-6deg); filter: drop-shadow(0 0 18px #6d5dfc); } }
+.spielflaeche[data-weich] .pa-enthuellt { animation: st-blitz .7s ease-out both; }
+@keyframes st-blitz { 0% { transform: scale(1.3); filter: brightness(3); opacity: 0; } 40% { opacity: 1; } }
+
+/* ---- Wer bin ich: Stirn-Zettel (gelbe Klebezettel mit Klebestreifen), wer fragt, leuchtet; Erraten = Stempel */
+.spielflaeche[data-spiel="werbinich"] .figurkarte { position: relative; isolation: isolate; color: #2b2410; border-radius: 4px 4px 14px 4px;
+  background: linear-gradient(170deg, #fff6a8, #ffe766 70%, #f5d43f); box-shadow: 0 10px 18px #0008, inset 0 -10px 18px #c9a20022;
+  transform: rotate(calc((var(--i, 0) - 1.5) * 1.4deg)); transition: transform .3s, box-shadow .3s; }
+.spielflaeche[data-spiel="werbinich"] .figurkarte:nth-child(even) { background: linear-gradient(170deg, #ffd1ea, #ffb3d9 70%, #ff96c8); }
+.spielflaeche[data-spiel="werbinich"] .figurkarte::before { content: ""; position: absolute; left: 50%; top: -7px; width: 54px; height: 16px; translate: -50% 0; rotate: -3deg;
+  background: #ffffff8c; box-shadow: 0 1px 2px #0003; z-index: 1; }
+.spielflaeche[data-spiel="werbinich"] .figurkarte small { color: #5a4a10; opacity: .9; }
+.spielflaeche[data-spiel="werbinich"] .figurkarte b { color: #241c05; text-shadow: none; }
+.spielflaeche[data-spiel="werbinich"] .figurkarte.ich:not(.geschafft) { background: linear-gradient(170deg, #e9e6dc, #cfcabb); }
+.spielflaeche[data-spiel="werbinich"] .figurkarte.ich:not(.geschafft) b { color: #6d5dfc; }
+.spielflaeche[data-spiel="werbinich"] .figurkarte.dran { box-shadow: 0 0 0 3px var(--gold), 0 0 24px #ffd23f99, 0 10px 18px #0008; transform: rotate(0) scale(1.03); }
+.spielflaeche[data-spiel="werbinich"] .figurkarte.geschafft { filter: saturate(.85); }
+.spielflaeche[data-spiel="werbinich"] .wbi-stempel { display: inline-block; margin-top: 4px; padding: 1px 8px; border: 2.5px solid #1f9d3a; border-radius: 6px; color: #1f9d3a; font-weight: 900; font-style: normal;
+  rotate: -8deg; background: #ffffffaa; }
+.spielflaeche[data-weich][data-spiel="werbinich"] .figurkarte { animation: st-zettel .5s cubic-bezier(.2, 1.4, .4, 1) both; animation-delay: calc(var(--i, 0) * .07s); }
+@keyframes st-zettel { from { transform: translateY(-30px) rotate(-12deg); opacity: 0; } }
+.spielflaeche[data-weich] .wbi-stempel { animation: st-stempel .45s cubic-bezier(.3, 1.6, .5, 1) both; }
+@keyframes st-stempel { from { transform: scale(2.6); opacity: 0; } }
+
+/* ---- Begriffe: Tabu-Karte (Wort im Kopf, verbotene Woerter im roten Feld darunter) */
+.fragekarte.bg-tabu { background: linear-gradient(180deg, var(--k1) 0 44%, #fffaf0 44%); color: #1b1f2a; }
+.fragekarte.bg-tabu .vor { color: #ffffffd9; }
+.fragekarte.bg-tabu .text { color: #fff; text-shadow: 0 2px 0 #0005; }
+.fragekarte.bg-tabu .verboten { margin-top: 18px; padding: 10px 6px 4px; border-radius: 12px; background: #ffe3e3; box-shadow: inset 0 0 0 2px #e5484d55; }
+.fragekarte.bg-tabu .verboten span { color: #c4161c; background: #fff; border-color: #e5484d; text-decoration: none; }
+.fragekarte.bg-tabu .verboten span::before { content: "⛔ "; }
+/* ---- Pantomime: Buehne mit rotem Vorhang und Spot */
+.fragekarte.pm-buehne { background: radial-gradient(55% 60% at 50% 30%, #fff4c255, #0000 70%), linear-gradient(90deg, #8e1028 0 9%, #3a0f1f 9% 91%, #8e1028 91%);
+  box-shadow: inset 0 14px 0 #b8173a, inset 0 18px 10px #0006, 0 8px 0 #0007, 0 18px 34px #0008; }
+.fragekarte.pm-buehne .text { text-shadow: 0 0 22px #fff4c2; }
+/* ---- Spielstand-Tafel (Begriffe, Pantomime, Quiz ...): Punkte als leuchtende Marke */
+.spielflaeche .tafel span[data-zahl] { display: inline-block; font-variant-numeric: tabular-nums; }
+
+/* ---- Activity: Rot gegen Blau mit Fortschritt bis zum Ziel */
+.act-teams { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.act-teams .act-team { position: relative; overflow: hidden; isolation: isolate; border-radius: 14px !important; padding: 8px 10px !important; text-align: left; overflow-wrap: anywhere; }
+.act-teams .act-team::before { content: ""; position: absolute; inset: 0; z-index: -1; transform-origin: left; transform: scaleX(var(--anteil, 0)); transition: transform .8s cubic-bezier(.2, 1, .3, 1); }
+.act-teams .act-team.rot::before { background: linear-gradient(90deg, #ff4b4b88, #ff4b4b33); } .act-teams .act-team.blau::before { background: linear-gradient(90deg, #1cb0f688, #1cb0f633); }
+.act-teams .act-team.am-zug { box-shadow: 0 0 0 2px var(--gold), 0 0 16px #ffd23f66; }
+.act-teams small { display: block; font-size: 11px; opacity: .75; font-weight: 700; }
+
+/* ---- Malen & Raten: Papier auf der Staffelei, Tipps als Sprechblasen */
+.spielflaeche[data-spiel="malen"] .leinwand, .spielflaeche[data-spiel="activity"] .leinwand { background: #fffdf6; border: 0; border-radius: 6px;
+  box-shadow: 0 0 0 8px #8a5426, 0 0 0 10px #4a2a10, 0 14px 26px #000a, inset 0 0 30px #c8b89a55; }
+.mt-blase { position: relative; display: inline-flex; align-items: center; gap: 5px; background: #fff !important; color: #1b1f2a !important; border-radius: 14px 14px 14px 4px !important; font-weight: 700;
+  box-shadow: 0 3px 8px #0006; animation: st-chip .4s cubic-bezier(.2, 1.8, .4, 1) both; overflow-wrap: anywhere; }
+.mt-blase .farbe { flex: none; margin: 0; }
+
+/* ---- Stadt-Land-Fluss: Buchstabe als rollender Wuerfel, Felder auf liniertem Papier */
+.spielflaeche[data-spiel="slf"] .buchstabe { display: inline-grid; place-items: center; min-width: 1.5em; padding: 0 .15em; border-radius: 14px; color: #1b1f2a;
+  background: radial-gradient(circle at 30% 25%, #fff, #f3eee0 55%, #d9d1bb); box-shadow: 0 5px 0 #a99f86, 0 10px 16px #0008; -webkit-text-fill-color: #1b1f2a; }
+.spielflaeche[data-weich][data-spiel="slf"] .buchstabe { animation: st-rollen .8s cubic-bezier(.3, 1.4, .5, 1) both; }
+.spielflaeche[data-spiel="slf"] .slf-felder { padding: 12px 12px 6px; border-radius: 10px; color: #1b1f2a;
+  background: repeating-linear-gradient(180deg, #fffdf6 0 31px, #b9d3f0 31px 32px), #fffdf6; box-shadow: inset 4px 0 0 #f2a1a1, 0 10px 22px #0009; }
+.spielflaeche[data-spiel="slf"] .slf-felder label { color: #3a3f55; font-weight: 800; }
+.spielflaeche[data-spiel="slf"] .slf-felder input { background: #ffffffcc; color: #1b1f2a; border-color: #b9d3f0; }
+
+/* ---- Maexchen: Filztisch, Lederbecher, Elfenbein-Wuerfel mit Augen, Stempel beim Aufdecken */
+.spielflaeche[data-spiel="maexchen"] { background: radial-gradient(circle at 50% 30%, #2a8a5b, #135a38 55%, #0b3a24), #0b3a24; }
+.mx-paar { display: flex !important; justify-content: center; gap: 12px; margin: 6px 0; }
+.mx-w { display: inline-grid; grid-template-columns: repeat(3, 1fr); gap: 3px; width: 58px; height: 58px; padding: 8px; box-sizing: border-box; border-radius: 22%;
+  background: radial-gradient(circle at 30% 25%, #fff, #f3eee0 55%, #d9d1bb); box-shadow: 0 5px 0 #a99f86, 0 10px 14px #0009, inset 0 1px 0 #fff; }
+.mx-w i { border-radius: 50%; } .mx-w i.an { background: radial-gradient(circle at 35% 35%, #555, #111 70%); box-shadow: inset 0 1px 1px #0008; }
+.mx-ansage.maex .mx-w i.an { background: radial-gradient(circle at 35% 35%, #ff6b6b, #b00 70%); }
+.mx-ansage { text-align: center; margin: 4px 0 10px; } .mx-ansage small { display: block; opacity: .8; font-weight: 700; }
+.spielflaeche[data-weich] .mx-rollt .mx-w, .spielflaeche[data-weich] .mx-aufgedeckt .mx-w { animation: st-rollen .6s cubic-bezier(.3, 1.4, .5, 1) both; }
+.spielflaeche[data-weich] .mx-rollt .mx-w + .mx-w, .spielflaeche[data-weich] .mx-aufgedeckt .mx-w + .mx-w { animation-delay: .08s; }
+.mx-becher { display: flex; justify-content: center; margin: 6px 0 2px; }
+.mx-becher span { width: 70px; height: 74px; clip-path: polygon(10% 0, 90% 0, 100% 100%, 0 100%); border-radius: 6px;
+  background: repeating-linear-gradient(90deg, #ffffff0d 0 3px, #0000 3px 9px), linear-gradient(90deg, #4a2414, #8a4a26 45%, #5a2c16); box-shadow: inset 0 6px 0 #2a1208; }
+.mx-becher.wackelt span { animation: st-schuetteln .18s ease-in-out infinite alternate; }
+@keyframes st-schuetteln { from { transform: rotate(-9deg) translateX(-3px); } to { transform: rotate(9deg) translateX(3px); } }
+.mx-aufgedeckt { position: relative; } .mx-aufgedeckt .mx-becher { display: none; }
+.mx-stempel { display: inline-block; margin-left: 8px; padding: 1px 9px; border: 3px solid currentColor; border-radius: 7px; font-style: normal; font-weight: 900; letter-spacing: .05em; rotate: -8deg; }
+.mx-aufgedeckt.gelogen .mx-stempel { color: #ff5a5a; } .mx-aufgedeckt.ehrlich .mx-stempel { color: #6ee7a0; }
+.spielflaeche[data-weich] .mx-stempel { animation: st-stempel .45s cubic-bezier(.3, 1.6, .5, 1) .5s both; }
+.mx-stand .farbe { margin-right: 4px; }
+
+/* ---- Werwolf am Tag (ueber die Nachtbuehne hinaus): Grabsteine fuer die Toten, Steckbrief-Knoepfe zur Abstimmung,
+   Rollen-Karten bei der Aufloesung */
+.spielflaeche[data-spiel="werwolf"] .todeskarte { position: relative; margin: 10px auto; max-width: 340px; padding: 26px 16px 14px; text-align: center; color: #e9e6f2;
+  border-radius: 90px 90px 10px 10px / 70px 70px 10px 10px; border: 0;
+  background: radial-gradient(circle at 30% 20%, #ffffff14 0 2px, #0000 3px) 0 0 / 13px 11px, linear-gradient(180deg, #8d8a9a, #5d5a6c 55%, #3e3c4a);
+  box-shadow: inset 0 3px 0 #ffffff33, inset 0 -8px 14px #0006, 0 10px 0 #2a2933, 0 18px 26px #000b; text-shadow: 0 1px 0 #0009; overflow-wrap: anywhere; }
+.spielflaeche[data-spiel="werwolf"] .todeskarte b { display: block; font-size: 20px; color: #fff; }
+.spielflaeche[data-spiel="werwolf"] .todeskarte small { display: inline-block; margin-top: 6px; padding: 2px 10px; border-radius: 99px; background: #0004; }
+.spielflaeche[data-weich][data-spiel="werwolf"] .todeskarte { animation: st-grab .8s cubic-bezier(.2, 1.2, .4, 1) .3s both; }
+@keyframes st-grab { from { transform: translateY(40px) scaleY(.4); opacity: 0; } }
+.spielflaeche[data-spiel="werwolf"] .raster button.wahl { background: linear-gradient(180deg, #f3e2bf, #dcc08f); color: #3a2410; border: 0; text-shadow: none; --lippe: #8a6a3a;
+  box-shadow: 0 5px 0 #8a6a3a, 0 10px 18px #0008, inset 0 0 0 2px #ffffff55, inset 0 0 22px #a8875055; }
+.spielflaeche[data-spiel="werwolf"] .raster button.wahl::before { content: "🔎 "; }
+.spielflaeche[data-spiel="werwolf"] .raster button.wahl.gewaehlt { background: linear-gradient(180deg, #ffb4a0, #e0553a) !important; color: #fff; }
+.spielflaeche[data-spiel="werwolf"] .rollenaufloesung span { animation: st-chip .45s cubic-bezier(.2, 1.8, .4, 1) both; }
+.spielflaeche[data-spiel="werwolf"] .rollenaufloesung span:nth-child(2n) { animation-delay: .08s; } .spielflaeche[data-spiel="werwolf"] .rollenaufloesung span:nth-child(3n) { animation-delay: .16s; }
 
 /* ================================================================ weniger Bewegung */
 @media (prefers-reduced-motion: reduce) {

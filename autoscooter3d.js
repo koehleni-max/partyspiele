@@ -4,8 +4,10 @@
 // Nur die Darstellung - Regeln, Punkte und Computer bleiben in autoscooter.js beim Gastgeber.
 //   Halle     Kirmes-Autoscooter bei Nacht: Stahlboden mit Glanz und Plattenfugen, Gummibande auf Blechwand mit
 //             Warnstreifen und Lauflichtern, Stromgitter unter dem Dach, Saeulen, Neonroehren, Leuchtschrift, bunte Strahler.
-//   Wagen     richtige Autoscooter: lackierte Wanne in der Spielerfarbe, Gummiring, Sitz, Lenkrad (dreht beim Lenken),
-//             Scheinwerfer, Ruecklichter, Stromstange mit Funken am Gitter, Unterboden-Leuchten, Fahrer am Steuer, Name darueber.
+//   Wagen     richtige Autoscooter (Schritt 4b): runde Lackwanne mit Haube und Heckschild, Gummiwulst, Chrom, Startnummer,
+//             Sitz, Lenkrad (dreht beim Lenken), Scheinwerfer, Ruecklichter, Stromstange mit Feder und Funken am Gitter,
+//             Unterboden-Leuchten; Fahrer aus runden Formen mit Kopf (wackelt beim Stoss nach), Haaren, Haenden am Lenkrad.
+//   Glanz     Lack, Chrom, Boden und Bande spiegeln eine einmal gerechnete Ersatz-Halle (Lichterketten, Neon, Strahler).
 //   Weich     Der Gastgeber rechnet 10-mal pro Sekunde. Jeder Stand kommt mit seiner Gastgeber-Uhr (t); die Ansicht spielt
 //             die Staende mit kleinem Puffer (VERZUG) nach und zieht die Wagen dazwischen weich (Bild fuer Bild, 60/s).
 //             Fehlt ein Stand, wird kurz vorausgerechnet. Das eigene Auto am Handy faehrt sofort: es wird ab dem letzten
@@ -37,6 +39,9 @@ const lsLesen = (k) => { try { return localStorage.getItem(k); } catch (e) { ret
 const lsSchreiben = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* privater Modus */ } };
 // Zeiten in Sekunden (fuer die Tests auslesbar)
 export const AS3_ZEIT = { podest: 1.7, plus: 1.1, funken: 0.7, ring: 0.55, los: 0.9 };
+const HAUT = ["#f1c7a0", "#c98e62", "#f6d5b8", "#8d5a3b", "#e0ac7e", "#5c3a28"];
+// Haarfarben eher mittel bis hell: hinter dem Wagen hebt sich der Kopf so vom dunklen Hallendach ab
+const HAARE = ["#8a5a2e", "#e2b866", "#b4522a", "#5a3a22", "#f08bb5", "#c9a06a", "#3b2a20", "#6f8fe0"];
 
 let g = null, generation = 0, geht = null;
 
@@ -129,29 +134,131 @@ function hochziehen(form, hoehe, fase, y0) {
   geo.rotateX(-Math.PI / 2); geo.translate(0, y0 + fase, 0);
   return geo;
 }
+// Draufsicht als runde Wanne (Superellipse), vorn etwas schmaler - die Grundform echter Kirmes-Autoscooter
+function wannenPunkte(l, b, n = 3.4, N = 56, schmal = 0.14) {
+  const pkt = [];
+  for (let i = 0; i < N; i++) {
+    const t = (i / N) * Math.PI * 2, c = Math.cos(t), s = Math.sin(t);
+    const x = Math.sign(c) * Math.pow(Math.abs(c), 2 / n) * (l / 2);
+    pkt.push(new THREE.Vector2(x, Math.sign(s) * Math.pow(Math.abs(s), 2 / n) * (b / 2) * (1 - schmal * Math.max(0, x / (l / 2)))));
+  }
+  return pkt;
+}
+const wannenForm = (l, b, n, schmal) => new THREE.Shape(wannenPunkte(l, b, n, 56, schmal));
+const ringWeg = (l, b, y, schmal) => new THREE.CatmullRomCurve3(wannenPunkte(l, b, 3.4, 40, schmal).map((p) => V(p.x, y, p.y)), true);
+// stehende Platte (Ansicht von hinten: quer z, Hoehe y), Dicke nach x; bogen = oben rund
+function platte(breite, hoehe, dicke, fase, bogen) {
+  const s = new THREE.Shape(), hb = breite / 2;
+  if (bogen) { s.moveTo(-hb, 0); s.lineTo(-hb, hoehe - hb); s.absarc(0, hoehe - hb, hb, Math.PI, 0, true); s.lineTo(hb, 0); s.lineTo(-hb, 0); }
+  else { const r = Math.min(hb, hoehe / 2) * 0.6; s.moveTo(-hb + r, 0); s.lineTo(hb - r, 0); s.quadraticCurveTo(hb, 0, hb, r); s.lineTo(hb, hoehe - r); s.quadraticCurveTo(hb, hoehe, hb - r, hoehe); s.lineTo(-hb + r, hoehe); s.quadraticCurveTo(-hb, hoehe, -hb, hoehe - r); s.lineTo(-hb, r); s.quadraticCurveTo(-hb, 0, -hb + r, 0); }
+  const geo = new THREE.ExtrudeGeometry(s, { depth: dicke, bevelEnabled: true, bevelThickness: fase, bevelSize: fase, bevelSegments: 3, curveSegments: 14 });
+  geo.translate(0, 0, -dicke / 2); geo.rotateY(Math.PI / 2);   // Dicke liegt jetzt auf x, Mitte bei x = 0
+  return geo;
+}
+// Stab von a nach b (Rohr, Stange)
+function stab(a, b, r, seg = 8) {
+  const d = new THREE.Vector3().subVectors(b, a), k = new THREE.CylinderGeometry(r, r, d.length(), seg);
+  k.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(V(0, 1, 0), d.clone().normalize())); k.translate((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+  return k;
+}
+const farbig = (geo, f) => { const c = new THREE.Color(f), n = geo.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) a.set([c.r, c.g, c.b], i * 3); geo.setAttribute("color", new THREE.BufferAttribute(a, 3)); return geo; };
+// Masse des Wagens (Wagen-Raum: x nach vorn, y nach oben, z quer). Die Stromstange steht hinten hinter dem Heckschild.
+export const WAGEN = { stange: V(-0.42, 0, 0.13), stangeOben: 2.62, rad: V(0.05, 0.5, 0), radR: 0.075, huefte: V(-0.15, 0.4, 0), schulter: V(0.012, 0.205, 0.09), hals: V(0.004, 0.25, 0) };
+// Kirmes-Autoscooter (Schritt 4b, Nico 08.11.2026: "noch klobig" in der Sicht hinter dem Wagen): runde lackierte Wanne mit
+// Haube und hohem, oben rundem Heckschild, dicker Gummiwulst rundum, Chrom (Zierleiste, Schildrand, Scheinwerferringe,
+// Stromstange mit Feder und Abnehmer), Cockpit mit gepolstertem Sitz, Lenkrad mit drei Speichen, Startnummer hinten und vorn.
 function wagenTeile() {
   const lack = vereinen([
-    hochziehen(rundRechteck(0.62, 0.5, 0.14, 0.2), 0.16, 0.05, 0.1),                         // Wanne
-    (() => { const k = new THREE.SphereGeometry(0.24, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2); k.scale(0.9, 0.55, 1.0); k.translate(0.16, 0.34, 0); return k; })(), // Haube vorn
-    // Heck-Rueckenblech: oben rund (Halbscheibe) - so sieht man es hinter dem Wagen (Verfolger-Kamera, Nachtrag 08.11.2026)
-    (() => { const f = new THREE.CylinderGeometry(0.23, 0.23, 0.09, 28, 1, false, 0, Math.PI); f.rotateZ(Math.PI / 2); f.translate(-0.3, 0.31, 0); return f; })(),
+    hochziehen(wannenForm(0.56, 0.44, 3.4, 0.12), 0.09, 0.06, 0.1),                                                            // Wanne
+    (() => { const k = new THREE.SphereGeometry(0.21, 32, 14, 0, Math.PI * 2, 0, Math.PI / 2); k.scale(1.05, 0.46, 1.04); k.translate(0.15, 0.3, 0); return k; })(), // Haube
+    // Heckschild: niedrig genug, dass man hinter dem Wagen Kopf und Schultern des Fahrers sieht
+    (() => { const k = platte(0.44, 0.25, 0.05, 0.022, true); k.translate(-0.33, 0.26, 0); return k; })(),
+    ...[-1, 1].map((s) => { const k = new THREE.SphereGeometry(0.12, 18, 10); k.scale(1.3, 0.62, 0.7); k.translate(-0.2, 0.3, s * 0.21); return k; }),   // Kotfluegel hinten
   ]);
-  const gummi = (() => { const t = new THREE.TorusGeometry(0.34, 0.068, 12, 48); t.rotateX(Math.PI / 2); t.scale(1.12, 1, 0.88); t.translate(0, 0.14, 0); return t; })();
+  const gummi = new THREE.TubeGeometry(ringWeg(0.72, 0.6, 0.15, 0.1), 72, 0.078, 12, true);
   const dunkel = vereinen([
-    (() => { const k = new THREE.CylinderGeometry(0.33, 0.35, 0.1, 32); k.scale(1.1, 1, 0.86); k.translate(0, 0.07, 0); return k; })(),   // Sockel
-    (() => { const k = new THREE.BoxGeometry(0.2, 0.08, 0.36); k.translate(-0.12, 0.36, 0); return k; })(),                   // Sitzflaeche
-    (() => { const k = new THREE.BoxGeometry(0.07, 0.26, 0.36); k.rotateZ(0.18); k.translate(-0.23, 0.48, 0); return k; })(), // Lehne
-    (() => { const k = new THREE.CylinderGeometry(0.018, 0.022, 0.24, 8); k.rotateZ(0.75); k.translate(0.1, 0.42, 0); return k; })(), // Lenksaeule
+    (() => { const k = new THREE.CylinderGeometry(0.3, 0.33, 0.1, 40); k.scale(1.12, 1, 0.92); k.translate(0, 0.06, 0); return k; })(),          // Unterboden
+    (() => { const k = hochziehen(wannenForm(0.36, 0.34, 3, 0), 0.004, 0.006, 0.312); k.translate(-0.05, 0, 0); return k; })(),               // Cockpit-Boden
+    (() => { const k = hochziehen(wannenForm(0.15, 0.3, 4, 0), 0.03, 0.025, 0.33); k.translate(-0.17, 0, 0); return k; })(),                  // Sitzkissen
+    (() => { const k = platte(0.34, 0.15, 0.04, 0.025, false); k.rotateZ(0.16); k.translate(-0.27, 0.36, 0); return k; })(),                  // Rueckenpolster (Schultern bleiben frei)
+    stab(V(0.17, 0.34, 0), V(WAGEN.rad.x, WAGEN.rad.y, 0), 0.016),                                                                              // Lenksaeule
   ]);
+  const st = WAGEN.stange;
+  const feder = (() => { const p = []; for (let i = 0; i <= 90; i++) { const u = i / 90, a = u * Math.PI * 2 * 7; p.push(V(st.x + Math.cos(a) * 0.028, 0.36 + u * 0.24, st.z + Math.sin(a) * 0.028)); } return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(p), 120, 0.006, 5, false); })();
   const chrom = vereinen([
-    (() => { const k = new THREE.CylinderGeometry(0.014, 0.02, 2.12, 8); k.translate(-0.3, 0.5 + 1.06, 0); return k; })(),    // Stromstange
-    (() => { const k = new THREE.TorusGeometry(0.035, 0.008, 6, 16); k.rotateY(Math.PI / 2); k.translate(-0.3, 2.62, 0); return k; })(), // Abnehmer oben
-    (() => { const k = new THREE.TorusGeometry(0.3, 0.012, 6, 40); k.rotateX(Math.PI / 2); k.scale(1.12, 1, 0.88); k.translate(0, 0.3, 0); return k; })(), // Zierleiste
+    stab(V(st.x, 0.3, st.z), V(st.x, WAGEN.stangeOben - 0.04, st.z), 0.015),                                                          // Stromstange
+    feder,                                                                                                                              // Feder unten
+    (() => { const k = new THREE.CylinderGeometry(0.035, 0.045, 0.06, 14); k.translate(st.x, 0.33, st.z); return k; })(),             // Halter
+    stab(V(-0.37, 0.31, st.z), V(st.x, 0.32, st.z), 0.02),                                                                             // Arm zum Schild
+    (() => { const k = new THREE.BoxGeometry(0.16, 0.018, 0.05); k.translate(st.x + 0.02, WAGEN.stangeOben - 0.02, st.z); return k; })(), // Abnehmer-Schuh am Gitter
+    new THREE.TubeGeometry(ringWeg(0.62, 0.5, 0.325, 0.12), 64, 0.012, 6, true),                                                      // Zierleiste oben
+    (() => { const s = []; for (let i = 0; i <= 24; i++) { const a = Math.PI - (i / 24) * Math.PI; s.push(V(-0.33, 0.26 + 0.03 + Math.sin(a) * 0.243, Math.cos(a) * 0.243)); } return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(s), 40, 0.013, 6, false); })(), // Schildrand
+    ...[-1, 1].map((s) => { const k = new THREE.TorusGeometry(0.04, 0.009, 6, 18); k.rotateY(Math.PI / 2); k.translate(0.315, 0.33, s * 0.12); return k; }),   // Scheinwerferringe
   ]);
-  const rad = (() => { const k = new THREE.TorusGeometry(0.07, 0.014, 8, 24); const sp = new THREE.BoxGeometry(0.01, 0.13, 0.016); return vereinen([k, sp]); })();
-  const vorn = vereinen([-1, 1].map((s) => { const k = new THREE.SphereGeometry(0.035, 12, 8); k.translate(0.36, 0.3, s * 0.13); return k; }));
-  const hinten = vereinen([-1, 1].map((s) => { const k = new THREE.BoxGeometry(0.02, 0.04, 0.09); k.translate(-0.36, 0.42, s * 0.14); return k; }));
-  return { lack, gummi, dunkel, chrom, rad, vorn, hinten };
+  const rad = vereinen([new THREE.TorusGeometry(WAGEN.radR, 0.013, 8, 28), new THREE.CylinderGeometry(0.022, 0.022, 0.02, 12).rotateX(Math.PI / 2),
+    ...[0, 1, 2].map((k) => { const b = new THREE.BoxGeometry(0.009, WAGEN.radR, 0.008); b.translate(0, -WAGEN.radR / 2, 0); b.rotateZ(k * (Math.PI * 2 / 3)); return b; })]);
+  const vorn = vereinen([-1, 1].map((s) => { const k = new THREE.SphereGeometry(0.036, 14, 10); k.scale(0.7, 1, 1); k.translate(0.315, 0.33, s * 0.12); return k; }));
+  const hinten = vereinen([-1, 1].map((s) => { const k = new THREE.CapsuleGeometry(0.018, 0.05, 4, 8); k.rotateX(Math.PI / 2); k.translate(-0.378, 0.34, s * 0.16); return k; }));
+  // Startnummer: hinten auf dem Schild (die sieht man hinter dem eigenen Wagen) und oben auf der Haube; Feld je Wagen aus dem Zahlen-Atlas
+  const nummer = vereinen([
+    (() => { const k = new THREE.PlaneGeometry(0.17, 0.17); k.rotateY(-Math.PI / 2); k.translate(-0.381, 0.395, -0.01); return k; })(),
+    (() => { const k = new THREE.PlaneGeometry(0.11, 0.11); k.rotateX(-Math.PI / 2); k.rotateY(-Math.PI / 2); k.rotateZ(-0.24); k.translate(0.2, 0.399, 0); return k; })(),
+  ]);
+  return { lack, gummi, dunkel, chrom, rad, vorn, hinten, nummer };
+}
+// Fahrer aus runden Formen (statt der kantigen Figuren): Rumpf, Kopf mit Augen, Nase und Ohren, Haare, Arme am Lenkrad.
+// Ursprung je Teil = Gelenk (Huefte, Hals, Schulter), damit Kopf und Rumpf beim Stoss mitwackeln und die Arme zum Lenkrad greifen.
+export const ARM_L = 0.235;
+function fahrerTeile() {
+  const rumpf = new THREE.CapsuleGeometry(0.078, 0.11, 6, 14); rumpf.translate(0, 0.133, 0);
+  const haut = 0xffffff, dunkel = 0x1b1410;
+  const kopf = vereinen([
+    farbig(new THREE.SphereGeometry(0.085, 20, 14), haut),
+    farbig((() => { const k = new THREE.SphereGeometry(0.013, 8, 6); k.translate(0.084, -0.006, 0); return k; })(), haut),
+    ...[-1, 1].map((s) => farbig((() => { const k = new THREE.SphereGeometry(0.013, 8, 6); k.translate(0.073, 0.02, s * 0.031); return k; })(), dunkel)),
+    ...[-1, 1].map((s) => farbig((() => { const k = new THREE.SphereGeometry(0.022, 8, 6); k.scale(0.5, 1, 0.55); k.translate(-0.004, 0, s * 0.084); return k; })(), haut)),
+    farbig((() => { const k = new THREE.TorusGeometry(0.026, 0.005, 4, 10, Math.PI); k.rotateZ(Math.PI); k.rotateY(Math.PI / 2); k.translate(0.074, -0.03, 0); return k; })(), 0x8a2a2a),   // Laecheln
+  ]);
+  kopf.translate(0, 0.095, 0);
+  const haare = (() => { const k = new THREE.SphereGeometry(0.092, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.52); k.scale(1.04, 1, 1.02); k.rotateZ(0.4); k.translate(-0.006, 0.098, 0); return k; })();
+  const arm = new THREE.CapsuleGeometry(0.027, ARM_L - 0.054, 4, 10); arm.rotateZ(-Math.PI / 2); arm.translate(ARM_L / 2, 0, 0);
+  const hand = new THREE.SphereGeometry(0.03, 10, 8); hand.translate(ARM_L, 0, 0);
+  return { rumpf, kopf, haare, arm, hand };
+}
+// Zahlen-Atlas 4 x 4 (Startnummern 1-16): weisse Plakette mit dunkler Zahl
+function nummernAtlas() {
+  const S = 128, [c, x] = leinwand(S * 4);
+  for (let i = 0; i < 16; i++) {
+    const cx = (i % 4) * S + S / 2, cy = Math.floor(i / 4) * S + S / 2;
+    x.fillStyle = "#f8f6ef"; x.beginPath(); x.arc(cx, cy, S * 0.46, 0, 7); x.fill();
+    x.lineWidth = 7; x.strokeStyle = "#1c1c24"; x.beginPath(); x.arc(cx, cy, S * 0.4, 0, 7); x.stroke();
+    x.font = `900 ${i + 1 > 9 ? 62 : 74}px sans-serif`; x.textAlign = "center"; x.textBaseline = "middle"; x.fillStyle = "#1c1c24"; x.fillText(String(i + 1), cx, cy + 5);
+  }
+  const t = textur(c); t.flipY = true; return t;
+}
+// Spiegelungen in der Halle: kleine Ersatz-Halle (Lichterketten, Neonroehren, bunte Strahler, Leuchtschrift) einmal in eine
+// Umgebungs-Karte gerechnet - so spiegeln Lack, Chrom, Boden und Bande die Kirmeslichter statt des Nachthimmels
+function hallenUmgebung(renderer, W, H) {
+  const s = new THREE.Scene(); s.background = new THREE.Color(0x0d0819);
+  const raum = new THREE.Mesh(new THREE.BoxGeometry(40, 14, 30), new THREE.MeshBasicMaterial({ color: 0x150e26, side: THREE.BackSide })); raum.position.y = 5; s.add(raum);
+  const boden = new THREE.Mesh(new THREE.PlaneGeometry(40, 30).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x0b0a12 })); s.add(boden);
+  const hell = (f, k) => new THREE.MeshBasicMaterial({ color: new THREE.Color(f).multiplyScalar(k) });
+  const sx = W + 1.5, sz = H + 1.3;
+  [[0xff3fa8, 0, -sz, sx * 2, 0], [0x22d3ee, 0, sz, sx * 2, 0], [0xa855f7, -sx, 0, sz * 2, 1], [0xfacc15, sx, 0, sz * 2, 1]].forEach(([f, x, z, l, quer]) => {
+    const r = new THREE.Mesh(new THREE.BoxGeometry(quer ? 0.12 : l, 0.12, quer ? l : 0.12), hell(f, 5)); r.position.set(x, 2.66, z); s.add(r);
+  });
+  const birne = new THREE.SphereGeometry(0.09, 6, 4), birneMat = hell(0xffe2a8, 7);
+  for (const [hx, hz, y, schritt] of [[W + 0.17, H + 0.17, 0.42, 0.5], [sx, sz, 2.62, 0.42]]) {
+    for (let x = -hx; x <= hx; x += schritt) [-hz, hz].forEach((z) => { const b = new THREE.Mesh(birne, birneMat); b.position.set(x, y, z); s.add(b); });
+    for (let z = -hz; z <= hz; z += schritt) [-hx, hx].forEach((x) => { const b = new THREE.Mesh(birne, birneMat); b.position.set(x, y, z); s.add(b); });
+  }
+  [[0xff3fa8, -W + 0.5, -H + 0.4], [0x22d3ee, W - 0.5, -H + 0.4], [0xfacc15, -W + 0.5, H - 0.4], [0xa855f7, W - 0.5, H - 0.4]].forEach(([f, x, z]) => {
+    const p = new THREE.Mesh(new THREE.CircleGeometry(0.7, 16).rotateX(Math.PI / 2), hell(f, 3)); p.position.set(x * 1.2, 3.4, z * 1.2); s.add(p);
+  });
+  const schild = new THREE.Mesh(new THREE.PlaneGeometry(7, 1.2), hell(0xff3fa8, 2.5)); schild.position.set(0, 3.65, -sz - 0.1); s.add(schild);
+  const pm = new THREE.PMREMGenerator(renderer), env = pm.fromScene(s, 0.02, 0.1, 60).texture; pm.dispose();
+  s.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+  return env;
 }
 
 // ---------------------------------------------------------------- Aufbau
@@ -181,7 +288,8 @@ function aufbauen(o, n) {
   const blitz = new THREE.PointLight(0xfff2c0, 0, 6, 1.8); blitz.position.set(0, 0.8, 0); scene.add(blitz);
 
   // ---- Boden: Stahl mit Glanz; aussen Holzsteg, dahinter der dunkle Kirmesplatz
-  const boden = new THREE.Mesh(new THREE.PlaneGeometry(W * 2, H * 2), new THREE.MeshPhysicalMaterial({ map: bodenTextur(), metalness: 0.55, roughness: 0.3, clearcoat: Q.leuchten ? 0.8 : 0.3, clearcoatRoughness: 0.12 }));
+  // Boden poliert (Schritt 4b): Klarlack fast spiegelglatt - auf Augenhoehe spiegeln sich Lichterketten und Neon darin
+  const boden = new THREE.Mesh(new THREE.PlaneGeometry(W * 2, H * 2), new THREE.MeshPhysicalMaterial({ map: bodenTextur(), metalness: 0.6, roughness: 0.26, clearcoat: Q.leuchten ? 1 : 0.7, clearcoatRoughness: 0.04 }));
   boden.rotation.x = -Math.PI / 2; boden.receiveShadow = true; scene.add(boden);
   const steg = new THREE.Mesh(new THREE.PlaneGeometry(W * 2 + 3.4, H * 2 + 3.2), SC.holzMaterial(0x5a3a22));
   steg.rotation.x = -Math.PI / 2; steg.position.y = -0.03; steg.receiveShadow = true; scene.add(steg);
@@ -204,6 +312,14 @@ function aufbauen(o, n) {
   });
   const gummiBande = new THREE.Mesh(new THREE.TubeGeometry(bandWeg, 240, 0.11, 10, true), new THREE.MeshPhysicalMaterial({ color: 0x14141a, roughness: 0.55, clearcoat: 0.4, clearcoatRoughness: 0.4 }));
   gummiBande.position.y = 0.2; gummiBande.castShadow = true; scene.add(gummiBande);
+  // Chrom-Handlauf oben auf der Bande (glaenzt auf Augenhoehe)
+  const handlauf = new THREE.Mesh(new THREE.TubeGeometry(bandWeg, 240, 0.028, 8, true), new THREE.MeshStandardMaterial({ color: 0xe8edf6, metalness: 1, roughness: 0.14 }));
+  handlauf.position.y = 0.395; scene.add(handlauf);
+  // Lichtpfuetzen: die bunten Strahler spiegeln sich als weiche Flecken im polierten Boden
+  const pfuetzen = [[0xff3fa8, -W + 0.9, -H + 0.7], [0x22d3ee, W - 0.9, -H + 0.7], [0xfacc15, -W + 0.9, H - 0.7], [0xa855f7, W - 0.9, H - 0.7]].map(([f, x, z]) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 2.6).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: weich(), color: new THREE.Color(f).multiplyScalar(0.35), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    m.position.set(x, 0.006, z); scene.add(m); return m;
+  });
 
   // ---- Lauflichter oben auf der Bande und unter dem Dach (Gluehbirnen, laufen im Kreis)
   const birnenOrte = [];
@@ -248,23 +364,39 @@ function aufbauen(o, n) {
   const T = wagenTeile();
   const lackMat = Q.leuchten || st.stufe === "mittel" ? new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.32, metalness: 0.15, clearcoat: 1, clearcoatRoughness: 0.06 })
     : new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35, metalness: 0.1 });
-  const sammel = (geo, mat, schatten = true) => { const im = new THREE.InstancedMesh(geo, mat, n); im.castShadow = schatten; im.receiveShadow = true; im.frustumCulled = false; scene.add(im); return im; };
+  const sammel = (geo, mat, schatten = true, anzahl = n) => { const im = new THREE.InstancedMesh(geo, mat, anzahl); im.castShadow = schatten; im.receiveShadow = true; im.frustumCulled = false; scene.add(im); return im; };
   const vollSchatten = Q.schatten >= 2048;   // Handy-Stufen: nur Wanne und Gummiring werfen Schatten (spart einen Durchgang je Teil)
+  // Startnummer: ein Zahlen-Atlas fuer alle Wagen; welches Feld, steht je Wagen im Merkmal nrOff (kleine Ergaenzung im Shader)
+  T.nummer.setAttribute("nrOff", new THREE.InstancedBufferAttribute(new Float32Array(Array.from({ length: n }, (_, j) => [(j % 4) / 4, 1 - (Math.floor((j % 16) / 4) + 1) / 4]).flat()), 2));
+  const nrMat = new THREE.MeshStandardMaterial({ map: nummernAtlas(), transparent: true, alphaTest: 0.3, roughness: 0.3, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  nrMat.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace("void main() {", "attribute vec2 nrOff;\nvoid main() {").replace("#include <uv_vertex>", "#include <uv_vertex>\n#ifdef USE_MAP\n  vMapUv = vMapUv * 0.25 + nrOff;\n#endif");
+  };
+  nrMat.customProgramCacheKey = () => "as3-nummer";
+  const F = fahrerTeile();
+  const hautMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55 });
   const W3 = {
-    lack: sammel(T.lack, lackMat), gummi: sammel(T.gummi, new THREE.MeshStandardMaterial({ color: 0x121218, roughness: 0.7 })),
-    dunkel: sammel(T.dunkel, new THREE.MeshStandardMaterial({ color: 0x2a1a22, roughness: 0.55 }), vollSchatten), chrom: sammel(T.chrom, chromMat, vollSchatten),
-    rad: sammel(T.rad, new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.4 }), false),
+    lack: sammel(T.lack, lackMat),
+    gummi: sammel(T.gummi, new THREE.MeshPhysicalMaterial({ color: 0x15151c, roughness: 0.5, clearcoat: 0.35, clearcoatRoughness: 0.35 })),
+    dunkel: sammel(T.dunkel, new THREE.MeshStandardMaterial({ color: 0x2a1a24, roughness: 0.5 }), vollSchatten), chrom: sammel(T.chrom, chromMat, vollSchatten),
+    rad: sammel(T.rad, new THREE.MeshStandardMaterial({ color: 0x15151a, roughness: 0.35 }), false),
     vorn: sammel(T.vorn, new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 3, 2.6) }), false),
     hinten: sammel(T.hinten, new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 0.25, 0.2) }), false),
+    nummer: sammel(T.nummer, nrMat, false),
     glow: sammel(new THREE.PlaneGeometry(1.5, 1.2).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: weich(), transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending }), false),
-    kopf: sammel(new THREE.SphereGeometry(0.085, 14, 10).translate(-0.1, 0.66, 0), new THREE.MeshStandardMaterial({ color: 0xf1c7a0, roughness: 0.6 })),
-    rumpf: sammel(new THREE.CylinderGeometry(0.075, 0.1, 0.22, 12).translate(-0.1, 0.5, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 })),
+    rumpf: sammel(F.rumpf, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 }), vollSchatten),
+    kopf: sammel(F.kopf, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55, vertexColors: true }), vollSchatten),
+    haare: sammel(F.haare, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 }), false),
+    arme: sammel(F.arm, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 }), false, n * 2),
+    haende: sammel(F.hand, hautMat, false, n * 2),
   };
   W3.glow.renderOrder = 1;
   const hell = (f, a) => new THREE.Color(f).lerp(new THREE.Color(0xffffff), a);
   for (let j = 0; j < n; j++) {
-    const f = o.farben[j % o.farben.length];
-    W3.lack.setColorAt(j, new THREE.Color(f)); W3.glow.setColorAt(j, hell(f, 0.1)); W3.rumpf.setColorAt(j, new THREE.Color(f).multiplyScalar(0.6));
+    const f = o.farben[j % o.farben.length], hemd = hell(f, 0.62).multiplyScalar(0.92), haut = new THREE.Color(HAUT[j % HAUT.length]);
+    W3.lack.setColorAt(j, new THREE.Color(f)); W3.glow.setColorAt(j, hell(f, 0.1));
+    W3.rumpf.setColorAt(j, hemd); W3.kopf.setColorAt(j, haut); W3.haare.setColorAt(j, new THREE.Color(HAARE[(j * 5) % HAARE.length]));
+    [0, 1].forEach((s) => { W3.arme.setColorAt(j * 2 + s, hemd); W3.haende.setColorAt(j * 2 + s, haut); });
   }
   // Funken an der Stromstange (ein Punkt je Wagen)
   const fsGeo = new THREE.BufferGeometry();
@@ -277,7 +409,7 @@ function aufbauen(o, n) {
   const SPUR = 26;
   const autos = Array.from({ length: n }, (_, j) => {
     const flammen = new THREE.Group();
-    [-0.12, 0.12].forEach((z) => { const m = new THREE.Mesh(flammeGeo, flammeMat); m.position.set(-0.36, 0.22, z); flammen.add(m); });
+    [-0.12, 0.12].forEach((z) => { const m = new THREE.Mesh(flammeGeo, flammeMat); m.position.set(-0.4, 0.22, z); flammen.add(m); });
     flammen.visible = false; scene.add(flammen);
     const spurGeo = new THREE.BufferGeometry();
     spurGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(SPUR * 2 * 3), 3)); spurGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(SPUR * 2 * 3), 3));
@@ -285,7 +417,8 @@ function aufbauen(o, n) {
     const spur = new THREE.Mesh(spurGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
     spur.frustumCulled = false; spur.visible = false; scene.add(spur);
     return { j, farbe: new THREE.Color(o.farben[j % o.farben.length]), puffer: [], x: 0, y: 0, w: 0, zx: 0, zy: 0, zw: 0, fehler: null, roll: 0, nick: 0, v: 0, gier: 0,
-      ruck: V(), ruckV: V(), wipp: 0, wippT: 0, flammen, spur, spurPkt: [], spurAlt: 0, turbo: false, lenk: 0, rad: 0, fahrer: null, jubel: 0, matrix: new THREE.Matrix4(), podest: null };
+      ruck: V(), ruckV: V(), wipp: 0, wippT: 0, flammen, spur, spurPkt: [], spurAlt: 0, turbo: false, lenk: 0, rad: 0, jubel: 0, jubelK: 0, matrix: new THREE.Matrix4(), podest: null,
+      kopf: { x: 0, z: 0, vx: 0, vz: 0 } };   // Kopf-Wackeln (Feder): x = zur Seite, z = vor/zurueck
   });
   // eigenes Auto (Handy): Pfeil darueber und Ring darunter
   const pfeil = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.26, 4).rotateX(Math.PI), new THREE.MeshBasicMaterial({ color: 0xffffff }));
@@ -321,24 +454,16 @@ function aufbauen(o, n) {
   const kegel = [-1, 1].map((x) => { const k = new THREE.Mesh(new THREE.ConeGeometry(0.62, 2.5, 32, 1, true), kegelMat); k.position.set(x * 0.5, 1.35, 0.2); k.rotation.z = x > 0 ? 0.25 : -0.25; k.visible = false; scene.add(k); return k; });
 
   g = { renderer, scene, camera, mess, sonne, strahler, blitz, birnen, birnenOrte, dachBirnenAb, W3, autos, n, W, H, pfeil, ring, stangenFunken, funken, funkDaten: [], ringe, konfetti, konfDaten,
-    podest, kegel, beamer: !!o.beamer, o, stufe: st.stufe, stufeFest: st.fest, mess_dt: [], bilder: 0, uhr: new THREE.Clock(), offsets: [], offMin: null, phase: null, runde: 0, start: 0, bis: 0,
+    podest, kegel, pfuetzen, beamer: !!o.beamer, o, stufe: st.stufe, stufeFest: st.fest, mess_dt: [], bilder: 0, uhr: new THREE.Clock(), offsets: [], offMin: null, phase: null, runde: 0, start: 0, bis: 0,
     punkte: [], stoesse: 0, gesehen: new Set(), offen: [], eingabe: { l: 0, turboT: 0 }, kam: { a: Math.PI / 2, e: 0.9, d: 14, l: V() }, kamSprung: true, wackel: 0, stossZiel: null,
     intro: null, sieg: null, countZuletzt: null, letztT: -1, folgen: lsLesen("pa_as_kamera") !== "oben", vMix: 0, kick: null, zaehler: { knall: 0, turbo: 0, plus: 0, sieg: 0, countdown: 0, snaps: 0, vorausgerechnet: 0 }, mess_: null, ui: null, laeuft: false, container: null, groesse: null };
   SC.himmelSetzen(g, "nacht");
-  g.scene.environmentIntensity = 0.45;
-  // Fahrer: Kenney-Figuren in Spielerfarbe; fehlen die Dateien, bleiben Kopf und Rumpf aus einfachen Formen
+  // Spiegelungen aus der Halle statt aus dem Himmel (Lack, Chrom, Boden und Bande zeigen die Kirmeslichter)
+  try { g.scene.environment = hallenUmgebung(renderer, W, H); g.scene.environmentIntensity = 0.55; }
+  catch (e) { g.scene.environmentIntensity = 0.45; console.warn("Hallen-Spiegelung aus", e); }
+  // Fahrer: eigene runde Figuren (fahrerTeile), immer da - keine Dateien noetig
+  g.modelleDa = true;
   const dieseSzene = g;
-  MD.vorladen("autoscooter", Math.min(12, n)).then((da) => {
-    if (!da || g !== dieseSzene) return;
-    g.autos.forEach((a) => {
-      const m = MD.figur(a.j % 12, o.farben[a.j % o.farben.length], 0.62);
-      if (!m) return;
-      m.wurzel.traverse((x) => { if (x.isMesh) x.castShadow = Q.schatten >= 2048; });
-      scene.add(m.wurzel); a.fahrer = m;
-      const idle = m.aktionen.idle; if (idle) idle.play();
-    });
-    g.modelleDa = g.autos.some((a) => a.fahrer);
-  }).catch((e) => console.warn("Fahrer fuer den Autoscooter fehlen", e));
   MD.nachbearbeitungModule().then((N) => {
     if (!N || g !== dieseSzene) return;
     const ziel = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: 4 });
@@ -499,42 +624,37 @@ function autosSetzen(dt, t, T, hostJetzt) {
     _p.y = (g.phase === "fahrt" ? Math.sin(t * 38 + j * 1.7) * 0.004 * Math.min(1, a.v / 16) : 0) + (z.hoch || 0);
     _e.set(a.roll + wippW * 0.6, -z.w + (z.dreh || 0), a.nick + wippW * 0.35, "YXZ");
     _q.setFromEuler(_e);
-    a.matrix.compose(_p, _q, _s.set(1, 1, 1));
-    ["lack", "gummi", "dunkel", "chrom", "vorn", "hinten", "kopf", "rumpf"].forEach((k) => g.W3[k].setMatrixAt(j, a.matrix));
+    // hinter dem Wagen: ein fremder Wagen direkt an der Kamera wird ausgeblendet (sonst fuellt sein Fahrer das ganze Bild)
+    const anKamera = (g.vMix || 0) > 0.5 && j !== ich && Math.hypot(_p.x - g.camera.position.x, _p.z - g.camera.position.z) < 0.8;
+    a.matrix.compose(_p, _q, _s.setScalar(anKamera ? 1e-4 : 1));
+    a.anKamera = anKamera;
+    ["lack", "gummi", "dunkel", "chrom", "vorn", "hinten", "nummer"].forEach((k) => g.W3[k].setMatrixAt(j, a.matrix));
     // Lenkrad: vor dem Sitz, schraeg, dreht mit der Lenk-Stellung
     _qr.copy(RAD_LAGE).multiply(_qs.setFromAxisAngle(ACHSE_Z, a.lenk * 1.4));
-    _m2.compose(_v.set(0.04, 0.5, 0), _qr, _s.set(1, 1, 1));
+    _m2.compose(WAGEN.rad, _qr, _s.set(1, 1, 1));
     g.W3.rad.setMatrixAt(j, _m.multiplyMatrices(a.matrix, _m2));
+    fahrerSetzen(a, j, dt, t, sieger(a));
     // Unterboden-Leuchten: am eigenen Wagen heller und groesser
     const gs = (j === ich ? 1.35 : 1) * (dunkel && !a.podest ? 0.6 : 1);
     _m2.compose(_v.set(0, 0.012, 0), _q.identity(), _s.set(gs, 1, gs));
     g.W3.glow.setMatrixAt(j, _m.multiplyMatrices(a.matrix, _m2));
     // Stangen-Funke oben am Gitter: flackert, beim Turbo und nach dem Stoss stark
-    _v.set(-0.3, 2.62, 0).applyMatrix4(a.matrix);
+    _v.set(WAGEN.stange.x, WAGEN.stangeOben, WAGEN.stange.z).applyMatrix4(a.matrix);
     g.stangenFunken.geometry.attributes.position.setXYZ(j, _v.x, _v.y, _v.z);
     const fl = g.phase === "fahrt" ? (Math.random() < 0.18 + a.v / 120 ? 0.4 + Math.random() * 0.8 : 0.05) + (z.turbo ? 0.6 : 0) + a.wipp * 2 : 0.04;
     g.stangenFunken.geometry.attributes.color.setXYZ(j, 0.55 * fl, 0.75 * fl, 1.0 * fl);
-    // Fahrer
-    if (a.fahrer) {
-      const m = a.fahrer;
-      m.wurzel.position.copy(_v.set(-0.12, 0.2, 0).applyMatrix4(a.matrix));
-      m.wurzel.quaternion.copy(_q.setFromEuler(_e.set(a.roll, -z.w + (z.dreh || 0) + Math.PI / 2, 0, "YXZ")));
-      m.mixer.update(dt);
-      if (a.jubel && t > a.jubel) { a.jubel = 0; const al = m.aktionen.idle, nu = m.aktionen["emote-yes"]; if (al && nu) { al.reset().play(); nu.crossFadeTo(al, 0.25, false); } }
-    }
     // Turbo: Flammen und Spur
     const turbo = !!z.turbo && g.phase === "fahrt";
     if (turbo && !a.turbo) { g.zaehler.turbo++; if (g.beamer || j === ich) turboTon(t); }
     a.turbo = turbo;
-    a.flammen.visible = turbo && Q.partikel > 0.2;
+    a.flammen.visible = turbo && Q.partikel > 0.2 && !a.anKamera;
     if (a.flammen.visible) {
       a.flammen.position.copy(_v.setFromMatrixPosition(a.matrix)); a.flammen.quaternion.copy(_q.setFromRotationMatrix(a.matrix));
       a.flammen.children.forEach((f, k) => { const s = 0.75 + Math.random() * 0.6; f.scale.set(s, 0.8 + Math.random() * 0.4, 0.8 + Math.random() * 0.4); f.rotation.x = t * 20 + k; });
     }
     spurSetzen(a, turbo, dt);
   });
-  ["lack", "gummi", "dunkel", "chrom", "vorn", "hinten", "kopf", "rumpf", "rad", "glow"].forEach((k) => { g.W3[k].instanceMatrix.needsUpdate = true; });
-  g.W3.kopf.visible = g.W3.rumpf.visible = !g.modelleDa;
+  Object.values(g.W3).forEach((im) => { im.instanceMatrix.needsUpdate = true; });
   g.stangenFunken.geometry.attributes.position.needsUpdate = true; g.stangenFunken.geometry.attributes.color.needsUpdate = true;
   // eigener Wagen: Pfeil und Ring
   const meins = ich >= 0 && g.autos[ich];
@@ -552,12 +672,54 @@ function autosSetzen(dt, t, T, hostJetzt) {
     if (g.mess_.length > 4000) g.mess_.shift();
   }
 }
+// Fahrer je Bild: Rumpf und Kopf haengen an Federn (Kurven, Anfahren, Stoss - der Kopf wackelt nach), die Haende greifen das
+// Lenkrad auf "zehn vor zwei" und drehen mit; beim Jubeln (Punkt geholt, Sieg) gehen die Arme hoch und winken.
+const _fm = new THREE.Matrix4(), _fm2 = new THREE.Matrix4(), _fq = new THREE.Quaternion(), _fq2 = new THREE.Quaternion(), _fe = new THREE.Euler(), _fv = V(), _fz = V(), _fs = V(1, 1, 1), _fh = V();
+const X1 = V(1, 0, 0);
+const sieger = (a) => !!(g.sieg && g.sieg.fanfare && g.sieg.sieger.includes(a.j));
+function fahrerSetzen(a, j, dt, t, siegt) {
+  const k = a.kopf;
+  if (dt > 0) {
+    const zx = a.roll * 1.6, zz = -a.nick * 3;   // Kurve: Kopf lehnt mit nach aussen; Anfahren: nach hinten
+    k.vx += ((zx - k.x) * 150 - k.vx * 8) * dt; k.vz += ((zz - k.z) * 150 - k.vz * 8) * dt;
+    k.x = Math.max(-0.6, Math.min(0.6, k.x + k.vx * dt)); k.z = Math.max(-0.6, Math.min(0.6, k.z + k.vz * dt));
+  }
+  const jubelt = siegt || a.jubel > t;
+  a.jubelK += ((jubelt ? 1 : 0) - a.jubelK) * (1 - Math.exp(-dt * 9));
+  // Rumpf: leicht zurueckgelehnt, macht ein Drittel des Kopf-Wackelns mit
+  _fq.setFromEuler(_fe.set(k.x * 0.35, 0, 0.06 + k.z * 0.35, "XYZ"));
+  _fm2.compose(WAGEN.huefte, _fq, _fs);
+  g.W3.rumpf.setMatrixAt(j, _fm.multiplyMatrices(a.matrix, _fm2));
+  // Kopf und Haare am Hals
+  _fv.copy(WAGEN.hals).applyQuaternion(_fq).add(WAGEN.huefte);
+  const nicken = a.jubelK * Math.sin(t * 9) * 0.18;
+  _fq2.setFromEuler(_fe.set(k.x, a.jubelK * Math.sin(t * 4.5) * 0.25, 0.04 + k.z - nicken, "XYZ"));
+  _fm2.compose(_fv, _fq2, _fs);
+  _fm.multiplyMatrices(a.matrix, _fm2);
+  g.W3.kopf.setMatrixAt(j, _fm); g.W3.haare.setMatrixAt(j, _fm);
+  // Arme: Schulter -> Hand am Lenkradkranz (zehn vor zwei, dreht mit) bzw. hoch zum Jubeln
+  _qr.copy(RAD_LAGE).multiply(_qs.setFromAxisAngle(ACHSE_Z, a.lenk * 1.4));
+  [-1, 1].forEach((s, i) => {
+    _fv.set(WAGEN.schulter.x, WAGEN.schulter.y, s * WAGEN.schulter.z).applyQuaternion(_fq).add(WAGEN.huefte);
+    _fh.set(-s * 0.866 * WAGEN.radR, -0.5 * WAGEN.radR, 0).applyQuaternion(_qr).add(WAGEN.rad);
+    if (a.jubelK > 0.01) _fz.set(_fv.x + 0.05, _fv.y + 0.22, _fv.z + s * (0.08 + Math.sin(t * 10 + i * 2) * 0.05)), _fh.lerp(_fz, a.jubelK);
+    _fz.subVectors(_fh, _fv).normalize();
+    _fm2.compose(_fv, _fq2.setFromUnitVectors(X1, _fz), _fs);
+    _fm.multiplyMatrices(a.matrix, _fm2);
+    g.W3.arme.setMatrixAt(j * 2 + i, _fm); g.W3.haende.setMatrixAt(j * 2 + i, _fm);
+  });
+}
+// Kopf-Stoss: der Wagen wird weggeschoben, der Kopf bleibt erst zurueck und schwingt dann nach
+function kopfStoss(a, nx, ny, wucht) {
+  const c = Math.cos(a.zw), s = Math.sin(a.zw), vor = nx * c + ny * s, quer = -nx * s + ny * c, k = 5 + wucht * 9;
+  a.kopf.vz += vor * k; a.kopf.vx -= quer * k;
+}
 let turboTonZuletzt = -9;
 function turboTon(t) { if (t - turboTonZuletzt < 0.35) return; turboTonZuletzt = t; klang("schuss"); }
 function spurSetzen(a, turbo, dt) {
   if (turbo) a.spurAlt = 0.6; else a.spurAlt = Math.max(0, a.spurAlt - dt);
   if (a.spurAlt <= 0 || STUFE[g.stufe].partikel < 0.3) { a.spur.visible = false; a.spurPkt = []; return; }
-  const p = _v.set(-0.38, 0.16, 0).applyMatrix4(a.matrix).clone();
+  const p = _v.set(-0.44, 0.16, 0).applyMatrix4(a.matrix).clone();
   if (!a.spurPkt.length || a.spurPkt[0].distanceTo(p) > 0.05) { a.spurPkt.unshift(p); if (a.spurPkt.length > 26) a.spurPkt.pop(); }
   const pos = a.spur.geometry.attributes.position, col = a.spur.geometry.attributes.color, N = 26;
   for (let i = 0; i < N; i++) {
@@ -597,10 +759,9 @@ function knall(k, t, meiner) {
     if (!a) return;
     a.ruckV.add(V((k.nx || 0) * s, 0, (k.ny || 0) * s).multiplyScalar(1.6 + wucht * 2.2));
     a.wipp = Math.max(a.wipp, 0.08 + wucht * 0.12); a.wippT = t;
-    if (plus > 0) {
-      plusZeigen(j, plus);
-      if (a.fahrer && a.fahrer.aktionen["emote-yes"]) { const em = a.fahrer.aktionen["emote-yes"]; em.reset(); em.setLoop(THREE.LoopOnce); em.clampWhenFinished = true; em.play(); a.jubel = t + 1.1; }
-    }
+    kopfStoss(a, (k.nx || 0) * s, (k.ny || 0) * s, wucht);
+    g.zaehler.kopf = (g.zaehler.kopf || 0) + 1;
+    if (plus > 0) { plusZeigen(j, plus); a.jubel = t + 1.1; }
   });
   klang("aua");
   if (meiner) {
@@ -651,10 +812,17 @@ function effekte(dt, t) {
     if (u >= 1) r.m.visible = false;
   });
   g.blitz.intensity *= Math.exp(-dt * 12);
+  g.funken.material.size = 0.12 - 0.05 * (g.vMix || 0);   // nah an der Kamera sonst grosse Flecken
   // Lauflichter: Bande in Wellen, Dach als Lauflicht (jedes dritte Bild reicht dem Auge)
   if (g.bilder % 3 === 0) birnenSetzen(t);
   // Strahler drehen langsam ihre Staerke (Kirmes-Licht)
-  g.strahler.forEach((l, i) => { l.intensity = 7 + Math.sin(t * 1.3 + i * 1.7) * 3; });
+  g.strahler.forEach((l, i) => { l.intensity = 7 + Math.sin(t * 1.3 + i * 1.7) * 3; g.pfuetzen[i].material.opacity = l.visible ? 0.55 + Math.sin(t * 1.3 + i * 1.7) * 0.25 : 0.25; });
+  // Stromstangen knistern: ab und zu regnen ein paar Funken vom Gitter (bei schwachen Geraeten seltener)
+  // (nicht am eigenen Wagen hinter dem Wagen: die Funken fielen direkt vor der Kamera als grosse Flecken herunter)
+  const nah = (g.vMix || 0) > 0.5 ? g.o.ich : -1;
+  if (g.phase === "fahrt" && STUFE[g.stufe].partikel >= 0.6) g.autos.forEach((a) => {
+    if (a.j !== nah && Math.random() < dt * (0.25 + a.v / 30 + (a.turbo ? 3 : 0))) funkenAn(_v.set(WAGEN.stange.x, WAGEN.stangeOben - 0.03, WAGEN.stange.z).applyMatrix4(a.matrix).clone(), 3, 0.05);
+  });
   if (g.konfetti.visible) {
     for (let i = 0; i < g.konfDaten.length; i++) {
       const x = g.konfDaten[i];
@@ -726,8 +894,7 @@ function siegTakt(t) {
   g.podest.userData.licht.intensity = 9 * u;
   g.kegel.forEach((k, i) => { k.visible = u > 0.5; k.rotation.z = (i ? 0.25 : -0.25) + Math.sin(t * 0.9 + i) * 0.12; });
   if (!g.sieg.fanfare && t - g.sieg.t > AS3_ZEIT.podest + 0.4) {
-    g.sieg.fanfare = true; klang("sieg");
-    g.sieg.sieger.forEach((j) => { const a = g.autos[j]; if (a && a.fahrer && a.fahrer.aktionen["emote-yes"]) { const em = a.fahrer.aktionen["emote-yes"]; em.reset(); em.setLoop(THREE.LoopRepeat); em.play(); } });
+    g.sieg.fanfare = true; klang("sieg");   // ab jetzt jubeln die Sieger-Fahrer (sieger() in fahrerSetzen)
   }
 }
 
@@ -790,7 +957,7 @@ function zielPose(t) {
 // hoechstens VF.dreh rad/s schnell (Abprall an der Bande wirbelt nicht herum - kein Schwindel), der Horizont bleibt gerade.
 // Eigener Stoss: Ruck weg vom Gegner, kurzes Wackeln, Sichtfeld zuckt auf (dazu Funken, Blitz, Vibration wie bisher).
 // Turbo weitet das Sichtfeld. Wand/Beamer und Siegerehrung bleiben in der Uebersicht von oben; Umschalter im Bild.
-export const VF = { hinten: 1.75, hoehe: 0.82, vorne: 1.7, blickHoehe: 0.28, fov: 64, fovTurbo: 9, fovOben: 38, dreh: 2.6, feder: 3.4, ruck: 0.12 };
+export const VF = { hinten: 1.55, hoehe: 0.8, vorne: 1.7, blickHoehe: 0.28, fov: 64, fovTurbo: 9, fovOben: 38, dreh: 2.6, feder: 3.4, ruck: 0.12 };
 function verfolger() {
   const ich = g.beamer ? -1 : g.o.ich;
   return ich >= 0 && g.autos[ich] && !g.sieg && g.folgen ? g.autos[ich] : null;
@@ -1032,7 +1199,7 @@ function uiSetzen(t, hostJetzt) {
     _v.setFromMatrixPosition(a.matrix); _v.y += a.podest ? 1.15 : 0.95; _v.project(g.camera);
     const sw = s._w || 40, sh = s._h || 16;
     // hinter dem Wagen: das eigene Schild weg (man sitzt ja drin), Wagen hinter der Kamera oder weit ausserhalb ohne Schild
-    const weg = (g.vMix > 0.5 && j === ich) || _v.z > 1 || (g.vMix > 0 && (Math.abs(_v.x) > 1.05 || Math.abs(_v.y) > 1.05));
+    const weg = (g.vMix > 0.5 && j === ich) || a.anKamera || _v.z > 1 || (g.vMix > 0 && (Math.abs(_v.x) > 1.05 || Math.abs(_v.y) > 1.05));
     const x = Math.max(2, Math.min(bw - sw - 2, ((_v.x + 1) / 2) * bw - sw / 2)), y = Math.max(2, Math.min(bh - sh - 2, ((1 - _v.y) / 2) * bh - sh));
     return { s, j, x, y, w: sw, h: sh, dy: 0, weg };
   });
@@ -1151,6 +1318,8 @@ export function as3dStand() {
     schilder: g.ui ? g.ui.schilder.map((s) => { const r = s.getBoundingClientRect(); return { t: s.textContent, l: r.left, r: r.right, o: r.top, u: r.bottom, dy: +(s._dy || 0).toFixed(1), ziel: +(s._ziel || 0).toFixed(1), w: s._w, h: s._h, sicht: s.style.opacity !== "0" }; }) : [],
     // Verfolger-Kamera (Handy): an?, Mischung, Sichtfeld, eigener Wagen im Bild (Seitenkoordinaten -1..1), Stoss-Rucks
     verfolger: !!verfolger(), vMix: +(g.vMix || 0).toFixed(2), fov: +g.camera.fov.toFixed(1),
+    // Fahrer: Kopf-Auslenkung (rad) und Jubel-Anteil je Wagen
+    kopf: g.autos.map((a) => +Math.hypot(a.kopf.x, a.kopf.z).toFixed(3)), jubel: g.autos.map((a) => +a.jubelK.toFixed(2)),
     eigenImBild: !g.beamer && g.autos[g.o.ich] ? (() => { const p = _v.setFromMatrixPosition(g.autos[g.o.ich].matrix).project(g.camera); return [+p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(3)]; })() : null,
     vorne: !g.beamer && g.autos[g.o.ich] ? g.autos.filter((a) => a.j !== g.o.ich).filter((a) => { const p = _v.setFromMatrixPosition(a.matrix).project(g.camera); return p.z < 1 && Math.abs(p.x) < 1 && Math.abs(p.y) < 1; }).length : 0 };
 }
