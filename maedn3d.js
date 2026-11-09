@@ -93,7 +93,7 @@ function platteMalen(o, RB, k, S) {
   return textur(c);
 }
 // Wuerfelseiten: weiss mit runden Ecken und tiefen Augen
-function wuerfelMaterialien(stufe) {
+export function wuerfelMaterialien(stufe) {   // auch Wuerfelpoker in 3D (wuerfel3d.js)
   const punkte = { 1: [[.5, .5]], 2: [[.27, .27], [.73, .73]], 3: [[.25, .25], [.5, .5], [.75, .75]], 4: [[.27, .27], [.73, .27], [.27, .73], [.73, .73]],
     5: [[.26, .26], [.74, .26], [.5, .5], [.26, .74], [.74, .74]], 6: [[.27, .24], [.73, .24], [.27, .5], [.73, .5], [.27, .76], [.73, .76]] };
   // Reihenfolge der Seiten in three.js: +x, -x, +y, -y, +z, -z (Gegenseiten ergeben 7)
@@ -113,7 +113,7 @@ function wuerfelMaterialien(stufe) {
   });
 }
 // Drehung, die Seite "zahl" nach oben bringt
-const OBEN = { 2: [0, 0, 0], 5: [Math.PI, 0, 0], 1: [0, 0, Math.PI / 2], 6: [0, 0, -Math.PI / 2], 3: [-Math.PI / 2, 0, 0], 4: [Math.PI / 2, 0, 0] };
+export const OBEN = { 2:[0, 0, 0], 5: [Math.PI, 0, 0], 1: [0, 0, Math.PI / 2], 6: [0, 0, -Math.PI / 2], 3: [-Math.PI / 2, 0, 0], 4: [Math.PI / 2, 0, 0] };
 function nummerTextur(n, farbe) {
   const [c, x] = leinwand(128);
   x.fillStyle = "#ffd23f"; x.beginPath(); x.arc(64, 64, 56, 0, 7); x.fill();
@@ -124,7 +124,7 @@ function nummerTextur(n, farbe) {
 
 // ---------------------------------------------------------------- Formen
 // Wuerfel mit runden Kanten: Wuerfel mit vielen Teilen, die Ecken auf Kugeln gezogen
-function rundWuerfel(groesse, rund = 0.16, teile = 5) {
+export function rundWuerfel(groesse, rund = 0.16, teile = 5) {
   const geo = new THREE.BoxGeometry(1, 1, 1, teile, teile, teile), p = geo.attributes.position, v = V(), innen = V();
   const h = 0.5 - rund;
   for (let i = 0; i < p.count; i++) {

@@ -7,6 +7,7 @@ import * as TTT from "./fremd/tic-tac-toe.js";
 import * as WUERFEL from "./fremd/yahtzee.js";
 import * as DAME from "./fremd/checkers.js";
 import * as SCHIFFE from "./fremd/battleship.js";
+import { HAT_3D, fremd3dHandy } from "./fremd3d.js";
 
 const DE = [
   [/'s fleet is waiting\.?/gi, "s Flotte wartet."], [/Your shot/gi, "Dein Schuss"], [/click anywhere on/gi, "tippe auf ein Feld in"], [/\bfire!/g, "schieß!"],
@@ -135,7 +136,7 @@ function fremdSpiel({ id, name, emoji, kurz, farben, M, regeln, gruppe, bot, ket
         <details class="grundregeln"><summary>📖 So geht's</summary>${regeln}</details>
         <p class="leise klein mitte">Fertiges Spiel aus „LAN Games“ von kbennett2000 (MIT-Lizenz), eingebunden von Jarvis.</p>`;
     },
-    nach(s, ich, senden) {
+    nach(s, ich, senden, namen) {
       const platz = document.getElementById("fremd-platz");
       if (!platz) return;
       // Siegesmoment: einmal je Partie und Geraet die Fanfare (Studio-Look, Schritt 4a)
@@ -168,6 +169,8 @@ function fremdSpiel({ id, name, emoji, kurz, farben, M, regeln, gruppe, bot, ket
       try { b.r.update(ansicht); } catch (e) { console.error(e); }
       if (b.nr !== s.nr) { b.nr = s.nr; (s.ereignisse || []).filter((e) => e.nr === s.nr).forEach((e) => { try { b.r.onEvent(e, ansicht); } catch (x) {} }); }
       uebersetzen(b.el);
+      // Tischspiele in echtem 3D (Nico 09.11.2026): Vier gewinnt, Dame, Wuerfelpoker, Schiffe versenken (fremd3d.js)
+      if (HAT_3D(id)) fremd3dHandy(id, b.el, ansicht, ich, namen, senden);
     },
   };
 }

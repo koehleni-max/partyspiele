@@ -186,6 +186,17 @@
 .fremd-buehne .bs-cell.bs-cell-hit::after { filter: drop-shadow(0 0 6px #ff7a1a); animation: st-brennen .6s ease-in-out infinite alternate; }
 @keyframes st-brennen { to { transform: scale(1.15); filter: drop-shadow(0 0 10px #ffb020); } }
 
+/* ================================================================ Tischspiele in 3D (09.11.2026): die flache Spielflaeche weicht dem 3D-Bild
+   (Punktezettel, Aufstellen und Knoepfe des Regelwerks bleiben); ohne WebGL bleibt alles wie bisher */
+.fremd-buehne.mit-3d[data-d3="f-vier"] .connect-four-wrapper, .fremd-buehne.mit-3d[data-d3="f-dame"] .checkers-wrapper,
+.fremd-buehne.mit-3d[data-d3="f-wuerfel"] .yz-tray, .fremd-buehne.mit-3d[data-d3="f-wuerfel"] .yz-roll-wrap,
+.fremd-buehne.mit-3d[data-d3="f-schiffe"] .bs-firing { display: none !important; }
+.fremd-buehne.mit-3d { padding: 6px; }
+.fremd-buehne.mit-3d > .t3d { margin: 0 auto 6px; }
+.bsf.mit-3d .bsf-feld, .bsf.mit-3d .bsf-meere, .bsf.mit-3d .bsf-wuerfel { display: none !important; }
+.mio3d.hat-3d ~ .mio-flach, .mio3d:not(.hat-3d) ~ .mio-3d-nur { display: none !important; }
+.spielflaeche .mio3d { margin: 0 auto 10px; box-shadow: 0 0 0 2px #c9a227, 0 10px 26px #0009; }
+
 /* ================================================================ Millionaer: Studio-Bühne mit Goldrand und Rauten-Antworten */
 .spielflaeche[data-spiel="millionaer"] { background: radial-gradient(120% 80% at 50% -20%, #2a3a9a, #121a52 45%, #070b26 100%); }
 .spielflaeche[data-spiel="millionaer"] .frage:not(.klein3) { margin: 6px 0 14px; padding: 16px 18px; border-radius: 999px; font-size: 19px;
@@ -262,6 +273,10 @@ body.beamer .bm-pille { background-image: var(--glanz); box-shadow: inset 0 1px 
 .ww-stimmen i { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; background: #ffffff10; opacity: .35; transition: opacity .3s, transform .3s; }
 .ww-stimmen i.da { opacity: 1; transform: scale(1.15); box-shadow: 0 0 10px #ffffff55; animation: st-chip .4s cubic-bezier(.2, 1.8, .4, 1) both; }
 .ww-stimmen .farbe { margin: 0; }
+/* Aufloesung: die Frage ist das Groesste auf der Karte (Abnahme 4b, Jarvis 09.11.2026) */
+.spielflaeche .frage.ww-frage { margin: 2px 0 16px; padding: 16px 16px 18px; border-radius: 20px; font-size: 24px; line-height: 1.22; font-weight: 900; color: #fff; overflow-wrap: anywhere;
+  background: linear-gradient(150deg, #1cb0f6, #3b2fbf 75%); box-shadow: 0 6px 0 #0007, 0 16px 30px #0006, inset 0 1px 0 #ffffff55; }
+.frage.ww-frage small { display: block; margin-bottom: 4px; font-size: 14px; font-weight: 800; letter-spacing: .04em; color: #e6f4ff; opacity: .85; }
 .spielflaeche[data-weich] .ww-ergebnis .b { transform-origin: left; animation: st-balken .7s cubic-bezier(.2, 1, .3, 1) both; animation-delay: calc(var(--i, 0) * .12s); }
 @keyframes st-balken { from { transform: scaleX(0); } }
 .ww-ergebnis .zeile.top span { color: var(--gold); font-weight: 900; }

@@ -118,7 +118,8 @@ export const werWuerde = {
     const max = Math.max(...zaehl);
     const verl = zaehl.map((z, j) => (z === max ? j : -1)).filter((j) => j >= 0);
     // Aufloesung: Balken wachsen nacheinander (Reihenfolge ueber --i), Stimmen zaehlen hoch, die Meisten bekommen die Krone
-    return `<div class="frage klein3">${esc(s.karte[1])}</div>
+    // Abnahme 4b (Jarvis 09.11.2026): die Frage ist das Groesste und Deutlichste auf der Karte (vorher klein und blass)
+    return `<div class="frage ww-frage"><small>Wer würde eher …</small>${esc(s.karte[1])}</div>
       <div class="balken ww-ergebnis" data-key="wb${s.kartenNr}" data-ton="wirbel">${namen.map((n, j) => `<div class="zeile ${zaehl[j] === max && max > 0 ? "top" : ""}" style="--i:${j}"><span>${zaehl[j] === max && max > 0 ? "👑 " : ""}${esc(n)}</span><div class="b" style="width:${(zaehl[j] / namen.length) * 100}%"></div><b>${zaehl[j]}</b></div>`).join("")}</div>
       <div class="urteil" data-key="u${s.kartenNr}">🍺 ${verl.map((j) => name(namen, j)).join(" & ")} ${verl.length > 1 ? "trinken" : "trinkt"} ${schlucke(max)}</div>
       ${knopf("Nächste Karte ➜", { typ: "weiter" }, "gross")}${katKnopf(ich)}`;

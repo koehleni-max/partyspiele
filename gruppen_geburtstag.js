@@ -11,6 +11,7 @@
 // Alles ohne Alkohol, keine Computer-Mitspieler. Zustand und Zufall nur beim Gastgeber.
 import { esc, knopf, mischen, name } from "./hilfe.js";
 import { MILLIONAER, ACTIVITY, BILDER, DAMALS } from "./fragen_gruppen.js";
+import { mio3dZeigen } from "./mio3d.js";   // Millionaer-Buehne in 3D (09.11.2026)
 import { MINISPIELE } from "./minispiele.js";   // Activity "Zeichnen" nutzt die Malflaeche von Malen & Raten (Restpaket 3c)
 const MALEN = MINISPIELE.find((x) => x.id === "malen");
 
@@ -85,8 +86,11 @@ export const millionaer = {
       <li>Sicher sind 500 € (nach Frage 5) und 16.000 € (nach Frage 10). Aufhören behält den Stand.</li>
       <li>Joker: 50:50, Publikum (die Tipps der anderen), Telefon (eine Person darf heimlich tippen).</li>
       <li>Alle anderen raten am Handy mit – jeder richtige Tipp ist ein ✔.</li></ul></details>`;
+    // 3D-Buehne (mio3d.js, 09.11.2026): steht sie, weicht die flache Frage samt Antworten (.mio-flach); Joker, Tipps der anderen,
+    // Aufhoeren und Weiter bleiben als Knoepfe darunter
+    const buehne = `<div class="t3d mio3d" data-key="mio3d" data-mio3d data-eigen></div>`;
     if (s.phase === "ende") {
-      return `<div class="frage">🏆 Alle waren dran!</div>${stand}<i hidden data-ergebnis="mio${s.runde}"></i>${knopf("Neue Runde", { typ: "neustart" }, "gross")}`;
+      return `${buehne}<div class="frage mio-flach">🏆 Alle waren dran!</div>${stand}<i hidden data-ergebnis="mio${s.runde}"></i>${knopf("Neue Runde", { typ: "neustart" }, "gross")}`;
     }
     const kopf = `<div class="frage klein3">${name(namen, s.kand)} · Frage ${s.stufe + 1} um <b>${euro(MIO_GELD[s.stufe])}</b></div><div class="frage">${esc(q.f)}</div>`;
     const zaehl = [0, 1, 2, 3].map((k) => Object.values(s.tipps).filter((x) => x === k).length), alle = Object.keys(s.tipps).length;
@@ -99,25 +103,48 @@ export const millionaer = {
         const tels = !s.joker.tel ? `<details class="gg-tel"><summary>📞 Telefonjoker – wen anrufen?</summary><div class="raster">${namen.map((nm, j) => (j === ich ? "" : knopf(esc(nm), { typ: "tel", j }, "zweit"))).join("")}</div></details>` : "";
         const jk = `<div class="raster2">${s.joker.fifty ? "" : knopf("✂️ 50:50", { typ: "fifty" }, "zweit")}${s.joker.pub ? "" : knopf("👥 Publikum", { typ: "pub" }, "zweit")}</div>${tels}`;
         const sicher = `<p class="mitte leise">Sicher: ${euro(mioSicher(s.stufe))} · Aufhören: ${euro(s.stufe ? MIO_GELD[s.stufe - 1] : 0)}</p>`;
-        return `${kopf}${ant}${pub}${tel}${jk}${knopf(`🛑 Aufhören mit ${euro(s.stufe ? MIO_GELD[s.stufe - 1] : 0)}`, { typ: "aufhoeren" }, "zweit")}${sicher}${regel}`;
+        return `${buehne}<div class="mio-flach">${kopf}${ant}</div>${pub}${tel}${jk}${knopf(`🛑 Aufhören mit ${euro(s.stufe ? MIO_GELD[s.stufe - 1] : 0)}`, { typ: "aufhoeren" }, "zweit")}${sicher}${regel}`;
       }
       if (ich === s.tel && s.telTipp === null) {
-        return `${kopf}<p class="mitte">📞 <b>${esc(namen[s.kand])} ruft dich an!</b> Was meinst du?</p>
-          <div class="raster2">${q.a.map((t, k) => (s.weg.includes(k) ? "" : knopf(`${BUCH[k]}: ${esc(t)}`, { typ: "teltipp", k }, "wahl"))).join("")}</div>${stand}`;
+        return `${buehne}<p class="mitte">📞 <b>${esc(namen[s.kand])} ruft dich an!</b> Was meinst du?</p><div class="mio-flach">${kopf}
+          <div class="raster2">${q.a.map((t, k) => (s.weg.includes(k) ? "" : knopf(`${BUCH[k]}: ${esc(t)}`, { typ: "teltipp", k }, "wahl"))).join("")}</div></div>${stand}`;
       }
       const meins = s.tipps[ich];
-      return `${kopf}<p class="mitte leise">Rate mit – ${esc(namen[s.kand])} sieht deinen Tipp nur über den Publikumsjoker.</p>
-        <div class="raster2">${q.a.map((t, k) => (s.weg.includes(k) ? `<button class="wahl" disabled>${BUCH[k]}: –</button>` : knopf(`${BUCH[k]}: ${esc(t)}`, { typ: "tipp", k }, `wahl ${meins === k ? "gewaehlt" : ""}`))).join("")}</div>${pub}${tel}${stand}`;
+      return `${buehne}<div class="mio-flach">${kopf}<p class="mitte leise">Rate mit – ${esc(namen[s.kand])} sieht deinen Tipp nur über den Publikumsjoker.</p>
+        <div class="raster2">${q.a.map((t, k) => (s.weg.includes(k) ? `<button class="wahl" disabled>${BUCH[k]}: –</button>` : knopf(`${BUCH[k]}: ${esc(t)}`, { typ: "tipp", k }, `wahl ${meins === k ? "gewaehlt" : ""}`))).join("")}</div></div>
+        <p class="mitte leise mio-3d-nur">Rate mit – ${esc(namen[s.kand])} sieht deinen Tipp nur über den Publikumsjoker.</p>${pub}${tel}${stand}`;
     }
     const richtig = s.wahl === s.q.r;
     const urteil = s.phase === "aufgehoert" ? `🛑 ${name(namen, s.kand)} hört auf und nimmt <b>${euro(s.gewinn[s.kand])}</b> mit`
       : richtig ? (s.stufe === 14 ? `🎉 ${name(namen, s.kand)} ist MILLIONÄR!` : `✅ Richtig! ${euro(MIO_GELD[s.stufe])}`)
       : `❌ Leider falsch – ${name(namen, s.kand)} geht mit <b>${euro(s.gewinn[s.kand])}</b> nach Hause`;
-    return `${kopf}<div class="raster2">${q.a.map((t, k) => `<button class="wahl ${k === q.r ? "gewaehlt" : ""}" disabled>${k === q.r ? "✅" : k === s.wahl ? "❌" : ""} ${BUCH[k]}: ${esc(t)}</button>`).join("")}</div>
-      <i hidden data-ergebnis="mio${s.runde}-${s.kand}-${s.stufe}"></i><div class="urteil ${richtig ? "gut" : ""}">${urteil}</div>
+    return `${buehne}<div class="mio-flach">${kopf}<div class="raster2">${q.a.map((t, k) => `<button class="wahl ${k === q.r ? "gewaehlt" : ""}" disabled>${k === q.r ? "✅" : k === s.wahl ? "❌" : ""} ${BUCH[k]}: ${esc(t)}</button>`).join("")}</div>
+      <div class="urteil ${richtig ? "gut" : ""}">${urteil}</div></div><i hidden data-ergebnis="mio${s.runde}-${s.kand}-${s.stufe}"></i>
       ${knopf(richtig && s.stufe < 14 && s.phase === "aufgeloest" ? "Nächste Frage" : "Nächster Kandidat", { typ: "weiter" }, "gross")}${stand}`;
   },
+  // nach dem Einsetzen: 3D-Buehne in den Kasten (bleibt ueber Neuzeichnungen erhalten). Tafel antippen = derselbe Knopf wie flach
+  nach(s, ich, senden, namen) {
+    const c = document.querySelector("#app [data-mio3d]");
+    if (!c) return;
+    const rolle = ich === s.kand ? "kand" : ich === s.tel && s.telTipp === null ? "tel" : ich < namen.length ? "tipp" : "zu";
+    const waehlen = (typ, k) => {
+      const kn = document.querySelector(`#app button[data-a='${JSON.stringify({ typ, k })}']`);
+      if (kn && !kn.disabled) kn.click(); else if (!kn) senden({ typ, k });
+    };
+    try { mio3dZeigen(c, { ...mioAuszug(s), namen, ich, rolle, meinTipp: s.tipps ? s.tipps[ich] : null, waehlen, beamer: false, ton: true }); } catch (e) { console.error(e); }
+  },
 };
+// an der Wand: 3D-Buehne in den Kasten aus mioHTML (beamer_spiele.js ruft das auf)
+let mioWandNamen = [];
+export function mioWandNach(el, d) {
+  const c = el && el.querySelector("[data-mio3d-wand]");
+  if (!c || !d) return;
+  const inhalt = c.closest(".bm-inhalt") || el, ri = inhalt.getBoundingClientRect(), skala = inhalt.offsetHeight ? ri.height / inhalt.offsetHeight || 1 : 1;
+  const oben = (c.getBoundingClientRect().top - ri.top) / skala;
+  const h = Math.round(Math.max(window.innerHeight * 0.5, Math.min(window.innerHeight * 0.85, (inhalt.clientHeight || window.innerHeight) - oben - 30)));
+  if (c.style.height !== `${h}px`) c.style.height = `${h}px`;
+  try { const an = mio3dZeigen(c, { ...d, namen: mioWandNamen, ich: -1, rolle: "zu", beamer: true, ton: false }); c.closest(".bsmio") && c.closest(".bsmio").classList.toggle("mit-3d", !!an); } catch (e) { console.error(e); }
+}
 
 // Beamer: nur, was ohnehin alle sehen (Telefon-Tipp bleibt beim Kandidaten)
 export function mioAuszug(s) {
@@ -140,14 +167,17 @@ function mioStil() {
     .ggm-leiter span{padding:.2vh .8vw;border-radius:.6vw}.ggm-leiter span.sicher{color:#fff;font-weight:800}
     .ggm-leiter span.an{background:#d97706;color:#fff;font-weight:800}.ggm-leiter span.fertig{opacity:.55}
     .ggm-joker{display:flex;gap:1vw;justify-content:center;margin-top:1.5vh;font-size:1.8vw}.ggm-joker span.weg{opacity:.25;text-decoration:line-through}
+    .bsmio.mit-3d .ggm{display:none}
   </style>`);
 }
 export function mioHTML(d, nm, sp, kopf) {
   mioStil();
+  mioWandNamen = nm.slice();
   const wer = esc(nm[d.kand] || "");
+  const buehne = `<div class="t3d t3-wand" data-mio3d-wand></div>`;   // 3D-Buehne (09.11.2026); steht sie, weicht die flache Tafel (.bsmio.mit-3d)
   if (d.phase === "ende") {
     const tafel = nm.map((n, j) => [j, (d.gewinn || [])[j] || 0]).sort((x, y) => y[1] - x[1]);
-    return `<div class="bsmio">${kopf(sp, "Alle waren dran")}<div class="bm-pillen mitte">${tafel.map(([j, g]) => `<span class="bm-pille">${esc(nm[j] || "")}: ${euro(g)}</span>`).join("")}</div></div>`;
+    return `<div class="bsmio">${kopf(sp, "Alle waren dran")}${buehne}<div class="bm-pillen mitte">${tafel.map(([j, g]) => `<span class="bm-pille">${esc(nm[j] || "")}: ${euro(g)}</span>`).join("")}</div></div>`;
   }
   const ant = d.a.map((t, k) => {
     const kl = d.weg.includes(k) ? "weg" : d.richtig === k ? "ok" : d.richtig !== null && d.wahl === k ? "falsch" : "";
@@ -155,7 +185,7 @@ export function mioHTML(d, nm, sp, kopf) {
   }).join("");
   const leiter = MIO_GELD.map((g, k) => `<span class="${k === d.stufe ? "an" : ""} ${MIO_SICHER.includes(k) ? "sicher" : ""} ${k < d.stufe ? "fertig" : ""}">${k + 1} · ${euro(g)}</span>`).reverse().join("");
   const jk = `<div class="ggm-joker"><span class="${d.joker.fifty ? "weg" : ""}">✂️ 50:50</span><span class="${d.joker.pub ? "weg" : ""}">👥 Publikum</span><span class="${d.joker.tel ? "weg" : ""}">📞 Telefon</span></div>`;
-  return `<div class="bsmio">${kopf(sp, `${wer} spielt um ${euro(MIO_GELD[d.stufe])} · ${d.getippt} raten mit`)}
+  return `<div class="bsmio">${kopf(sp, `${wer} spielt um ${euro(MIO_GELD[d.stufe])} · ${d.getippt} raten mit`)}${buehne}
     <div class="ggm"><div><div class="ggm-frage">${esc(d.frage)}</div><div class="ggm-ant">${ant}</div>${jk}</div><div class="ggm-leiter">${leiter}</div></div></div>`;
 }
 

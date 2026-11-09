@@ -18,7 +18,8 @@ import * as DU from "./duell.js";
 import * as BR from "./brett.js";
 import { brett3dZeigen } from "./brett3d.js";
 import { busAuszug, busHTML } from "./trinken_geburtstag.js";   // Busfahrer an der Wand (Geburtstags-Runde E)
-import { mioAuszug, mioHTML, actAuszug, actHTML } from "./gruppen_geburtstag.js";   // Millionaer (Runde F) und Activity (Restpaket 3c) an der Wand
+import { mioAuszug, mioHTML, mioWandNach, actAuszug, actHTML } from "./gruppen_geburtstag.js";   // Millionaer (Runde F, seit 09.11.2026 in 3D) und Activity (Restpaket 3c) an der Wand
+import * as F3 from "./fremd3d.js";   // Tischspiele in 3D an der Wand (09.11.2026)
 import { maednAuszug, maednHTML, maednNach } from "./maedn.js";   // Mensch aergere dich nicht an der Wand (Vorschlag 147)
 import { asAuszug, asHTML, asNach } from "./autoscooter.js";   // Autoscooter an der Wand (Vorschlag 145), seit 08.11.2026 in 3D
 
@@ -472,6 +473,19 @@ const fremdHTML = {
   },
 };
 
+// Tischspiele in 3D an der Wand (09.11.2026, fremd3d.js): Kasten vor das flache Spielfeld; steht das 3D-Bild, blendet CSS
+// (.bsf.mit-3d) das flache Feld aus. Beim Aufstellen der Flotte und nach dem Wuerfelpoker bleibt es flach.
+["f-vier", "f-dame", "f-wuerfel", "f-schiffe"].forEach((id) => {
+  const flach = fremdHTML[id];
+  fremdHTML[id] = (d, nm, sp) => {
+    const h = flach(d, nm, sp);
+    if ((id === "f-schiffe" && d.phase === "setup") || (id === "f-wuerfel" && d.vorbei)) return h;
+    F3.fremd3dWandNamen(id, nm);
+    const i = h.search(/<div class="bsf-(feld|meere|wuerfel)|<p class="bm-zeile mitte">🎲/);
+    return i < 0 ? h : h.slice(0, i) + F3.fremd3dWandKasten(id) + h.slice(i);
+  };
+});
+
 const htmlDuell = (titel) => (d, nm, sp) => `${kopf(sp, titel)}${DU.beamerHTML(d, nm)}`;
 
 // ---------------------------------------------------------------- Partybrett an der Wand (Runde 3)
@@ -555,6 +569,8 @@ export function nach(el, p, d, lokal, beiGruen) {
   if (p && p.spiel === "brett") brettNach(el, d);
   if (p && p.spiel === "maedn") maednNach(el, d);   // 3D-Brett an der Wand (08.11.2026)
   if (p && p.spiel === "autoscooter") asNach(el, d);   // 3D-Halle an der Wand (08.11.2026)
+  if (p && F3.WAND_3D(p.spiel)) F3.fremd3dWand(el, p.spiel, d);   // Tischspiele in 3D (09.11.2026)
+  if (p && p.spiel === "millionaer") mioWandNach(el, d);   // Millionaer-Buehne in 3D (09.11.2026)
   const c =el.querySelector("[data-bs-leinwand]");
   if (c && d.striche) {
     const g = c.getContext("2d");
