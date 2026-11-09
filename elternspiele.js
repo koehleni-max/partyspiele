@@ -3,6 +3,8 @@ import { spiele as klang } from "./ton.js";
 import { esc, knopf, zufall, mischen, name } from "./hilfe.js";
 import { BEGRIFFE, PANTOMIME, FIGUREN, ORTE, SLF_KAT, QUIZ, QUIZ_HALLOWEEN } from "./inhalte2.js";
 import * as STAPEL from "./stapel.js";
+import * as FG from "./fragen_gedaechtnis.js";
+import { QUIZ_POOL } from "./fragen_pool/quiz.js";
 
 // data-zahl: neue Punkte zaehlen sichtbar hoch (weich.js, Schritt 4b)
 const punkteTafel = (namen, punkte) => `<div class="tafel">${namen.map((nm, j) => `<div><span class="farbe f${j}"></span><b>${esc(nm)}</b><span data-zahl="${punkte[j] || 0}">🏅 ${punkte[j] || 0}</span></div>`).join("")}</div>`;
@@ -349,23 +351,24 @@ export const slf = {
 // Alle antworten gleichzeitig am Handy, Frage + Countdown + Aufloesung gross am Beamer (beamer_spiele.js).
 // Fragen-Pakete: Allgemein, Halloween, Gemischt (Knopfreihe, gilt ab der naechsten Frage). Laeuft die Zeit ab,
 // meldet das jedes Handy ("zeit"); der Gastgeber loest dann auf (doppelte Meldungen werden ignoriert).
-export const QUIZ_ALLE = QUIZ.concat(QUIZ_HALLOWEEN);
+// Grosser Fragen-Pool (DUM-E 09.11.2026) HINTEN angehaengt: gespeicherte Fragenummern (s.frage) bleiben gueltig.
+export const QUIZ_ALLE = QUIZ.concat(QUIZ_HALLOWEEN, QUIZ_POOL);
+const POOL_AB = QUIZ.length + QUIZ_HALLOWEEN.length;
 const PAKETE = {
-  allgemein: ["🧠 Allgemein", QUIZ.map((_, i) => i)],
+  allgemein: ["🧠 Allgemein", QUIZ.map((_, i) => i).concat(QUIZ_POOL.map((_, i) => POOL_AB + i))],
   halloween: ["🎃 Halloween", QUIZ_HALLOWEEN.map((_, i) => QUIZ.length + i)],
   gemischt: ["🔀 Gemischt", QUIZ_ALLE.map((_, i) => i)],
 };
 export const QUIZ_ZEIT = 20;
+// Hinweis "es geht wieder von vorn los" - nur bei der einen Frage, bei der das Gedaechtnis neu anfing
+export const vonVornHTML = (text) => (text ? `<p class="mitte leise klein fg-hinweis">🔁 ${esc(text)}</p>` : "");
 function quizZiehen(s, raum) {
-  const pool = (PAKETE[s.paket] || PAKETE.allgemein)[1];
-  if (raum) {
-    // ohne Wiederholung am ganzen Abend, ueber alle Pakete (eine Halloween-Frage kommt im Gemischt-Paket nicht nochmal)
-    const im = new Set(pool);
-    s.frage = STAPEL.eins(raum, "quiz", QUIZ_ALLE.length, Math.random, (i) => im.has(i));
-  } else {
-    if (!s.rest || !s.rest.length || s.restPaket !== s.paket) { s.rest = mischen(pool.slice()); s.restPaket = s.paket; }
-    s.frage = s.rest.pop();
-  }
+  const im = new Set((PAKETE[s.paket] || PAKETE.allgemein)[1]);
+  // ohne Wiederholung ueber Spiele und Abende (fragen_gedaechtnis.js, gemeinsam mit Millionaer, Damals, Quizduell) und
+  // ueber alle Pakete (eine Halloween-Frage kommt im Gemischt-Paket nicht nochmal)
+  const z = FG.naechste("quiz", QUIZ_ALLE, { nur: (e, i) => im.has(i) });
+  s.frage = z.nr; s.vonVorn = z.vonVorn ? z.hinweis : "";
+  delete s.rest; delete s.restPaket;
   s.reihe = mischen([0, 1, 2, 3]); s.seit = Date.now(); s.antworten = {}; s.phase = "frage";
 }
 function quizAufloesen(s) {
@@ -414,6 +417,7 @@ export const quiz = {
     const pakete = `<div class="quizpakete mitte">${Object.entries(PAKETE).map(([id, [txt]]) => knopf(txt, { typ: "paket", paket: id }, `klein ${s.paket === id ? "" : "zweit"}`)).join(" ")}</div>
       <p class="mitte leise klein">Fragen-Paket gilt ab der nächsten Frage</p>`;
     return `${tafel}<div class="fragekarte" data-key="q${s.nr}" style="--k1:#0984e3;--k2:#2d1e8a"><span class="kat">Frage ${s.nr + 1}</span><div class="text" style="font-size:21px">${esc(q[0])}</div></div>
+      ${vonVornHTML(s.vonVorn)}
       ${s.phase === "frage" ? `<div class="uhr mitte" data-uhr="quiz-${s.nr}-${s.seit}">⏱️ ${QUIZ_ZEIT}</div>` : ""}
       <div class="quizraster">${knoepfe}</div>
       ${s.phase === "aufloesung" ? `<i hidden data-ergebnis="qa${s.nr}"></i><i hidden data-key="qa${s.nr}" data-ton="${s.antworten[ich] && s.antworten[ich].w === 0 ? "richtig" : "falsch"}"></i>` : ""}

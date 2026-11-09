@@ -1,5 +1,6 @@
 // Fragen und Aufgaben - eigene Texte, fuer eine Runde unter Freunden und Familie.
 import { SCHAETZ_MEHR, MALEN_MEHR, AUFGABEN } from "./texte_mehr.js";
+import { SCHAETZ_POOL } from "./fragen_pool/schaetz.js";   // grosser Fragen-Pool (DUM-E 09.11.2026), samt Nachschub
 export { AUFGABEN };
 export const WER_WUERDE = [
   "beim Karaoke als Erstes das Mikro schnappen", "sich auf einer Hochzeit danebenbenehmen", "im Urlaub den Pass vergessen",
@@ -53,7 +54,9 @@ export const PFLICHT = [
   "Sprich die nächste Runde nur in Reimen.", "Zieh dir ein Kleidungsstück verkehrt herum an – bis zum Spielende.",
   "Mach einen Werbespot für das Getränk in deiner Hand.", "Nenne 5 Automarken in 10 Sekunden.",
 ];
-export const SCHAETZ = [
+// SCHAETZ_ALT: die bisherigen Fragen. SCHAETZ = alte vorn, neuer Pool HINTEN angehaengt - so bleiben gespeicherte
+// Fragenummern (Spielstaende, Partybrett-Mini) gueltig. Ziehen ohne Wiederholung: fragen_gedaechtnis.js ("schaetzen").
+export const SCHAETZ_ALT = [
   ["Wie viele Knochen hat ein erwachsener Mensch?", 206], ["Wie hoch ist die Zugspitze in Metern?", 2962],
   ["In welchem Jahr fiel die Berliner Mauer?", 1989], ["Wie viele Einwohner hat Deutschland in Millionen (ca.)?", 84],
   ["Wie viele Tasten hat ein Klavier?", 88], ["Wie lang ist der Rhein in Kilometern (ca.)?", 1233],
@@ -64,6 +67,7 @@ export const SCHAETZ = [
   ["Wie viele Kilometer ist der Mond von der Erde entfernt (in Tausend)?", 384], ["Wie viele Beine hat eine Spinne?", 8],
   ["Wie viele Sekunden hat eine Stunde?", 3600], ["Wie alt wurde Goethe?", 82], ["Wie viele Planeten hat unser Sonnensystem?", 8],
 ].concat(SCHAETZ_MEHR);
+export const SCHAETZ = SCHAETZ_ALT.concat(SCHAETZ_POOL);
 export const MALEN = [
   "Katze", "Pizza", "Fahrrad", "Leuchtturm", "Schneemann", "Gitarre", "Dinosaurier", "Rakete", "Elefant", "Regenschirm",
   "Burg", "Kaktus", "Hai", "Zahnbürste", "Brille", "Ananas", "Feuerwehrauto", "Igel", "Toaster", "Einhorn", "Vulkan",

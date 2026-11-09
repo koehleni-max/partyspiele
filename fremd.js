@@ -170,7 +170,7 @@ function fremdSpiel({ id, name, emoji, kurz, farben, M, regeln, gruppe, bot, ket
       if (b.nr !== s.nr) { b.nr = s.nr; (s.ereignisse || []).filter((e) => e.nr === s.nr).forEach((e) => { try { b.r.onEvent(e, ansicht); } catch (x) {} }); }
       uebersetzen(b.el);
       // Tischspiele in echtem 3D (Nico 09.11.2026): Vier gewinnt, Dame, Wuerfelpoker, Schiffe versenken (fremd3d.js)
-      if (HAT_3D(id)) fremd3dHandy(id, b.el, ansicht, ich, namen, senden);
+      if (HAT_3D(id)) fremd3dHandy(id, b.el, ansicht, ich, namen, senden, s.st);
     },
   };
 }

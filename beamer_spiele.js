@@ -77,7 +77,8 @@ const AUSZUG = {
   schaetzen(s) {
     const [frage, loesung] = T.SCHAETZ[s.nr];
     const auf = s.phase === "aufloesung";
-    return { nr: s.nr, rest: (s.rest || []).length, frage, phase: s.phase, abgegeben: Object.keys(s.tipps).map(Number),
+    // rest: wechselt mit jeder Frage (neu s.zug, alte Staende s.rest) - fuer den Klang "dran"
+    return { nr: s.nr, rest: Number.isFinite(s.zug) ? `z${s.zug}` : (s.rest || []).length, frage, phase: s.phase, abgegeben: Object.keys(s.tipps).map(Number),
       tipps: auf ? s.tipps : null, loesung: auf ? loesung : null };
   },
 };
@@ -114,7 +115,9 @@ AUSZUG["f-schiffe"] = (s) => {
   // je Spieler: seine Schuesse auf den Gegner [x, y, 0 Wasser | 1 Treffer | 2 versenkt] - Schiffspositionen bleiben weg
   return { ...fremdKopf(s), phase: (st.turnState && st.turnState.phase) || "", b: cfg.gridWidth || 10, h: cfg.gridHeight || 10, schiffe: (cfg.ships || []).length,
     bereit: pl.map((x) => !!x.ready), schuesse: pl.map((x) => (x.shotsFired || []).map((z) => [z.cell.x, z.cell.y, z.result === "miss" ? 0 : z.result === "sunk" ? 2 : 1])),
-    versenkt: pl.map((x, j) => ((pl[1 - j] || {}).shipsSunk || []).length) };
+    versenkt: pl.map((x, j) => ((pl[1 - j] || {}).shipsSunk || []).length),
+    // je Spieler seine versenkten Schiffe (nach der Regel offen) - als Wrack in seinem Meer
+    wracks: pl.map((x) => F3.wracksVon(x)) };
 };
 const OBEN = ["ones", "twos", "threes", "fours", "fives", "sixes"];
 function wuerfelSumme(blatt) {

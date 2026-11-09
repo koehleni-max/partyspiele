@@ -9,7 +9,9 @@
 //   Handy    Eigenes Feld und Gegnerfeld klar getrennt: die Kamera zeigt jeweils eines bildfuellend - wer dran ist, sieht das
 //            Gegnerfeld, sonst die eigene Flotte; oben rechts umschalten. Feld antippen = Fadenkreuz, dann "Feuer!" (oder dasselbe
 //            Feld nochmal antippen).
-//   Wand     Beide Seegebiete nebeneinander, ohne Schiffe (geheim), nur Schuesse, Feuer und Fontaenen.
+//   Wand     Beide Seegebiete nebeneinander, Schuesse, Feuer und Fontaenen; Schiffe nur als Wrack, wenn versenkt (sonst geheim).
+//   Wrack    Ein versenktes Schiff ist nach der Regel offen: es liegt dann schief, tief und dunkel im Meer - am Handy auch im
+//            Gegnermeer, an der Wand in beiden (09.11.2026). Nicht versenkte fremde Schiffe bleiben unsichtbar.
 import * as T3 from "./tisch3d.js";
 import { spiele as klang } from "./ton.js";
 import * as BGU from "./vendor/addons/utils/BufferGeometryUtils.js";
@@ -131,9 +133,11 @@ function aufbauen(d) {
 // ---------------------------------------------------------------- Stand -> Auftritte
 function meereAus(d) {
   // Handy: 0 = Gegner (meine Schuesse), 1 = eigene Flotte (fremde Schuesse + eigene Schiffe). Wand: 0/1 = Meer von Spieler 0/1
-  if (d.beamer) return [0, 1].map((j) => ({ schuesse: (d.schuesse[1 - j] || []), schiffe: null, titel: `${(d.namen || [])[j] || `Spieler ${j + 1}`}s Meer`, farbe: d.farben[j] || "#fff", schuetze: 1 - j }));
+  // Versenkte fremde Schiffe sind nach der Regel offen (battleship.js: SHIP_SUNK zeigt die Zellen) - sie liegen als Wrack im
+  // Meer (wracks); alle anderen fremden Schiffe bleiben unsichtbar.
+  if (d.beamer) return [0, 1].map((j) => ({ schuesse: (d.schuesse[1 - j] || []), schiffe: ((d.wracks || [])[j] || []), titel: `${(d.namen || [])[j] || `Spieler ${j + 1}`}s Meer`, farbe: d.farben[j] || "#fff", schuetze: 1 - j }));
   const geg = 1 - d.ich, nmG = (d.namen || [])[geg] || "Gegner";
-  return [{ schuesse: d.vonMir || [], schiffe: null, titel: `🎯 ${nmG}s Meer`, farbe: d.farben[geg] || "#ff5a5a", schuetze: d.ich },
+  return [{ schuesse: d.vonMir || [], schiffe: d.wracks || [], titel: `🎯 ${nmG}s Meer`, farbe: d.farben[geg] || "#ff5a5a", schuetze: d.ich },
     { schuesse: d.aufMich || [], schiffe: d.meineSchiffe || [], titel: "🛡️ Deine Flotte", farbe: d.farben[d.ich] || "#5ab4ff", schuetze: geg }];
 }
 function neuerStand(d) {
@@ -150,7 +154,7 @@ function neuerStand(d) {
     const t = meere[k].titel;
     if (r.schildText !== t) { r.schildText = t; if (r.schild.material.map) r.schild.material.map.dispose(); r.schild.material.map = schildTextur(t, meere[k].farbe); r.schild.material.needsUpdate = true; }
   });
-  schiffeAbgleichen(meere[1].schiffe);
+  schiffeAbgleichen(meere.map((m) => m.schiffe));
   // Blick am Handy: wer dran ist, sieht das Gegnerfeld; sonst die eigene Flotte (bis jemand umschaltet)
   const blickSoll = d.phase === "setup" ? 1 : d.dran === d.ich ? 0 : 1;
   if (g.blickSollAlt !== blickSoll) { g.blickSollAlt = blickSoll; g.blickFest = null; }
@@ -158,20 +162,27 @@ function neuerStand(d) {
   if (!d.vorbei) g.sieg = null;
   if (g.ziel && (!d.darf || g.gezeigt[0].some(([x, y]) => x === g.ziel[0] && y === g.ziel[1]))) g.ziel = null;
 }
-function schiffeAbgleichen(liste) {
-  const sig = JSON.stringify((liste || []).map((s) => [s.zellen[0], s.zellen.length, s.waagerecht, s.versenkt]));
+// je Seegebiet k eine Liste [{ zellen, waagerecht, versenkt }] - Handy: 0 = Wracks im Gegnermeer, 1 = eigene Flotte
+function schiffeAbgleichen(jeMeer) {
+  const listen = [0, 1].map((k) => (jeMeer[k] || []).filter((s) => s && Array.isArray(s.zellen) && s.zellen.length));
+  const sig = JSON.stringify(listen.map((l) => l.map((s) => [s.zellen[0], s.zellen.length, s.waagerecht, s.versenkt])));
   if (sig === g.schiffSig) return;
   g.schiffSig = sig;
   g.schiffe.forEach((s) => T.scene.remove(s.gr));
-  g.schiffe = (liste || []).map((s) => {
+  g.schiffe = listen.flatMap((liste, k) => liste.map((s) => {
     const gr = schiffBauen(s.zellen.length, g.mats);
     const a = s.zellen[0], b = s.zellen[s.zellen.length - 1];
-    const p = feld(1, (a.x + b.x) / 2, (a.y + b.y) / 2);
+    const p = feld(k, (a.x + b.x) / 2, (a.y + b.y) / 2);
     gr.position.copy(p); gr.rotation.y = s.waagerecht ? 0 : -Math.PI / 2;
     if (s.versenkt) gr.traverse((o) => { if (o.isMesh) o.material = g.mats.wrack; });
     T.scene.add(gr);
-    return { gr, p, versenkt: s.versenkt, saat: a.x * 7 + a.y * 3 };
-  });
+    return { gr, p, k, versenkt: s.versenkt, saat: a.x * 7 + a.y * 3 };
+  }));
+}
+// versenkte Schiffe eines Spielers im Format oben (aus dem vollen Stand des Regelwerks; nur versenkte - die sind offen)
+export function wracksVon(spieler) {
+  const weg = new Set((spieler && spieler.shipsSunk) || []);
+  return ((spieler && spieler.ships) || []).filter((s) => weg.has(s.id)).map((s) => ({ zellen: (s.cells || []).map((c) => ({ x: c.x, y: c.y })), waagerecht: s.orientation === "horizontal", versenkt: true }));
 }
 
 // ---------------------------------------------------------------- je Bild
@@ -330,6 +341,7 @@ export function schiffe3dFeld(k, x, y) { return T ? T3.bildPunkt(T, feld(k, x, y
 export function schiffe3dStand() {
   if (!T || !g) return null;
   return { ...T3.buehneStand(T), blick: g.blick, ziel: g.ziel, schlange: g.schlange.length + (g.akt ? 1 : 0), zaehler: { ...g.zaehler }, schiffe: g.schiffe.length, versenkteSchiffe: g.schiffe.filter((s) => s.versenkt).length,
+    wracksGegner: g.nebeneinander ? null : g.schiffe.filter((s) => s.k === 0).length,
     stifte: [g.weiss.count, g.rot.count], sieg: g.sieg ? g.sieg.p : null, drin: T3.imBild(T, g.nebeneinander ? [...eckpunkte(0), ...eckpunkte(1)].slice(0, 4).concat(eckpunkte(1).slice(0, 4)) : eckpunkte(g.blick || 0).slice(0, 4), 1),
     knopf: T.ui && !T.ui.knopf.hidden ? T.ui.knopf.textContent : null, ecke: T.ui && !T.ui.ecke.hidden ? T.ui.ecke.textContent : null, ui: T.ui ? `${T.ui.name.textContent} · ${T.ui.unter.textContent}` : "" };
 }

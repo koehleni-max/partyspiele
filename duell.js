@@ -20,6 +20,8 @@
 import { esc, knopf } from "./hilfe.js";
 import * as TON from "./ton.js";
 import { QUIZ, QUIZ_HALLOWEEN } from "./inhalte2.js";
+import { QUIZ_POOL } from "./fragen_pool/quiz.js";
+import * as FG from "./fragen_gedaechtnis.js";
 import { BOTNAMEN } from "./partien.js";
 
 export const EINSATZ = 5;            // Nico 01.11.2026: fest 5 Muenzen, keine Wahl, kein Stern
@@ -81,7 +83,7 @@ const KORB_FLUG = 650, KORB_TOL = 9, KORB_ZIEL = 5;
 export function korbX(d, ms) { const s = ms / 1000; return 50 + Math.sin(s * (1.5 + s * 0.05) + d.ph) * 40; }
 
 const QUIZ_N = 5, QUIZ_FRAGE = 9000, QUIZ_PAUSE = 1800, QUIZ_SLOT = QUIZ_FRAGE + QUIZ_PAUSE;
-const QUIZ_VORRAT = QUIZ.concat(QUIZ_HALLOWEEN);
+const QUIZ_VORRAT = QUIZ.concat(QUIZ_HALLOWEEN, QUIZ_POOL);   // Pool hinten angehaengt; gezogen ueber fragen_gedaechtnis.js
 const BUCHST = ["A", "B", "C", "D"];
 // Punkte im Quizduell: je Frage zaehlt die schnellere Antwort; ist sie falsch, darf der andere (seine Antwort zaehlt dann)
 function quizPunkte(x, y, d) {
@@ -280,9 +282,9 @@ export const DEF = {
     kurz: "5 Fragen mit Buzzer – wer zuerst richtig antwortet, punktet",
     regel: "Fünf Fragen. Wer zuerst richtig antwortet, bekommt den Punkt. Antwortet der Schnellere falsch, zählt die Antwort des anderen. Mehr Punkte gewinnen.",
     daten() {
-      const idx = new Set();
-      while (idx.size < QUIZ_N) idx.add(r(QUIZ_VORRAT.length));
-      return { q: [...idx].map((i) => { const z = QUIZ_VORRAT[i], reihe = [0, 1, 2, 3].sort(() => Math.random() - 0.5); return { f: z[0], a: reihe.map((k) => z[1 + k]), r: reihe.indexOf(0) }; }) };
+      // keine Wiederholung ueber Duelle und Abende, gemeinsam mit Quizshow/Millionaer/Damals (Gastgeber zieht einmal)
+      const idx = FG.mehrere("duell", QUIZ_VORRAT, QUIZ_N).nummern;
+      return { q: idx.map((i) => { const z = QUIZ_VORRAT[i], reihe = [0, 1, 2, 3].sort(() => Math.random() - 0.5); return { f: z[0], a: reihe.map((k) => z[1 + k]), r: reihe.indexOf(0) }; }) };
     },
     neu: () => ({ a: Array(QUIZ_N).fill(null) }),
     taste(st, t, d, ms) {

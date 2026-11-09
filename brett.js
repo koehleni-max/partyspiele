@@ -15,6 +15,7 @@ import * as T from "./texte.js";
 import * as BE from "./brett_ereignisse.js";
 import * as R from "./brett_minis.js";
 import * as STAPEL from "./stapel.js";
+import * as FG from "./fragen_gedaechtnis.js";
 import * as DU from "./duell.js";
 import { brett3dZeigen, vorfuehrDauer, WURF, LAUF } from "./brett3d.js";
 import * as KF from "./kamera_frei.js";
@@ -1146,6 +1147,9 @@ function modusWahl(n, s) {
   if (n === 3) return x < 0.6 ? "alle" : x < 0.85 ? "eins" : "duell";
   return x < 0.4 ? "alle" : x < 0.65 ? "team" : x < 0.85 ? "eins" : "duell";
 }
+// Schaetzfrage ohne Wiederholung ueber Spiele und Abende (fragen_gedaechtnis.js, gemeinsam mit dem Schaetzmeister); die
+// anderen Minispiele brauchen keine Frage und verbrauchen darum auch keine
+export const miniFrage = (art) => (art === "schaetzen" ? FG.naechste("schaetzen", T.SCHAETZ).nr : zufall(T.SCHAETZ.length));
 function miniStart(s, raum) {
   const n = s.pos.length;
   const art = naechstesMini(s, raum);
@@ -1157,7 +1161,7 @@ function miniStart(s, raum) {
   else if (modus === "team") { const h = Math.ceil(n / 2); teams = [reihe.slice(0, h).sort(), reihe.slice(h).sort()]; }
   else if (modus === "eins") teams = [[reihe[0]], reihe.slice(1).sort()];
   else if (modus === "duell") teil = reihe.slice(0, 2).sort();
-  s.mini = { art, runde: s.runde, werte: {}, warte: 1500 + zufall(3500), frage: zufall(T.SCHAETZ.length), zahl: String(10000000 + zufall(89999999)),
+  s.mini = { art, runde: s.runde, werte: {}, warte: 1500 + zufall(3500), frage: miniFrage(art), zahl: String(10000000 + zufall(89999999)),
     d: R.daten(art), modus, teams, teil, t0: Date.now(), einsatz: {} };
   s.meldung = "";
   // Einsatz (Runde C, Punkt 26): erst duerfen alle Mitspielenden ein paar eigene Muenzen auf sich setzen

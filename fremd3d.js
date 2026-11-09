@@ -6,8 +6,9 @@
 import { vier3dZeigen } from "./vier3d.js";
 import { dame3dZeigen } from "./dame3d.js";
 import { wuerfel3dZeigen } from "./wuerfel3d.js";
-import { schiffe3dZeigen } from "./schiffe3d.js";
+import { schiffe3dZeigen, wracksVon } from "./schiffe3d.js";
 import { stil } from "./tisch3d.js";
+export { wracksVon };   // fuer den Wand-Auszug (beamer_spiele.js)
 
 const OBEN = ["ones", "twos", "threes", "fours", "fives", "sixes"];
 function wuerfelSumme(blatt) {
@@ -24,6 +25,21 @@ function kopf(st, ich) {
   return { farben: pl.map((p) => p.colorHex || "#888"), dran, vorbei, sieger, ich, n: pl.length, darf: spielt && dran === ich };
 }
 const senderFuer = (senden, action) => (payload) => senden({ typ: "fremd", action, payload });
+
+// Wuerfelpoker: das zuletzt eingetragene Feld leuchtet auf dem Zettel, bis das naechste eingetragen wird (09.11.2026).
+// Gemerkt wird je Spieler, welche Felder schon voll waren; kommt eines dazu, wandert das Licht dorthin.
+const zettel = { voll: null, licht: null };
+export function wuerfelLicht(buehne, pl) {
+  const jetzt = pl.map((p) => Object.entries(p.scoreSheet || {}).filter(([, v]) => v !== null && v !== undefined).map(([k]) => k));
+  if (zettel.voll && zettel.voll.length === jetzt.length) {
+    jetzt.forEach((felder, j) => { const neu = felder.filter((k) => !zettel.voll[j].includes(k)); if (neu.length === 1) zettel.licht = { id: pl[j].userId, kat: neu[0] }; });
+  } else zettel.licht = null;   // neues Spiel oder erstes Bild: noch kein Licht
+  zettel.voll = jetzt;
+  const ziel = zettel.licht && buehne.querySelector(`#yz-sheet td.yz-score-cell[data-user-id="${zettel.licht.id}"][data-category="${zettel.licht.kat}"]`);
+  buehne.querySelectorAll("#yz-sheet .yz-zuletzt").forEach((el) => { if (el !== ziel && el !== (ziel && ziel.parentElement)) el.classList.remove("yz-zuletzt"); });
+  if (ziel) { ziel.classList.add("yz-zuletzt"); ziel.parentElement.classList.add("yz-zuletzt"); }
+  return zettel.licht;
+}
 
 // ---------------------------------------------------------------- Handy: aus der Spieler-Ansicht des Regelwerks
 const HANDY = {
@@ -44,16 +60,20 @@ const HANDY = {
     const ts = st.turnState || {}, pl = st.players || [], k = kopf(st, ich), cfg = (st.config && st.config.settings) || {};
     const knopf = buehne.querySelector("#yz-roll-btn"), die = (i) => buehne.querySelector(`#yz-die-${i}`);
     const max = cfg.rollsPerTurn || 3, wurf = ts.rollsUsed || 0;
+    wuerfelLicht(buehne, pl);
     return wuerfel3dZeigen(box, { ...k, namen, wuerfel: (ts.dice || []).slice(), halten: (ts.held || []).slice(), lokal: [0, 1, 2, 3, 4].map((i) => !!(die(i) && die(i).classList.contains("yz-die-held"))),
       wurf, wuerfe: max, wurfKey: `${ts.currentPlayerIndex}:${ts.roundsCompleted || 0}:${wurf}`, punkte: pl.map((p) => wuerfelSumme(p.scoreSheet)),
       felder: pl.map((p) => Object.values(p.scoreSheet || {}).filter((v) => v !== null).length), kannHalten: k.darf && wurf >= 1 && wurf < max,
       kannWuerfeln: k.darf && !!knopf && !knopf.disabled, halte: (i) => { const el = die(i); if (el && !el.disabled) el.click(); }, wuerfeln: () => { if (knopf && !knopf.disabled) knopf.click(); }, ton: true });
   },
-  "f-schiffe": (box, st, ich, namen, senden) => {
+  "f-schiffe": (box, st, ich, namen, senden, buehne, voll) => {
     const pl = st.players || [], k = kopf(st, ich), ts = st.turnState || {}, cfg = (st.config && st.config.settings) || {};
     const me = pl[ich] || pl[0] || {}, r = (z) => [z.cell.x, z.cell.y, z.result === "miss" ? 0 : z.result === "sunk" ? 2 : 1];
     const versenkt = new Set(me.shipsSunk || []);
-    return schiffe3dZeigen(box, { ...k, ich: ich < pl.length ? ich : 0, namen, phase: ts.phase || "", b: cfg.gridWidth || 10, h: cfg.gridHeight || 10,
+    // Wracks im Gegnermeer: nur die schon versenkten fremden Schiffe, aus dem vollen Stand (die Spieler-Ansicht laesst fremde
+    // Schiffe ganz weg; versenkte sind nach der Regel offen)
+    const ichI = ich < pl.length ? ich : 0, geg = ((voll && voll.players) || [])[1 - ichI];
+    return schiffe3dZeigen(box, { ...k, ich: ichI, namen, wracks: wracksVon(geg), phase: ts.phase || "", b: cfg.gridWidth || 10, h: cfg.gridHeight || 10,
       darf: k.darf && ts.phase === "firing",
       meineSchiffe: ich < pl.length ? (me.ships || []).map((s) => ({ zellen: s.cells || [], waagerecht: s.orientation === "horizontal", versenkt: versenkt.has(s.id) })) : [],
       aufMich: (me.shotsReceived || []).map(r), vonMir: (me.shotsFired || []).map(r), senden: (x, y) => senderFuer(senden, "fireShot")({ cell: { x, y } }), ton: true });
@@ -62,13 +82,14 @@ const HANDY = {
 export const HAT_3D = (id) => Object.prototype.hasOwnProperty.call(HANDY, id);
 
 // in die Buehne des fertigen Spiels: 3D-Kasten oben, die flache Ansicht des Spielfelds wird ausgeblendet (CSS ueber mit-3d)
-export function fremd3dHandy(id, buehne, st, ich, namen, senden) {
+// voll: der ungefilterte Stand des Regelwerks (nur fuer Offenes wie versenkte Schiffe)
+export function fremd3dHandy(id, buehne, st, ich, namen, senden, voll = null) {
   if (!HANDY[id] || !buehne) return false;
   stil();
   let box = buehne.querySelector(":scope > .t3d");
   if (!box) { box = document.createElement("div"); box.className = "t3d"; box.dataset.t3d = id; buehne.insertBefore(box, buehne.firstChild); }
   let an = false;
-  try { an = !!HANDY[id](box, st, ich, namen || [], senden, buehne); } catch (e) { console.error(e); an = false; }
+  try { an = !!HANDY[id](box, st, ich, namen || [], senden, buehne, voll); } catch (e) { console.error(e); an = false; }
   buehne.classList.toggle("mit-3d", an);
   buehne.dataset.d3 = id;
   return an;

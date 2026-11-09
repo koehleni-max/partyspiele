@@ -10,7 +10,17 @@
 //   Quiz "Damals" (83)         Fragen zu den 90ern und 2000ern, gleicher Ablauf wie das Bilderraetsel.
 // Alles ohne Alkohol, keine Computer-Mitspieler. Zustand und Zufall nur beim Gastgeber.
 import { esc, knopf, mischen, name } from "./hilfe.js";
-import { MILLIONAER, ACTIVITY, BILDER, DAMALS } from "./fragen_gruppen.js";
+import { MILLIONAER as MIO_ALT, ACTIVITY, BILDER as BILDER_ALT, DAMALS as DAMALS_ALT } from "./fragen_gruppen.js";
+// Grosser Fragen-Pool (DUM-E 09.11.2026, samt Nachschub in fragen_pool/) - je Liste HINTEN angehaengt. Gezogen wird ueber
+// fragen_gedaechtnis.js: keine Wiederholung ueber Spiele und Abende (Millionaer und Damals teilen sich das Gedaechtnis mit
+// Quizshow und Quizduell, Bilderraetsel hat ein eigenes).
+import { MILLIONAER_POOL } from "./fragen_pool/millionaer.js";
+import { BILDER_POOL } from "./fragen_pool/bilder.js";
+import { DAMALS_POOL } from "./fragen_pool/damals.js";
+import * as FG from "./fragen_gedaechtnis.js";
+export const MILLIONAER = MIO_ALT.map((l, st) => l.concat(MILLIONAER_POOL[st] || []));
+export const BILDER = BILDER_ALT.concat(BILDER_POOL);
+export const DAMALS = DAMALS_ALT.concat(DAMALS_POOL);
 import { mio3dZeigen } from "./mio3d.js";   // Millionaer-Buehne in 3D (09.11.2026)
 import { MINISPIELE } from "./minispiele.js";   // Activity "Zeichnen" nutzt die Malflaeche von Malen & Raten (Restpaket 3c)
 const MALEN = MINISPIELE.find((x) => x.id === "malen");
@@ -38,7 +48,8 @@ const euro = (n) => `${Number(n || 0).toLocaleString("de-DE")} €`;
 export const mioSicher = (stufe) => { let g = 0; MIO_SICHER.forEach((k) => { if (stufe > k) g = MIO_GELD[k]; }); return g; };
 function mioFrage(s) {
   const st = s.stufe < 5 ? 0 : s.stufe < 10 ? 1 : 2;
-  s.q = mischFrage(MILLIONAER[st][zieh(s, `m${st}`, MILLIONAER[st].length)]);
+  const z = FG.naechste("millionaer", MILLIONAER[st]);
+  s.q = mischFrage(z.eintrag); s.vonVorn = z.vonVorn ? z.hinweis : "";
   Object.assign(s, { wahl: null, weg: [], tipps: {}, pub: false, tel: null, telTipp: null });
 }
 function mioNaechster(s, n) {
@@ -97,20 +108,23 @@ export const millionaer = {
     const pub = s.pub ? `<div class="balken">${q.a.map((t, k) => `<div class="zeile"><span>${BUCH[k]}</span><div class="b" style="width:${alle ? (zaehl[k] / alle) * 100 : 0}%"></div><b>${zaehl[k]}</b></div>`).join("")}</div>
       ${alle ? "" : "<p class='leise mitte'>Noch hat niemand aus dem Publikum getippt …</p>"}` : "";
     if (s.phase === "frage") {
+      // Hinweis "es geht wieder von vorn los" nur bei der Frage, bei der das Gedaechtnis neu anfing (steht ausserhalb der
+      // flachen Ansicht, damit er auch neben der 3D-Buehne zu sehen ist)
+      const vv = s.vonVorn ? `<p class="mitte leise klein fg-hinweis">🔁 ${esc(s.vonVorn)}</p>` : "";
       const tel = s.tel !== null ? `<p class="mitte">📞 ${name(namen, s.tel)}${s.telTipp !== null ? ` meint: <b>${BUCH[s.telTipp]}</b>` : " überlegt …"}</p>` : "";
       if (kand) {
         const ant = `<div class="raster2">${q.a.map((t, k) => (s.weg.includes(k) ? `<button class="wahl" disabled>${BUCH[k]}: –</button>` : knopf(`${BUCH[k]}: ${esc(t)}`, { typ: "antwort", k }, "wahl gg-antwort"))).join("")}</div>`;
         const tels = !s.joker.tel ? `<details class="gg-tel"><summary>📞 Telefonjoker – wen anrufen?</summary><div class="raster">${namen.map((nm, j) => (j === ich ? "" : knopf(esc(nm), { typ: "tel", j }, "zweit"))).join("")}</div></details>` : "";
         const jk = `<div class="raster2">${s.joker.fifty ? "" : knopf("✂️ 50:50", { typ: "fifty" }, "zweit")}${s.joker.pub ? "" : knopf("👥 Publikum", { typ: "pub" }, "zweit")}</div>${tels}`;
         const sicher = `<p class="mitte leise">Sicher: ${euro(mioSicher(s.stufe))} · Aufhören: ${euro(s.stufe ? MIO_GELD[s.stufe - 1] : 0)}</p>`;
-        return `${buehne}<div class="mio-flach">${kopf}${ant}</div>${pub}${tel}${jk}${knopf(`🛑 Aufhören mit ${euro(s.stufe ? MIO_GELD[s.stufe - 1] : 0)}`, { typ: "aufhoeren" }, "zweit")}${sicher}${regel}`;
+        return `${buehne}${vv}<div class="mio-flach">${kopf}${ant}</div>${pub}${tel}${jk}${knopf(`🛑 Aufhören mit ${euro(s.stufe ? MIO_GELD[s.stufe - 1] : 0)}`, { typ: "aufhoeren" }, "zweit")}${sicher}${regel}`;
       }
       if (ich === s.tel && s.telTipp === null) {
         return `${buehne}<p class="mitte">📞 <b>${esc(namen[s.kand])} ruft dich an!</b> Was meinst du?</p><div class="mio-flach">${kopf}
           <div class="raster2">${q.a.map((t, k) => (s.weg.includes(k) ? "" : knopf(`${BUCH[k]}: ${esc(t)}`, { typ: "teltipp", k }, "wahl"))).join("")}</div></div>${stand}`;
       }
       const meins = s.tipps[ich];
-      return `${buehne}<div class="mio-flach">${kopf}<p class="mitte leise">Rate mit – ${esc(namen[s.kand])} sieht deinen Tipp nur über den Publikumsjoker.</p>
+      return `${buehne}${vv}<div class="mio-flach">${kopf}<p class="mitte leise">Rate mit – ${esc(namen[s.kand])} sieht deinen Tipp nur über den Publikumsjoker.</p>
         <div class="raster2">${q.a.map((t, k) => (s.weg.includes(k) ? `<button class="wahl" disabled>${BUCH[k]}: –</button>` : knopf(`${BUCH[k]}: ${esc(t)}`, { typ: "tipp", k }, `wahl ${meins === k ? "gewaehlt" : ""}`))).join("")}</div></div>
         <p class="mitte leise mio-3d-nur">Rate mit – ${esc(namen[s.kand])} sieht deinen Tipp nur über den Publikumsjoker.</p>${pub}${tel}${stand}`;
     }
@@ -370,7 +384,10 @@ export function bildFrage(k) {
   return [emo, los, ...falsch];
 }
 function quizSpiel({ id, name: nm, emoji, farben, kurz, liste, frage, gross }) {
-  const neu = (s) => { s.nr++; s.q = mischFrage(frage(zieh(s, "q", liste.length))); s.antw = {}; s.phase = "frage"; s.seit = Date.now(); };
+  const neu = (s) => {
+    const z = FG.naechste(id, liste);   // "bilder" bzw. "damals" (fragen_gedaechtnis.js)
+    s.nr++; s.q = mischFrage(frage(z.nr)); s.vonVorn = z.vonVorn ? z.hinweis : ""; s.antw = {}; s.phase = "frage"; s.seit = Date.now();
+  };
   const sp = {
     id, name: nm, emoji, farben, kurz,
     start(namen) { const s = { nr: 0, punkte: namen.map(() => 0), runde: 1 }; neu(s); return s; },
@@ -404,7 +421,7 @@ function quizSpiel({ id, name: nm, emoji, farben, kurz, liste, frage, gross }) {
       const kopf = `<p class="mitte leise">Frage ${s.nr} von ${QR_ANZAHL}</p><div class="frage">${gross ? `<span class="gg-emoji">${esc(s.q.f)}</span>` : esc(s.q.f)}</div>`;
       if (s.phase === "frage") {
         const meins = s.antw[ich];
-        return `${kopf}<div class="raster2">${s.q.a.map((t, k) => knopf(`${BUCH[k]}: ${esc(t)}`, { typ: "antwort", k }, `wahl ${meins && meins.k === k ? "gewaehlt" : ""}`, meins ? "disabled" : "")).join("")}</div>
+        return `${kopf}${s.vonVorn ? `<p class="mitte leise klein fg-hinweis">🔁 ${esc(s.vonVorn)}</p>` : ""}<div class="raster2">${s.q.a.map((t, k) => knopf(`${BUCH[k]}: ${esc(t)}`, { typ: "antwort", k }, `wahl ${meins && meins.k === k ? "gewaehlt" : ""}`, meins ? "disabled" : "")).join("")}</div>
           <p class="mitte leise">${meins ? "Abgegeben – warte auf die anderen" : "Wer zuerst richtig tippt, bekommt 2 Punkte, alle anderen Richtigen 1"} (${Object.keys(s.antw).length}/${namen.length})</p>
           ${knopf("Auflösen", { typ: "aufloesen" }, "zweit klein2")}${stand}`;
       }
@@ -417,7 +434,7 @@ function quizSpiel({ id, name: nm, emoji, farben, kurz, liste, frage, gross }) {
 }
 export const bilder = quizSpiel({ id: "bilder", name: "Bilderrätsel", emoji: "🧩", farben: ["#f59e0b", "#be185d"], kurz: "Emoji-Rätsel: Film, Sprichwort, Märchen …",
   liste: BILDER, frage: bildFrage, gross: true });
-export const damals = quizSpiel({ id: "damals", name: "Quiz „Damals“", emoji: "📼", farben: ["#a855f7", "#0ea5e9"], kurz: "90er und 2000er – weißt du's noch?",
+export const damals = quizSpiel({ id: "damals", name: "Quiz „Damals“", emoji: "📼", farben: ["#a855f7", "#0ea5e9"], kurz: "80er bis 2010er – weißt du's noch?",
   liste: DAMALS, frage: (k) => DAMALS[k] });
 
 // Stil fuers Handy (einmal)

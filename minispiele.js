@@ -3,6 +3,7 @@ import { spiele as klang } from "./ton.js";
 import { esc, knopf, zufall, ziehe, mischen, name, schlucke } from "./hilfe.js";
 import * as T from "./texte.js";
 import * as STAPEL from "./stapel.js";
+import * as FG from "./fragen_gedaechtnis.js";
 
 // ================================================================ Reaktion
 // Jedes Handy misst selbst (keine Uhrenabgleich-Probleme): Start kommt vom Gastgeber, Gruen nach eigener Wartezeit.
@@ -61,10 +62,16 @@ const reaktion = {
 };
 
 // ================================================================ Schaetzen
+export const schaetzZug = (s) => (Number.isFinite(s.zug) ? `z${s.zug}` : String(s.rest ? s.rest.length : 0));
+function schaetzZiehen(s) {
+  const z = FG.naechste("schaetzen", T.SCHAETZ);
+  s.nr = z.nr; s.vonVorn = z.vonVorn ? z.hinweis : "";
+}
 const schaetzen = {
   id: "schaetzen", name: "Schätzmeister", emoji: "🎯", farben: ["#f97316","#7c2d12"], kurz: "Zahlen schätzen – wer am weitesten weg liegt, trinkt",
-  // Fragen ohne Wiederholung am ganzen Abend (stapel.js); s.rest bleibt als Zaehler fuer Wertung und Eingabefeld
-  start: (namen, raum) => { const s = { tipps: {}, phase: "tippen" }; s.rest = mischen(T.SCHAETZ.map((_, i) => i)); s.nr = raum ? STAPEL.eins(raum, "schaetzen", T.SCHAETZ.length) : s.rest.pop(); return s; },
+  // Fragen ohne Wiederholung ueber Spiele und Abende (fragen_gedaechtnis.js, gemeinsam mit dem Partybrett-Mini).
+  // s.zug zaehlt die Fragen (Wertung, Eingabefeld); alte Staende haben stattdessen s.rest (Liste) - schaetzZug kann beides.
+  start: () => { const s = { tipps: {}, phase: "tippen", zug: 0 }; schaetzZiehen(s); return s; },
   // Gesamtwertung: je Frage, wer am naechsten dran war
   ergebnis(s) {
     if (s.phase !== "aufloesung") return null;
@@ -72,7 +79,7 @@ const schaetzen = {
     const abst = Object.entries(s.tipps).map(([j, t]) => [Number(j), Math.abs(t - loesung)]);
     if (!abst.length) return null;
     const min = Math.min(...abst.map((x) => x[1]));
-    return { nr: `s${s.nr}-${s.rest.length}`, sieger: abst.filter((x) => x[1] === min).map((x) => x[0]) };
+    return { nr: `s${s.nr}-${schaetzZug(s)}`, sieger: abst.filter((x) => x[1] === min).map((x) => x[0]) };
   },
   aktion(s, i, a, namen, raum) {
     if (a.typ === "tipp" && s.phase === "tippen" && a.wert !== "" && !isNaN(Number(a.wert))) {
@@ -80,16 +87,15 @@ const schaetzen = {
       if (Object.keys(s.tipps).length >= s.anzahl) s.phase = "aufloesung";
     }
     if (a.typ === "weiter") {
-      if (!s.rest.length) s.rest = mischen(T.SCHAETZ.map((_, k) => k));
-      const nr = s.rest.pop();
-      s.nr = raum ? STAPEL.eins(raum, "schaetzen", T.SCHAETZ.length) : nr;
+      s.zug = (Number.isFinite(s.zug) ? s.zug : 0) + 1; delete s.rest;
+      schaetzZiehen(s);
       s.tipps = {}; s.phase = "tippen";
     }
   },
   render(s, ich, namen) {
     const [frage, loesung] = T.SCHAETZ[s.nr];
-    if (s.phase === "tippen") return `<div class="frage">${esc(frage)}</div>
-      ${s.tipps[ich] === undefined ? `<input id="tipp" data-rk="${s.nr}-${s.rest.length}" type="number" inputmode="decimal" placeholder="Deine Schätzung">${knopf("Abgeben", { typ: "tipp" }, "gross", `data-feld="tipp"`)}`
+    if (s.phase === "tippen") return `<div class="frage">${esc(frage)}</div>${s.vonVorn ? `<p class="mitte leise klein fg-hinweis">🔁 ${esc(s.vonVorn)}</p>` : ""}
+      ${s.tipps[ich] === undefined ? `<input id="tipp" data-rk="${s.nr}-${schaetzZug(s)}" type="number" inputmode="decimal" placeholder="Deine Schätzung">${knopf("Abgeben", { typ: "tipp" }, "gross", `data-feld="tipp"`)}`
                                    : `<p class="mitte">Abgegeben: <b>${s.tipps[ich]}</b></p>`}
       <p class="mitte leise">${Object.keys(s.tipps).length}/${namen.length} abgegeben</p>`;
     const abst = namen.map((_, j) => [j, Math.abs(s.tipps[j] - loesung)]).filter(([j]) => s.tipps[j] !== undefined).sort((x, y) => x[1] - y[1]);

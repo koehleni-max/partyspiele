@@ -29,6 +29,7 @@ import * as SL from "./spielleitung.js";
 import * as R from "./brett_minis.js";
 import * as ER from "./erklaer.js";   // Erklaer-Einblendung nach "Los geht's" (Restpaket 3a)
 import { einsetzenWeich } from "./weich.js";   // Spielseiten: nur Geaendertes austauschen (Schritt 4b, weiche Animationen)
+import * as FG from "./fragen_gedaechtnis.js";   // Quizfragen ohne Wiederholung ueber Abende - Knopf "Fragen wieder von vorn"
 
 const app = document.getElementById("app");
 const BASIS = location.href.split("#")[0];
@@ -732,7 +733,7 @@ function anwesenheitUebernehmen() {
   if (neu) { const aend = neueAenderung(); aend.lobby = true; verteilen(aend); }
 }
 
-const RAUM_TYPEN = new Set(["_hallo", "_spielwahl", "_ab18", "_trink", "_look", "_testkonten", "_tafel", "_admin", "_adminweg", "_raumende", "_beamer", "_alle", "_glueck", "_brettweg", "_koppeln", "_stvneu", "_stvweg", "_pause", "_party", "_plan", "_rueck", "_brettladen"]);
+const RAUM_TYPEN = new Set(["_hallo", "_spielwahl", "_ab18", "_trink", "_look", "_testkonten", "_tafel", "_admin", "_adminweg", "_raumende", "_beamer", "_alle", "_glueck", "_brettweg", "_koppeln", "_stvneu", "_stvweg", "_pause", "_party", "_plan", "_rueck", "_brettladen", "_fragenneu"]);
 
 function ausfuehren(von, a) {
   if (!raum || !a || typeof a !== "object" || typeof a.typ !== "string") return;
@@ -808,6 +809,9 @@ function ausfuehren(von, a) {
     }
     else if (a.typ === "_look" && admin && A.lookGueltig(a.look)) { raum.look = a.look; aend.lobby = true; }
     else if (a.typ === "_testkonten" && admin) { raum.testkonten = !K.testkontenAn(raum); aend.lobby = true; }
+    // Fragen-Gedaechtnis (fragen_gedaechtnis.js) liegt beim Gastgeber - vor dem Partyabend einmal loeschen, damit Testrunden
+    // nicht als "schon gestellt" zaehlen (DUM-E 09.11.2026, Punkt 6)
+    else if (a.typ === "_fragenneu" && admin) { FG.vergessen(); raum.fragenNeuAm = Date.now(); aend.lobby = true; logge("raum", "Fragen-Gedächtnis gelöscht", ich.name); }
     else if (a.typ === "_beamer" && admin) {
       if (!B.steuerAktion(raum, a, Date.now())) return;
       aend.lobby = true;
@@ -2380,6 +2384,8 @@ function steuerBild() {
       ${schalter("_testkonten", K.testkontenAn(raum), "🧪 Testkonten erlaubt", "Namen mit „test“ spielen mit, zählen aber nirgends in die Wertung – am Partyabend ausschalten")}
       ${schalter("_ab18", raum.ab18, "🔞 Alle hier sind über 18", "schaltet die Kategorien Spicy und 18+ frei")}
       ${schalter("_trink", raum.ohneAlkohol, "🧃 Ohne Alkohol spielen", "statt Schlucken gibt es Strafpunkte")}
+      ${knopf("🔁 Fragen wieder von vorn", { typ: "_fragenneu" }, "zweit fragen-neu")}
+      <p class="leise klein">Quizfragen kommen sonst über alle Abende nur einmal dran. Vor der Party einmal drücken, dann zählen Testrunden nicht mit.${raum.fragenNeuAm ? ` Zuletzt: ${new Date(raum.fragenNeuAm).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}` : ""}</p>
       ${knopf("Steuerrechte abgeben", { typ: "_adminweg" }, "zweit")}
       ${endeKnopf()}
     </div>`;
