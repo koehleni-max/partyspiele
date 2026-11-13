@@ -40,7 +40,11 @@ export function nameVon(raum, p, id) {
   return sp ? sp.name : "Weg";
 }
 export const namen = (raum, p) => p.mit.map((id) => nameVon(raum, p, id));
-export const leiter = (p) => p.mit.find((id) => !istBot(id)) || null;
+// Verlassen (Nico 13.11.2026): p.weg = wer das laufende Spiel verlassen hat, aber noch auf seinem Platz steht (Spiele ohne
+// Computer-Mitspieler); p.ersatz = {botId: Kennung} fuer Plaetze, die ein Computer fuer jemanden weiterspielt.
+export const istWeg = (p, id) => Array.isArray(p.weg) && p.weg.includes(id);
+export const aktive = (p) => p.mit.filter((id) => !istBot(id) && !istWeg(p, id));
+export const leiter = (p) => aktive(p)[0] || null;
 export const darfLeiten = (p, id, admin) => admin || leiter(p) === id;
 
 // -> "dabei" | "wartet" | null
@@ -68,6 +72,8 @@ export function raus(p, id) {
 }
 
 export function starten(p, sp, raum) {
+  // wer das Spiel verlassen hat, sitzt in der neuen Runde nicht mehr mit am Tisch
+  if (Array.isArray(p.weg) && p.weg.length) { p.mit = p.mit.filter((id) => !p.weg.includes(id)); p.weg = []; }
   // raum: fuer Inhalte ohne Wiederholung ueber den ganzen Abend (stapel.js, z. B. die Figuren bei Wer bin ich)
   p.s = sp.start(namen(raum, p), raum);
   p.s.anzahl = p.mit.length;
@@ -110,6 +116,8 @@ export function idErsetzen(raum, alt, neu) {
     p.mit = p.mit.map((x) => (x === alt ? neu : x));
     p.wartend = p.wartend.map((x) => (x === alt ? neu : x));
     if (p.von === alt) p.von = neu;
+    if (Array.isArray(p.weg)) p.weg = p.weg.map((x) => (x === alt ? neu : x));
+    if (p.ersatz) Object.keys(p.ersatz).forEach((b) => { if (p.ersatz[b] === alt) p.ersatz[b] = neu; });
     // Partybrett: Figur und Team aus dem Hauptmenue gehen mit
     if (p.hm) ["fig", "team"].forEach((k) => { if (p.hm[k] && alt in p.hm[k]) { p.hm[k][neu] = p.hm[k][alt]; delete p.hm[k][alt]; } });
   });
@@ -123,10 +131,49 @@ export function platzGeben(raum, p, alt, neu) {
   if (!raum.spieler.some((x) => x.id === neu)) return false;
   p.mit = p.mit.map((x) => (x === alt ? neu : x));
   p.wartend = p.wartend.filter((x) => x !== neu);
+  if (Array.isArray(p.weg)) p.weg = p.weg.filter((x) => x !== alt);   // der Platz ist wieder besetzt
   if (p.von === alt) p.von = neu;
   if (p.hm) ["fig", "team"].forEach((k) => { if (p.hm[k] && alt in p.hm[k]) { p.hm[k][neu] = p.hm[k][alt]; delete p.hm[k][alt]; } });
   return true;
 }
+
+// Verlassen statt "Beenden fuer alle" (Nico 13.11.2026: "nicht jeder darf alles beenden ... wenn alle aus dem Game raus sind,
+// beendet es sich selbst"). Jeder geht nur fuer sich:
+// - beim Sammeln oder von der Warteliste: einfach raus
+// - laufendes Spiel mit Computer-Mitspielern (sp.bot): ein Computer spielt auf dem Platz weiter ("🤖 Anna")
+// - sonst bleibt der Platz stehen und gilt als "weg" (Punkte und Zuege haengen an der Spieler-Nummer)
+// In beiden Faellen holt "Wieder mitmachen" den Platz zurueck (zurueck). -> "raus" | "bot" | "weg" | null
+const platzUmhaengen = (p, alt, neu) => {
+  p.mit = p.mit.map((x) => (x === alt ? neu : x));
+  if (p.von === alt) p.von = neu;
+  if (p.hm) ["fig", "team"].forEach((k) => { if (p.hm[k] && alt in p.hm[k]) { p.hm[k][neu] = p.hm[k][alt]; delete p.hm[k][alt]; } });
+};
+export function verlassen(raum, p, sp, id) {
+  if (p.wartend.includes(id)) { p.wartend = p.wartend.filter((x) => x !== id); return "raus"; }
+  if (istBot(id) || !p.mit.includes(id) || istWeg(p, id)) return null;
+  if (p.phase === "sammeln") { p.mit = p.mit.filter((x) => x !== id); if (p.von === id) p.von = leiter(p) || p.von; return "raus"; }
+  if (sp.bot) {
+    let k = 1; while (p.bots[`bot:${k}`]) k++;
+    const bot = `bot:${k}`, name = nameVon(raum, p, id);
+    p.bots[bot] = `🤖 ${name.slice(0, 11)}`;
+    p.ersatz = { ...(p.ersatz || {}), [bot]: id };
+    platzUmhaengen(p, id, bot);
+    return "bot";
+  }
+  p.weg = [...(p.weg || []), id];
+  return "weg";
+}
+// -> true, wenn die Kennung ihren alten Platz zurueckbekommen hat
+export function zurueck(p, id) {
+  if (istWeg(p, id)) { p.weg = p.weg.filter((x) => x !== id); return true; }
+  const bot = Object.keys(p.ersatz || {}).find((b) => p.ersatz[b] === id && p.mit.includes(b));
+  if (!bot || p.mit.includes(id)) return false;
+  platzUmhaengen(p, bot, id);
+  delete p.bots[bot];
+  delete p.ersatz[bot];
+  return true;
+}
+export const kannZurueck = (p, id) => istWeg(p, id) || Object.keys(p.ersatz || {}).some((b) => p.ersatz[b] === id && p.mit.includes(b));
 
 // Spiel retten (Vorschlag 124): was der Notfall-Knopf sichert und zurueckholt. Kennungen bleiben draussen - wer inzwischen den
 // Platz gewechselt hat, behaelt ihn.

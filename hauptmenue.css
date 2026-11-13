@@ -228,6 +228,8 @@ button.hm-los { margin: 0 auto; max-width: 596px; line-height: 1.15; }
 }
 @media (min-width: 1600px) { .hm:not(.gast) { font-size: 18px; padding: 20px 32px 24px; gap: 18px; } .hm-platz { grid-template-columns: 52px minmax(0, 1fr); min-height: 88px; } .hm-qr svg { width: 76px; height: 76px; } }
 /* schmale Handys: der Titel braucht den Platz, Beenden bleibt als Zeichen */
+/* Ton-Schalter steht am Seitenende: am Handy laege er sonst auf dem festen Startknopf (Nico 13.11.2026) */
+@media (max-width: 1099px) { body.hm-offen .ton-schalter { margin-bottom: calc(96px + env(safe-area-inset-bottom)); } }
 @media (max-width: 400px) { .hm-abbruch .wort { display: none; } .hm-titel { gap: 6px; } .hm-titel h1 { font-size: 1.5em; } .hm-wuerfel { font-size: 1.8em; } }
 @media (max-width: 345px) { .hm-reiter button { font-size: .72em; } .hm-titel h1 { font-size: 1.3em; } .hm-kachel b { font-size: .95em; } }
 

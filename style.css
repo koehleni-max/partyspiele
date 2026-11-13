@@ -1405,3 +1405,36 @@ html.im-spiel #app { -webkit-user-select: none; user-select: none; -webkit-touch
 html.im-spiel #app input, html.im-spiel #app textarea { -webkit-user-select: text; user-select: text; }
 .vollbild-knopf { background: var(--blau); box-shadow: 0 3px 0 var(--blau-lippe); }
 html.vollbild .vollbild-knopf { display: none; }
+
+/* Raum hierher holen: nur die Spielleitung, wenn das Gastgeber-Geraet (Raumhalter) laenger weg ist (Nico 13.11.2026) */
+.raumholen { display: grid; gap: 8px; margin-top: 12px; justify-items: center; }
+.raumholen button { font-size: 1rem; padding: 10px 16px; }
+.raumholen small { display: block; font-weight: 600; opacity: .85; line-height: 1.35; }
+
+/* "Weiter" nur fuer den Spieler am Zug (Nico 13.11.2026): alle anderen sehen den Knopf gesperrt, darunter wer drueckt und
+   wann er fuer alle frei wird (app.js, zugSperrePruefen). Der Text haengt am Knopf, damit beim Neuzeichnen nichts flackert. */
+button[data-zugsperre] { filter: grayscale(.7) brightness(.72); cursor: default; }
+button[data-zugsperre]::after { content: attr(data-zugsperre); display: block; margin-top: 4px; font-size: .62em; font-weight: 600; line-height: 1.25; opacity: .95; white-space: normal; }
+
+/* Verlassen statt "Beenden fuer alle" (Nico 13.11.2026): Nachfrage unter dem Spielkopf und Hinweis fuer den, der raus ist */
+.endefrage, .wegbox { margin: 8px 0 10px; text-align: center; }
+.endefrage b { display: block; margin-bottom: 8px; }
+.endefrage .raster2 { gap: 8px; }
+.endefrage button, .wegbox button { margin: 0; }
+.wegbox button { display: block; margin: 8px auto 0; }
+
+/* Wer das Spiel verlassen hat, sieht sein Feld blass und unbedienbar, bis er "Wieder mitmachen" drueckt; "Fuer X druecken" */
+.weg-sperre { opacity: .4; pointer-events: none; filter: grayscale(.5); }
+.fuerbox { margin: 8px 0 10px; text-align: center; }
+.fuerbox button { display: block; margin: 8px auto 0; }
+
+/* Uebersicht: Sprungleiste zu den Spielgruppen und Gruppentitel zum Auf- und Zuklappen (Nico 13.11.2026) */
+.sprung { margin-top: 12px; text-align: left; }
+.sprung small { display: block; margin: 0 2px 6px; font-weight: 700; }
+.sprungleiste { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.sprungleiste button.klein2 { margin: 0; padding: 9px 4px; font-size: 13px; min-height: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gruppenknopf { display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; scroll-margin-top: 10px; padding: 6px 2px; -webkit-tap-highlight-color: transparent; }
+.gruppenknopf .gruppen-pfeil { flex: none; font-size: 13px; letter-spacing: 0; text-transform: none; opacity: .8; }
+.gruppenknopf[aria-expanded="false"] { margin-bottom: 0; padding: 12px 12px; border-radius: 12px; background: rgba(255,255,255,.05); }
+/* schmale Handys: zwei Spalten, damit kein Wort abgeschnitten wird */
+@media (max-width: 345px) { .sprungleiste { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

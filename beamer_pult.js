@@ -223,7 +223,7 @@ function sperre() {
 
 function spieleBild(r) {
   const g = GRUPPEN[kat] || GRUPPEN[0];
-  const online = (r.spieler || []).filter((x) => x.online).length;
+  const online = (r.spieler || []).filter((x) => x.online && !x.halter).length;
   return `<div class="bp-kats">${GRUPPEN.map((x, i) => `<button data-pk="${i}" class="${i === kat ? "an" : ""}">${esc(x.titel)}</button>`).join("")}</div>
     <p class="bp-leise">Antippen startet das Spiel für alle ${online} verbundenen Gäste. Danach unter „Laufend“ auf „Los“.</p>
     <div class="bp-spiele">${g.ids.map(spiel).filter(Boolean).map((sp) => knopf(`<span class="bp-emo">${sp.emoji}</span><span><b>${esc(sp.name)}</b><small>${esc(sp.kurz || "")}</small></span>`, { typ: "_alle", wert: sp.id }, "bp-spiel", `data-spiel="${esc(sp.id)}"`)).join("")}</div>`;
@@ -305,7 +305,7 @@ function beamerBild(r) {
 function radBild(r) {
   const g = G.sicher(JSON.parse(JSON.stringify({ glueck: r.glueck || null })));
   const gl = (was, mehr = {}) => ({ typ: "_glueck", was, ...mehr });
-  const leute = (r.spieler || []).filter((x) => x.online);
+  const leute = (r.spieler || []).filter((x) => x.online && !x.halter);
   const trinkAus = G.FELDER.filter((f) => f.trink).every((f) => g.aus.includes(f.id));
   return `<div class="bp-reihe">${knopf(g.frei ? "🔒 Rad für Gäste sperren" : "🔓 Rad für Gäste freigeben", gl("frei"), g.frei ? "zweit" : "gruen")}
       ${knopf(trinkAus ? "🍺 Trink-Felder wieder an" : "🧃 Alle Trink-Felder aus", gl("trinkaus"), "zweit")}</div>

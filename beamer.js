@@ -282,7 +282,7 @@ function seiteGlueck(g, raum) {
 }
 
 function seiteMitmachen(raum) {
-  const leute = (raum.spieler || []).filter((x) => x.online), da = leute.length;
+  const leute = (raum.spieler || []).filter((x) => x.online && !x.halter), da = leute.length;
   // Partymodus: die Seite ist zugleich die Lobby - wer da ist, steht an der Wand
   const lobby = steuer(raum).party && da ? `<div class="bm-pillen bm-lobby">${leute.slice(0, 30).map((x) => `<span class="bm-pille">${esc(x.name)}</span>`).join("")}</div>` : "";
   return `<div class="bm-mitmachen"><div class="bm-qrgross" data-bqr></div>
@@ -351,7 +351,7 @@ export function ereignisHTML(raum, e, jetzt) {
     return `<div class="bm-e-box bm-e-abend"><div class="tt-ehrungtitel">🌙 Abendwertung</div>
       ${tab.length ? `<div class="tt-podest">${tab.map((x) => `<div class="tt-rang r${x.platz}"><span>${MED[x.platz]}</span><span class="tt-rangnamen"><b>${esc(x.name)} (${x.summe})</b></span></div>`).join("")}</div>` : `<p class="bm-leise">Noch keine Punkte.</p>`}
       ${traeger.length ? `<p class="bm-leise">🏆 Pokalträger: ${traeger.slice(-6).map((x) => `Runde ${x.nr}: ${esc(x.sieger.join(" & "))}`).join(" · ")}</p>` : ""}
-      ${(SH.cssEinhaengen(), SH.beamerAbschluss(raum.tafel, (raum.spieler || []).filter((x) => !K.istTestkonto(raum, x.name)).map((x) => x.name)))}</div>`;
+      ${(SH.cssEinhaengen(), SH.beamerAbschluss(raum.tafel, (raum.spieler || []).filter((x) => !x.halter && !K.istTestkonto(raum, x.name)).map((x) => x.name)))}</div>`;
   }
   return "";
 }
