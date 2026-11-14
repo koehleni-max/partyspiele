@@ -393,6 +393,7 @@ const merke = (x) => { verlauf.push(x); if (verlauf.length > 200) verlauf.shift(
 
 export async function start(code, wurzel) {
   app = wurzel;
+  wandCode = code;
   document.body.classList.add("beamer");
   document.title = "📽️ Beamer – Partyspiele";
   window.__beamer = { raum: () => raum, seite: () => zustand.seite, ereignis: () => (laufend ? laufend.art : null), verlauf: () => verlauf.slice(),
@@ -874,7 +875,10 @@ function qrLib() {
   }
   return qrLaden;
 }
-export const gastLink = () => location.href.split("#")[0] + location.hash.replace(/&beamer$/, "");
+// Link fuer die Gaeste (QR-Code an der Wand). Haelt das Wand-Geraet den Raum (#tv, wand.js), steht der Raum nicht in der
+// Adresse - dann aus dem Raumcode; ?halter und Ähnliches gehoert nicht in den Link der Gaeste.
+let wandCode = null;
+export const gastLink = () => (wandCode && !/^#r=/.test(location.hash) ? `${location.href.split("#")[0].split("?")[0]}#r=${wandCode}` : location.href.split("#")[0] + location.hash.replace(/&beamer$/, ""));
 async function qrFuellen() {
   const ziele = [...document.querySelectorAll("[data-bqr]")].filter((x) => !x.firstChild);
   if (!ziele.length) return;

@@ -1438,3 +1438,21 @@ button[data-zugsperre]::after { content: attr(data-zugsperre); display: block; m
 .gruppenknopf[aria-expanded="false"] { margin-bottom: 0; padding: 12px 12px; border-radius: 12px; background: rgba(255,255,255,.05); }
 /* schmale Handys: zwei Spalten, damit kein Wort abgeschnitten wird */
 @media (max-width: 345px) { .sprungleiste { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Wand-Geraet haelt den Raum (#tv, wand.js): Startseite gross und mit dem Finger bedienbar (Ally, Tablet, Fernseher) */
+body.wand-start { overflow: auto; }
+.wand { min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 14px; padding: 24px 20px; font-size: clamp(16px, 2.3vmin, 26px); }
+.wand-logo { font-size: 2.6em; line-height: 1.1; }
+.wand h1 { margin: 0; font-size: 1.7em; }
+.wand h2 { margin: 0; font-size: 1.15em; }
+.wand-leise { margin: 0; color: var(--leise, #9aa0c0); max-width: 34em; }
+.wand-leise.klein { font-size: .8em; }
+.wand-leise a { color: inherit; text-decoration: underline; }
+.wand-meldung { margin: 0; padding: .6em 1em; border-radius: 14px; background: #7a1f2b; color: #fff; font-weight: 800; max-width: 34em; }
+.wand-karte { width: min(100%, 34em); box-sizing: border-box; padding: 1em 1.1em; border-radius: 20px; background: #1e2036; border: 1px solid #ffffff1c; display: grid; gap: .7em; }
+.wand-feld { display: grid; gap: .3em; text-align: left; font-weight: 800; }
+.wand-feld input { font: inherit; font-size: 1.2em; padding: .5em .7em; border-radius: 12px; border: 2px solid #ffffff2e; background: #0f1020; color: #fff; text-align: center; width: 100%; box-sizing: border-box; }
+.wand-anlaesse { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6em; }
+button.wand-gross { font-size: 1.2em; padding: .8em .6em; margin: 0; width: 100%; }
+button.wand-gross.a-geburtstag { background: linear-gradient(135deg, #d6409f, #5b3fd6); }
+button.wand-gross.a-halloween { background: linear-gradient(135deg, #f97316, #7c2d12); }

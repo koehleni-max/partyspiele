@@ -29,16 +29,20 @@ import * as SL from "./spielleitung.js";
 import * as R from "./brett_minis.js";
 import * as ER from "./erklaer.js";   // Erklaer-Einblendung nach "Los geht's" (Restpaket 3a)
 import { einsetzenWeich } from "./weich.js";   // Spielseiten: nur Geaendertes austauschen (Schritt 4b, weiche Animationen)
+import * as WAND from "./wand.js";   // Wand-Geraet haelt den Raum (Adresse #tv, Nico 13.11.2026)
 import * as FG from "./fragen_gedaechtnis.js";   // Quizfragen ohne Wiederholung ueber Abende - Knopf "Fragen wieder von vorn"
 
 const app = document.getElementById("app");
 const BASIS = location.href.split("#")[0];
-// Raumhalter (Nico 13.11.2026: "der Raum soll offen bleiben, auch wenn das Tablet was anderes anzeigt"): ein Geraet, das
-// dauerhaft laeuft (PC zu Hause, alltag/partyspiele/raumhalter.py), oeffnet den Raum ueber ...?halter=1 und haelt ihn. Sein
-// Eintrag in raum.spieler traegt halter: true - er spielt nirgends mit und taucht in keiner Liste der Gaeste auf.
-// Faellt er aus, holt eine Spielleitung den Raum auf ihr Geraet (raumHolen); ist er zurueck, uebernimmt er wieder.
+// Raumhalter (Nico 13.11.2026): das Wand-Geraet (Ally oder Tablet, Adresse #tv, wand.js) haelt den Raum. Dazu laeuft diese
+// App dort in einem unsichtbaren Rahmen mit ...?halter=1: sie oeffnet den Raum (&auf=<anlass>) oder fuehrt ihn weiter und
+// fuehrt alle Spiele aus. Ihr Eintrag in raum.spieler traegt halter: true - er spielt nirgends mit und taucht in keiner
+// Liste der Gaeste auf. Faellt das Wand-Geraet aus (Seite nicht mehr vorn, Akku leer), holt eine Spielleitung den Raum auf
+// ihr Geraet (raumHolen); ist die Wand zurueck, uebernimmt sie von selbst wieder (abgeloest).
 const HALTER = new URLSearchParams(location.search).has("halter");
+if (HALTER) TON.ganzStill(true);   // im unsichtbaren Rahmen klingt nichts - der Ton kommt von der Wand-Ansicht davor
 const HOLEN_NACH = 15000;   // so lange muss das Gastgeber-Geraet weg sein, bevor "Raum hierher holen" erscheint
+const HALTER_ZURUECK = 8000; // so lange nach dem Abloesen wartet das Wand-Geraet, bevor es den Raum wieder uebernimmt
 const gaeste = (r = raum) => ((r && r.spieler) || []).filter((x) => !x.halter);
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const NAME_MAX = 14;
@@ -185,13 +189,20 @@ function ansichtMerken() { if (code) sessionStorage.setItem(`pa_ansicht_${code}`
 // ---------------------------------------------------------------- Startseite und Raum-Link
 // Lesezeichen #beamer im selben Tab (z. B. noch der alte Raum offen): nur der Teil hinter # aendert sich, der Browser laedt
 // dann nichts neu - ohne das hier bliebe das Lesezeichen wirkungslos
-window.addEventListener("hashchange", () => { if (location.hash === "#beamer") location.reload(); });
+window.addEventListener("hashchange", () => { if (location.hash === "#beamer" || location.hash === "#tv") location.reload(); });
 function startBild() {
   // Lesezeichen am Ally: #beamer zeigt eine Kopplungszahl, die Spielleitung koppelt vom Handy (kopplung.js, Runde 3)
   if (location.hash === "#beamer") return KOPPLUNG.beamerSeite(app, (c) => { history.replaceState(null, "", `${BASIS}#r=${c}&beamer`); B.start(c, app); });
   const m = location.hash.match(/^#r=([a-z0-9]{12,32})(&beamer)?$/);
   if (m && m[2]) return B.start(m[1], app);   // Beamer: kein Spieler, zeigt nur (beamer.js)
+  // Wand-Geraet haelt den Raum: grosse Ansicht vorn, Raumhalter im unsichtbaren Rahmen dahinter (wand.js)
+  if (location.hash === "#tv") return WAND.seite(app, (c) => B.start(c, app));
   if (m) return raumLink(m[1]);
+  // Raumhalter im Rahmen der Wand-Seite: oeffnet den Raum ohne Zutun (den Code hat die Wand-Seite schon geprueft)
+  if (HALTER) {
+    const frage = new URLSearchParams(location.search), anlass = A.anlassNeu(frage.get("auf") || "", frage.get("text") || "");
+    if (anlass) { meinName = WAND.NAME; return raumOeffnen(anlass); }
+  }
   startseite();
 }
 
@@ -762,6 +773,9 @@ async function abgeloest() {
   status = "abgeloest";
   statusText = "Ein anderes Gerät hält jetzt den Raum (ist jetzt Gastgeber).";
   zeichnen();
+  // Wand-Geraet: war die Seite eine Weile nicht vorn und eine Spielleitung hat den Raum solange geholt, uebernimmt die Wand
+  // wieder, sobald sie laeuft - das Handy der Spielleitung spielt dann von selbst als Gast weiter
+  if (HALTER) setTimeout(() => { if (status === "abgeloest" && code) gastgeberFortsetzen(); }, HALTER_ZURUECK);
 }
 
 // Spielleitung holt den Raum auf dieses Geraet (das Gastgeber-Geraet ist ausgefallen): als Gastgeber neu laden - der Stand

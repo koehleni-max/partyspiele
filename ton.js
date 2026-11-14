@@ -8,6 +8,9 @@
 let ctx = null, haupt = null, hall = null, musikBus = null, dateiBus = null;
 let modus = localStorage.getItem("pa_ton") || "an"; // "an" | "effekte" | "aus"
 let musikName = null, musikLauf = null;
+// Raumhalter im unsichtbaren Rahmen der Wand-Seite (wand.js): dort klingt nie etwas
+let ganzAus = false;
+export function ganzStill(an) { ganzAus = !!an; }
 export const DATEI_BUS = 0.77;
 export const BEGRENZER = { threshold: -3, knee: 0, ratio: 20, attack: 0.002, release: 0.1 };
 
@@ -339,7 +342,7 @@ const EFFEKTE = {
 export const GRUSS_KLAENGE = ["techno", "troete", "boing", "wirbel", "wobble", "tada"];
 
 export function spiele(name) {
-  if (modus === "aus" || nachtRuhe || !bereit()) return;
+  if (ganzAus || modus === "aus" || nachtRuhe || !bereit()) return;
   try {
     const s = stand(name);
     if (s.art === "datei") { abspielen(name, s.liste); return; }
@@ -444,7 +447,7 @@ function musikNeu() {
   musikLauf = lauf;
 }
 export function musik(name) {
-  name = name || null;
+  name = ganzAus ? null : name || null;
   if (name === musikName && nachtRuhe === nachtAngewandt) return;
   musikName = name;
   if (bereit() || ctx) musikNeu();
